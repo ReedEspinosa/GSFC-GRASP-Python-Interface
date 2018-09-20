@@ -5,13 +5,15 @@ import tempfile
 import os.path
 import warnings
 import yaml
+import re
 from datetime import datetime as dt # we really want datetime.datetime.striptime
 from datetime import timedelta
 from shutil import copyfile, rmtree
+from subprocess import Popen
 import numpy as np
 
 class graspRun(object):
-    def __init__(self, pathYAML, dirGRASP=False, orbHghtKM=700):
+    def __init__(self, pathYAML, orbHghtKM=700, dirGRASP=False):
         self.pixels = [];
         self.pathYAML = pathYAML;
         self.pathSDATA = False;
@@ -22,6 +24,7 @@ class graspRun(object):
             self.tempDir = False
             self.dirGRASP = dirGRASP
         self.orbHght = orbHghtKM*1000
+        self.pObj = False
     
     def addPix(self, newPixel): # this is called once for each pixel
         self.pixels.append(newPixel)
@@ -33,6 +36,7 @@ class graspRun(object):
         if not self.dirGRASP and self.tempDir:
                 self.dirGRASP = tempfile.mkdtemp()
         self.pathSDATA = os.path.join(self.dirGRASP, self.findSDATA_FN());
+        assert (not self.pathSDATA), 'Failed to read SDATA filename from '+self.pathYAML
         unqTimes = np.unique([pix.dtNm for pix in self.pixels])
         SDATAstr = self.genSDATAHead(unqTimes)
         for unqTime in unqTimes:
@@ -44,39 +48,89 @@ class graspRun(object):
             fid.write(SDATAstr)
             fid.close()
 
-    def runGRASP(self, parallel):
+    def runGRASP(self, parallel=False, pathGRASP='grasp'):
         if not self.pathSDATA:
             warnings.warn('You must call writeSDATA() before running GRASP!')
             return False
         pathNewYAML = os.path.join(self.dirGRASP, os.path.basename(self.pathYAML));
         copyfile(self.pathYAML, pathNewYAML) # copy each time so user can update orginal YAML
-        if parallel:
-            print('Run GRASP async.') # STILL NEED TO IMPLEMENT THIS!
-            # return obj from pop and let user wait then read
-            # https://stackoverflow.com/questions/636561/how-can-i-run-an-external-command-asynchronously-from-python
-        else:
-            print('Run GRASP normal') # STILL NEED TO IMPLEMENT THIS!
-            # https://stackoverflow.com/questions/4856583/how-do-i-pipe-a-subprocess-call-to-a-text-file
+        self.pObj = Popen([pathGRASP, pathNewYAML])
+        if not parallel:
+            self.pObj.wait()
             self.readOutput()          
+        return self.pObj # returns Popen object, (PopenObj.poll() is not None) == True when complete
             
     def readOutput(self):
-        if False: # CHANGE THIS TO CHECK IF GRASP HAS BEEN RUN
+        if not self.pObj:
             warnings.warn('You must call runGRASP() before reading the output!')
             return False
-        print('Read output from whatever') # STILL NEED TO IMPLEMENT THIS!
-        if self.tempDir:
+        if self.pObj.poll() is None:
+            warnings.warn('GRASP has not yet terminated, output can only be read after retrieval is complete.')
+            return False
+        outputFN = self.findSDATA_FN()
+        assert (not outputFN), 'Failed to read stream filename from '+self.pathYAML
+        with open(os.path.join(self.dirGRASP, outputFN)) as fid:
+            contents = fid.readlines()
+        rsltDict = self.parseOutContent(contents)
+        if self.tempDir and rsltDict:
             rmtree(self.dirGRASP)
+        return rsltDict
            
+    def parseOutContent(self, contents):
+        results = []
+        numericLn = re.compile('^[ ]*[0-9]+')
+        ptrnDate = re.compile('^[ ]*Date:[ ]+')
+        ptrnTime = re.compile('^[ ]*Time:[ ]+')
+        ptrnHdEnd = re.compile('^[ ]*\*\*\*[ ]*[A-z ]+[ ]*\*\*\*[ ]*$')
+        ptrnPSD = re.compile('^[ ]*Size Distribution dV\/dlnr \(normalized to 1\)')
+        inHeader = True
+        i = 0;
+        while i<len(contents):
+            line = contents[i]
+            if not ptrnHdEnd.match(line) is None: inHeader=False # start of DETAILED PARAMETERS
+            if not ptrnDate.match(line) is None and inHeader: # Date
+                dtStrCln = line[ptrnDate.match(line).end():-1].split()
+                dates_list = [dt.strptime(date, '%Y-%m-%d').date() for date in dtStrCln]
+            if not ptrnTime.match(line) is None and inHeader: # Time (should come after Date in output)
+                dtStrCln = line[ptrnTime.match(line).end():-1].split()
+                times_list = [dt.strptime(time, '%H:%M:%S').time() for time in dtStrCln]
+                for j in range(len(times_list)): 
+                    dtNow = dt.combine(dates_list[j], times_list[j])
+                    results.append(dict(datetime=dtNow))
+            if not ptrnPSD.match(line) is None: # binned PSD
+                lastLine = i+1
+                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
+                for dataRow in contents[i+1:lastLine]:
+                    for k in range(len(results)):
+                        rVal = np.float64(dataRow.split()[0])
+                        results[k]['r'] = np.append(results[k]['r'], rVal) if 'r' in results[k] else rVal
+                        psdVal = np.float64(dataRow.split()[k+1])
+                        results[k]['dVdlnr'] = np.append(results[k]['dVdlnr'], psdVal) if 'dVdlnr' in results[k] else psdVal
+                i = lastLine - 1
+            i+=1
+        return results
+    
     def findSDATA_FN(self):
         if not os.path.isfile(self.pathYAML):
-            warnings.warn('The file '+self.pathYAML+' does not exist! Returning Generic SDATA filename.', stacklevel=2)
-            return 'sdata.dat'
+            warnings.warn('The file '+self.pathYAML+' does not exist! Can not get SDATA filename.', stacklevel=2)
+            return False
         with open(self.pathYAML, 'r') as stream:
             data_loaded = yaml.load(stream)
         if not ('input'  in data_loaded) or not ('file' in data_loaded['input']):
-            warnings.warn('The file '+self.pathYAML+' did not have field input.file! Returning Generic SDATA filename.', stacklevel=2)
-            return 'sdata.dat'
+            warnings.warn('The file '+self.pathYAML+' did not have field input.file! Can not get SDATA filename.', stacklevel=2)
+            return False
         return data_loaded["input"]["file"]
+    
+    def findStream_FN(self):
+        if not os.path.isfile(self.pathYAML):
+            warnings.warn('The file '+self.pathYAML+' does not exist! Can not get stream filename.', stacklevel=2)
+            return False
+        with open(self.pathYAML, 'r') as stream:
+            data_loaded = yaml.load(stream)
+        if not ('input'  in data_loaded) or not ('file' in data_loaded['input']):
+            warnings.warn('The file '+self.pathYAML+' did not have field output.segment.stream! Can not get stream filename.', stacklevel=2)
+            return False
+        return data_loaded["output"]["segment"]["stream"]
     
     def genSDATAHead(self, unqTimes):
         nx = max([pix.ix for pix in self.pixels])
