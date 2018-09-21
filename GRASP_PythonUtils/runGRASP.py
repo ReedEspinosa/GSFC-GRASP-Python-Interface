@@ -61,20 +61,20 @@ class graspRun(object):
         return self.pObj # returns Popen object, (PopenObj.poll() is not None) == True when complete
             
     def readOutput(self, customSDATA=False): # customSDATA is full path of unrelated SDATA file to read
-        if not self.pObj and not customSDATA:
+        if not customSDATA and not self.pObj:
             warnings.warn('You must call runGRASP() before reading the output!')
             return False
-        if self.pObj.poll() is None and not customSDATA:
+        if not customSDATA and self.pObj.poll() is None:
             warnings.warn('GRASP has not yet terminated, output can only be read after retrieval is complete.')
             return False
-        outputFN = customSDATA if customSDATA else self.findSDATA_FN()
-        assert (not outputFN), 'Failed to read stream filename from '+self.pathYAML
-        with open(os.path.join(self.dirGRASP, outputFN)) as fid:
+        assert (customSDATA or self.findSDATA_FN()), 'Failed to read stream filename from '+self.pathYAML
+        outputFN = customSDATA if customSDATA else os.path.join(self.dirGRASP, self.findSDATA_FN())
+        with open(outputFN) as fid:
             contents = fid.readlines()
         rsltAeroDict = self.parseOutAerosol(contents)
         rsltSurfDict = self.parseOutSurface(contents)
-        rsltDict = [{**aero **surf} for aero, surf in zip(rsltAeroDict, rsltSurfDict)]
-        if self.tempDir and rsltDict:
+        rsltDict = [{**aero, **surf} for aero, surf in zip(rsltAeroDict, rsltSurfDict)]
+        if self.tempDir and rsltDict and not customSDATA:
             rmtree(self.dirGRASP)
         return rsltDict
     
@@ -94,6 +94,7 @@ class graspRun(object):
                 for j in range(len(times_list)): 
                     dtNow = dt.combine(dates_list[j], times_list[j])
                     results.append(dict(datetime=dtNow))
+            i+=1
         return results
 
     def parseOutAerosol(self, contents):
@@ -197,8 +198,9 @@ class graspRun(object):
                 results[k]['dVdlnr'] = results[k]['dVdlnr'].reshape(nsd,-1)
                 results[k]['aodMode'] = results[k]['aodMode'].reshape(nsd,-1)
                 results[k]['ssaMode'] = results[k]['ssaMode'].reshape(nsd,-1)
-                results[k]['n'] = results[k]['n'].reshape(nsd,-1)
-                results[k]['k'] = results[k]['k'].reshape(nsd,-1)
+                if len(results[k]['n']) == len(results[k]['aodMode']): # RI not always mode dependent
+                    results[k]['n'] = results[k]['n'].reshape(nsd,-1)
+                    results[k]['k'] = results[k]['k'].reshape(nsd,-1)
         return results
     
     def parseOutSurface(self, contents):
@@ -206,7 +208,9 @@ class graspRun(object):
         numericLn = re.compile('^[ ]*[0-9]+')
         singNumeric = re.compile('^[ ]*[0-9]+[ ]*$')
         ptrnALB = re.compile('^[ ]*Wavelength \(um\),[ ]+Surface ALBEDO')
-        ptrnBRDF = re.compile('^[ ]*Wavelength \(um\),[]+BRDF parameters')
+        ptrnBRDF = re.compile('^[ ]*Wavelength \(um\),[ ]+BRDF parameters')
+        ptrnBPDF = re.compile('^[ ]*Wavelength \(um\),[ ]+BPDF parameters')
+        ptrnWater = re.compile('^[ ]*Wavelength \(um\),[ ]+Water surface parameters')
         i = 0
         while i<len(contents):
             if not ptrnALB.match(contents[i]) is None: # Surface Albedo 
@@ -231,6 +235,35 @@ class graspRun(object):
                 for k in range(len(results)): # seperate parameters from wavelengths
                     results[k]['brdf'] = results[k]['brdf'].reshape(Nparams,-1)
                 i = lastLine - 1
+            if not ptrnBPDF.match(contents[i]) is None: # RRI by aersol size mode
+                lastLine = i+1
+                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
+                Nparams = 0
+                for dataRow in contents[i+1:lastLine]:
+                    if not singNumeric.match(dataRow):
+                        dArr = np.array(dataRow.split(), dtype='float64')
+                        for k in range(len(results)):
+                            results[k]['bpdf'] = np.append(results[k]['bpdf'], dArr[k+1]) if 'bpdf' in results[k] else dArr[k+1]
+                    else:
+                        Nparams += 1
+                for k in range(len(results)): # seperate parameters from wavelengths
+                    results[k]['bpdf'] = results[k]['bpdf'].reshape(Nparams,-1)
+                i = lastLine - 1
+            if not ptrnWater.match(contents[i]) is None: # RRI by aersol size mode
+                lastLine = i+1
+                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
+                Nparams = 0
+                for dataRow in contents[i+1:lastLine]:
+                    if not singNumeric.match(dataRow):
+                        dArr = np.array(dataRow.split(), dtype='float64')
+                        for k in range(len(results)):
+                            results[k]['wtrSurf'] = np.append(results[k]['wtrSurf'], dArr[k+1]) if 'wtrSurf' in results[k] else dArr[k+1]
+                    else:
+                        Nparams += 1
+                for k in range(len(results)): # seperate parameters from wavelengths
+                    results[k]['wtrSurf'] = results[k]['wtrSurf'].reshape(Nparams,-1)
+                i = lastLine - 1    
+            i+=1
         return results
     
     def findSDATA_FN(self):
