@@ -6,12 +6,37 @@ import os.path
 import warnings
 import yaml
 import re
+import time
 from datetime import datetime as dt # we want datetime.datetime
 from datetime import timedelta
 from shutil import copyfile, rmtree
 from subprocess import Popen
 import numpy as np
 
+class graspDB(object):
+    def __init__(self, listGraspRunObjs):
+        self.grObjs = listGraspRunObjs
+        
+    def processData(self, maxCPUs=1, pathGRASP='/usr/local/bin/grasp'):
+        usedDirs = []
+        rslts = []
+        for grObj in self.grObjs:
+            assert (not grObj.dirGRASP in usedDirs), "Each graspRun instance must use a unique directory!"
+            grObj.writeSDATA()
+        i = 0
+        pObjs = []
+        while i < len(self.grObjs):
+            if sum([pObj is not None for pObj in pObjs]) < maxCPUs:
+                print('Starting a new thread for graspRun number %d' % i)
+                pObjs.append(self.grObjs[i].runGRASP(True, pathGRASP))
+                i+=1
+            time.sleep(0.1)
+        while any([pObj is not None for pObj in pObjs]): time.sleep(0.1)
+        for grObj in self.grObjs:
+            rslts.append(grObj.readOutput())
+        return rslts
+    
+    
 class graspRun(object):
     def __init__(self, pathYAML, orbHghtKM=700, dirGRASP=False):
         self.pixels = [];
@@ -36,7 +61,7 @@ class graspRun(object):
         if not self.dirGRASP and self.tempDir:
                 self.dirGRASP = tempfile.mkdtemp()
         self.pathSDATA = os.path.join(self.dirGRASP, self.findSDATA_FN());
-        assert (not self.pathSDATA), 'Failed to read SDATA filename from '+self.pathYAML
+        assert (self.pathSDATA), 'Failed to read SDATA filename from '+self.pathYAML
         unqTimes = np.unique([pix.dtNm for pix in self.pixels])
         SDATAstr = self.genSDATAHead(unqTimes)
         for unqTime in unqTimes:
@@ -48,7 +73,7 @@ class graspRun(object):
             fid.write(SDATAstr)
             fid.close()
 
-    def runGRASP(self, parallel=False, pathGRASP='grasp'):
+    def runGRASP(self, parallel=False, pathGRASP='/usr/local/bin/grasp'):
         if not self.pathSDATA:
             warnings.warn('You must call writeSDATA() before running GRASP!')
             return False
@@ -60,21 +85,21 @@ class graspRun(object):
             self.invRslt = self.readOutput()          
         return self.pObj # returns Popen object, (PopenObj.poll() is not None) == True when complete
             
-    def readOutput(self, customSDATA=False): # customSDATA is full path of unrelated SDATA file to read
-        if not customSDATA and not self.pObj:
+    def readOutput(self, customOUT=False): # customSDATA is full path of unrelated SDATA file to read
+        if not customOUT and not self.pObj:
             warnings.warn('You must call runGRASP() before reading the output!')
             return False
-        if not customSDATA and self.pObj.poll() is None:
+        if not customOUT and self.pObj.poll() is None:
             warnings.warn('GRASP has not yet terminated, output can only be read after retrieval is complete.')
             return False
-        assert (customSDATA or self.findSDATA_FN()), 'Failed to read stream filename from '+self.pathYAML
-        outputFN = customSDATA if customSDATA else os.path.join(self.dirGRASP, self.findSDATA_FN())
+        assert (customOUT or self.findStream_FN()), 'Failed to read stream filename from '+self.pathYAML
+        outputFN = customOUT if customOUT else os.path.join(self.dirGRASP, self.findStream_FN())
         with open(outputFN) as fid:
             contents = fid.readlines()
         rsltAeroDict = self.parseOutAerosol(contents)
         rsltSurfDict = self.parseOutSurface(contents)
         rsltDict = [{**aero, **surf} for aero, surf in zip(rsltAeroDict, rsltSurfDict)]
-        if self.tempDir and rsltDict and not customSDATA:
+        if self.tempDir and rsltDict and not customOUT:
             rmtree(self.dirGRASP)
         return rsltDict
     
