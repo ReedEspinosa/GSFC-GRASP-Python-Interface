@@ -17,21 +17,22 @@ class graspDB(object):
     def __init__(self, listGraspRunObjs):
         self.grObjs = listGraspRunObjs
         
-    def processData(self, maxCPUs=1, pathGRASP='/usr/local/bin/grasp'):
+    def processData(self, maxCPUs=1, binPathGRASP='/usr/local/bin/grasp'):
         usedDirs = []
         rslts = []
         for grObj in self.grObjs:
             assert (not grObj.dirGRASP in usedDirs), "Each graspRun instance must use a unique directory!"
             grObj.writeSDATA()
         i = 0
+        Nobjs = len(self.grObjs)
         pObjs = []
-        while i < len(self.grObjs):
-            if sum([pObj is not None for pObj in pObjs]) < maxCPUs:
-                print('Starting a new thread for graspRun number %d' % i)
-                pObjs.append(self.grObjs[i].runGRASP(True, pathGRASP))
+        while i < Nobjs:
+            if sum([pObj.poll() is None for pObj in pObjs]) < maxCPUs:
+                print('Starting a new thread for graspRun index %d/%d' % (i,Nobjs-1))
+                pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP))
                 i+=1
             time.sleep(0.1)
-        while any([pObj is not None for pObj in pObjs]): time.sleep(0.1)
+        while any([pObj.poll() is None for pObj in pObjs]): time.sleep(0.1)
         for grObj in self.grObjs:
             rslts.append(grObj.readOutput())
         return rslts
@@ -73,13 +74,13 @@ class graspRun(object):
             fid.write(SDATAstr)
             fid.close()
 
-    def runGRASP(self, parallel=False, pathGRASP='/usr/local/bin/grasp'):
+    def runGRASP(self, parallel=False, binPathGRASP='/usr/local/bin/grasp'):
         if not self.pathSDATA:
             warnings.warn('You must call writeSDATA() before running GRASP!')
             return False
         pathNewYAML = os.path.join(self.dirGRASP, os.path.basename(self.pathYAML));
         copyfile(self.pathYAML, pathNewYAML) # copy each time so user can update orginal YAML
-        self.pObj = Popen([pathGRASP, pathNewYAML])
+        self.pObj = Popen([binPathGRASP, pathNewYAML])
         if not parallel:
             self.pObj.wait()
             self.invRslt = self.readOutput()          
