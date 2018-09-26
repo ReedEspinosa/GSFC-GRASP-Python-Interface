@@ -343,6 +343,8 @@ class pixel(object):
         self.measVals = []
          
     def addMeas(self, wl, msTyp, nbvm, sza, thtv, phi, msrmnts): # this is called once for each wavelength of data
+        msrmnts = np.array(msrmnts)
+        msrmnts[msrmnts < 0.000001] = 0.000001 # GRASP does not like zeros
         newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts)
         self.measVals.append(newMeas)
         self.nwl += 1
