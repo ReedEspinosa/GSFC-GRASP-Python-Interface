@@ -99,7 +99,8 @@ class graspRun(object):
             contents = fid.readlines()
         rsltAeroDict = self.parseOutAerosol(contents)
         rsltSurfDict = self.parseOutSurface(contents)
-        rsltDict = [{**aero, **surf} for aero, surf in zip(rsltAeroDict, rsltSurfDict)]
+        rsltFitDict = self.parseOutFit(contents)
+        rsltDict = [{**aero, **surf, **fit} for aero, surf, fit in zip(rsltAeroDict, rsltSurfDict, rsltFitDict)]
         if self.tempDir and rsltDict and not customOUT:
             rmtree(self.dirGRASP)
         return rsltDict
@@ -289,6 +290,30 @@ class graspRun(object):
                 for k in range(len(results)): # seperate parameters from wavelengths
                     results[k]['wtrSurf'] = results[k]['wtrSurf'].reshape(Nparams,-1)
                 i = lastLine - 1    
+            i+=1
+        return results
+    
+    def parseOutFit(self, contents):
+        results = self.parseOutDateTime(contents)
+        ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING[ ]*[\*]+[ ]*$')
+        ptrnPIX = re.compile('^[ ]*pixel[ ]*#[ ]*([0-9]+)[ ]*wavelength[ ]*#[ ]*([0-9]+)')
+        i = 0
+        skipFlds = 4 # the 1st 4 fields aren't interesting
+        FITfnd = False
+        while i<len(contents):
+            if not ptrnFIT.match(contents[i]) is None: # Surface Albedo
+                FITfnd = True
+            pixMatch = ptrnPIX.match(contents[i]) if FITfnd else None
+            if not pixMatch is None: 
+                pixInd = int(pixMatch.group(1))-1
+                flds = contents[i+2].split()[skipFlds:] 
+                dArr = np.array(contents[i+3].split(), dtype='float64')[skipFlds:]  # ONLY TAKES FIRST ANGLE
+                for j,fld in enumerate(flds): # MIGHT WANT TO FIND Nlambda THEN PREALOCATE AND FILL BASED ON WAVELENGTH, THEN CONCAT EACH ANGLE
+                    print('pix:%d, fld:%s' % (pixInd,fld))
+                    if fld in results[pixInd]:
+                        results[pixInd][fld] = np.append(results[pixInd][fld], dArr[j])
+                    else:
+                        results[pixInd][fld] = dArr[j]
             i+=1
         return results
     
