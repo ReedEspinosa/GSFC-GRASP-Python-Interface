@@ -126,8 +126,6 @@ class graspRun(object):
 
     def parseOutAerosol(self, contents):
         results = self.parseOutDateTime(contents)
-        numericLn = re.compile('^[ ]*[0-9]+')
-        singNumeric = re.compile('^[ ]*[0-9]+[ ]*$')
         ptrnPSD = re.compile('^[ ]*(Radius \(um\),)?[ ]*Size Distribution dV\/dlnr \(normalized')
         ptrnLN = re.compile('^[ ]*Parameters of lognormal SD')
         ptrnVol = re.compile('^[ ]*Aerosol volume concentration')
@@ -141,17 +139,7 @@ class graspRun(object):
         i = 0
         nsd = 0
         while i<len(contents):
-            if not ptrnPSD.match(contents[i]) is None: # binned PSD
-                lastLine = i+1
-                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
-                for dataRow in contents[i+1:lastLine]:
-                    dArr = np.array(dataRow.split(), dtype='float64')
-                    for k in range(len(results)):
-                        results[k]['r'] = np.append(results[k]['r'], dArr[0]) if 'r' in results[k] else dArr[0]
-                        results[k]['dVdlnr'] = np.append(results[k]['dVdlnr'], dArr[k+1]) if 'dVdlnr' in results[k] else dArr[k+1]
-                i = lastLine - 1
-                nsd+=1
-            if not ptrnLN.match(contents[i]) is None: # lognormal PSD
+            if not ptrnLN.match(contents[i]) is None: # lognormal PSD, these fields have unique form
                 mtch = re.search('[ ]*rv \(um\):[ ]*', contents[i+1])
                 rvArr = np.array(contents[i+1][mtch.end():-1].split(), dtype='float64')
                 mtch = re.search('[ ] ln\(sigma\):[ ]*', contents[i+2])
@@ -160,136 +148,37 @@ class graspRun(object):
                     results[k]['rv'] = np.append(results[k]['rv'], rvArr[k]) if 'rv' in results[k] else rvArr[k]
                     results[k]['sigma'] = np.append(results[k]['sigma'], sigArr[k]) if 'sigma' in results[k] else sigArr[k]
                 i+=2
-            if not ptrnVol.match(contents[i]) is None: # Volume Concentration
-                lastLine = i+1
-                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
-                for dataRow in contents[i+1:lastLine]:
-                    dArr = np.array(dataRow.split(), dtype='float64')
-                    for k in range(len(results)):
-                        results[k]['vol'] = np.append(results[k]['vol'], dArr[k+1]) if 'vol' in results[k] else dArr[k+1]
-                i = lastLine - 1
-            if not ptrnSPH.match(contents[i]) is None: # spherical fraction
-                sphVal = np.array(contents[i+1].split(), dtype='float64')
-                for k in range(len(results)):
-                    results[k]['sph'] = np.append(results[k]['sph'], sphVal[k+1]) if 'sph' in results[k] else sphVal[k+1]
-                i+=1
-            if not ptrnAOD.match(contents[i]) is None: # AOD (must come before all of the following fields)
-                lastLine = i+1
-                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
-                for dataRow in contents[i+1:lastLine]:
-                    dArr = np.array(dataRow.split(), dtype='float64')
-                    for k in range(len(results)):
-                        results[k]['lambda'] = np.append(results[k]['lambda'], dArr[0]) if 'lambda' in results[k] else dArr[0]
-                        results[k]['aod'] = np.append(results[k]['aod'], dArr[k+1]) if 'aod' in results[k] else dArr[k+1]
-                nwl = lastLine - (i + 1)
-                i = lastLine - 1
-            if not ptrnAODmode.match(contents[i]) is None: # AOD by aerosol size mode
-                for dataRow in contents[i+1:i+nwl+1]:
-                    dArr = np.array(dataRow.split(), dtype='float64')
-                    for k in range(len(results)):
-                        results[k]['aodMode'] = np.append(results[k]['aodMode'], dArr[k+1]) if 'aodMode' in results[k] else dArr[k+1]
-                i = i + nwl
-            if not ptrnSSA.match(contents[i]) is None: # SSA
-                for dataRow in contents[i+1:i+nwl+1]:
-                    dArr = np.array(dataRow.split(), dtype='float64')
-                    for k in range(len(results)):
-                        results[k]['ssa'] = np.append(results[k]['ssa'], dArr[k+1]) if 'ssa' in results[k] else dArr[k+1]
-                i = i + nwl
-            if not ptrnSSAmode.match(contents[i]) is None: # SSA by aersol size mode
-                for dataRow in contents[i+1:i+nwl+1]:
-                    dArr = np.array(dataRow.split(), dtype='float64')
-                    for k in range(len(results)):
-                        results[k]['ssaMode'] = np.append(results[k]['ssaMode'], dArr[k+1]) if 'ssaMode' in results[k] else dArr[k+1]
-                i = i + nwl
-            if not ptrnRRI.match(contents[i]) is None: # RRI by aersol size mode
-                lastLine = i+1
-                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
-                for dataRow in contents[i+1:lastLine]:
-                    if not singNumeric.match(dataRow):
-                        dArr = np.array(dataRow.split(), dtype='float64')
-                        for k in range(len(results)):
-                            results[k]['n'] = np.append(results[k]['n'], dArr[k+1]) if 'n' in results[k] else dArr[k+1]
-            if not ptrnIRI.match(contents[i]) is None: # RRI by aersol size mode
-                lastLine = i+1
-                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
-                for dataRow in contents[i+1:lastLine]:
-                    if not singNumeric.match(dataRow):
-                        dArr = np.array(dataRow.split(), dtype='float64')
-                        for k in range(len(results)):
-                            results[k]['k'] = np.append(results[k]['k'], dArr[k+1]) if 'k' in results[k] else dArr[k+1]
-                i = lastLine - 1
+            self.parseMultiParamFld(contents, i, results, ptrnAOD, 'aod', 'lambda')
+            self.parseMultiParamFld(contents, i, results, ptrnPSD, 'dVdlnr', 'r')
+            self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
+            self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')            
+            self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode')
+            self.parseMultiParamFld(contents, i, results, ptrnSSA, 'ssa')
+            self.parseMultiParamFld(contents, i, results, ptrnSSAmode, 'ssaMode')
+            self.parseMultiParamFld(contents, i, results, ptrnRRI, 'n')
+            self.parseMultiParamFld(contents, i, results, ptrnIRI, 'k')
             i+=1
-        if nsd > 1:
+        if 'aodMode' in results[0]:
+            nsd = int(results[0]['aodMode'].shape[0]/results[0]['aod'].shape[0])
             for k in range(len(results)): # seperate aerosol modes 
                 results[k]['r'] = results[k]['r'].reshape(nsd,-1)
                 results[k]['dVdlnr'] = results[k]['dVdlnr'].reshape(nsd,-1)
                 results[k]['aodMode'] = results[k]['aodMode'].reshape(nsd,-1)
                 results[k]['ssaMode'] = results[k]['ssaMode'].reshape(nsd,-1)
-                if len(results[k]['n']) == len(results[k]['aodMode']): # RI not always mode dependent
-                    results[k]['n'] = results[k]['n'].reshape(nsd,-1)
-                    results[k]['k'] = results[k]['k'].reshape(nsd,-1)
         return results
     
     def parseOutSurface(self, contents):
         results = self.parseOutDateTime(contents)
-        numericLn = re.compile('^[ ]*[0-9]+')
-        singNumeric = re.compile('^[ ]*[0-9]+[ ]*$')
         ptrnALB = re.compile('^[ ]*Wavelength \(um\),[ ]+Surface ALBEDO')
         ptrnBRDF = re.compile('^[ ]*Wavelength \(um\),[ ]+BRDF parameters')
         ptrnBPDF = re.compile('^[ ]*Wavelength \(um\),[ ]+BPDF parameters')
         ptrnWater = re.compile('^[ ]*Wavelength \(um\),[ ]+Water surface parameters')
         i = 0
         while i<len(contents):
-            if not ptrnALB.match(contents[i]) is None: # Surface Albedo 
-                lastLine = i+1
-                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
-                for dataRow in contents[i+1:lastLine]:
-                    dArr = np.array(dataRow.split(), dtype='float64')
-                    for k in range(len(results)):
-                        results[k]['albedo'] = np.append(results[k]['albedo'], dArr[k+1]) if 'albedo' in results[k] else dArr[k+1]
-                i = lastLine - 1
-            if not ptrnBRDF.match(contents[i]) is None: # RRI by aersol size mode
-                lastLine = i+1
-                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
-                Nparams = 0
-                for dataRow in contents[i+1:lastLine]:
-                    if not singNumeric.match(dataRow):
-                        dArr = np.array(dataRow.split(), dtype='float64')
-                        for k in range(len(results)):
-                            results[k]['brdf'] = np.append(results[k]['brdf'], dArr[k+1]) if 'brdf' in results[k] else dArr[k+1]
-                    else:
-                        Nparams += 1
-                for k in range(len(results)): # seperate parameters from wavelengths
-                    results[k]['brdf'] = results[k]['brdf'].reshape(Nparams,-1)
-                i = lastLine - 1
-            if not ptrnBPDF.match(contents[i]) is None: # RRI by aersol size mode
-                lastLine = i+1
-                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
-                Nparams = 0
-                for dataRow in contents[i+1:lastLine]:
-                    if not singNumeric.match(dataRow):
-                        dArr = np.array(dataRow.split(), dtype='float64')
-                        for k in range(len(results)):
-                            results[k]['bpdf'] = np.append(results[k]['bpdf'], dArr[k+1]) if 'bpdf' in results[k] else dArr[k+1]
-                    else:
-                        Nparams += 1
-                for k in range(len(results)): # seperate parameters from wavelengths
-                    results[k]['bpdf'] = results[k]['bpdf'].reshape(Nparams,-1)
-                i = lastLine - 1
-            if not ptrnWater.match(contents[i]) is None: # RRI by aersol size mode
-                lastLine = i+1
-                while not numericLn.match(contents[lastLine]) is None: lastLine+=1
-                Nparams = 0
-                for dataRow in contents[i+1:lastLine]:
-                    if not singNumeric.match(dataRow):
-                        dArr = np.array(dataRow.split(), dtype='float64')
-                        for k in range(len(results)):
-                            results[k]['wtrSurf'] = np.append(results[k]['wtrSurf'], dArr[k+1]) if 'wtrSurf' in results[k] else dArr[k+1]
-                    else:
-                        Nparams += 1
-                for k in range(len(results)): # seperate parameters from wavelengths
-                    results[k]['wtrSurf'] = results[k]['wtrSurf'].reshape(Nparams,-1)
-                i = lastLine - 1    
+            self.parseMultiParamFld(contents, i, results, ptrnALB, 'albedo')
+            self.parseMultiParamFld(contents, i, results, ptrnBRDF, 'brdf')
+            self.parseMultiParamFld(contents, i, results, ptrnBPDF, 'bpdf')
+            self.parseMultiParamFld(contents, i, results, ptrnWater, 'wtrSurf')            
             i+=1
         return results
     
@@ -297,26 +186,56 @@ class graspRun(object):
         results = self.parseOutDateTime(contents)
         ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING[ ]*[\*]+[ ]*$')
         ptrnPIX = re.compile('^[ ]*pixel[ ]*#[ ]*([0-9]+)[ ]*wavelength[ ]*#[ ]*([0-9]+)')
+        numericLn = re.compile('^[ ]*[0-9]+')
         i = 0
         skipFlds = 4 # the 1st 4 fields aren't interesting
         FITfnd = False
         while i<len(contents):
-            if not ptrnFIT.match(contents[i]) is None: # Surface Albedo
+            if not ptrnFIT.match(contents[i]) is None: # We found fitting data
                 FITfnd = True
             pixMatch = ptrnPIX.match(contents[i]) if FITfnd else None
             if not pixMatch is None: 
                 pixInd = int(pixMatch.group(1))-1
-                flds = contents[i+2].split()[skipFlds:] 
-                dArr = np.array(contents[i+3].split(), dtype='float64')[skipFlds:]  # ONLY TAKES FIRST ANGLE
-                for j,fld in enumerate(flds): # MIGHT WANT TO FIND Nlambda THEN PREALOCATE AND FILL BASED ON WAVELENGTH, THEN CONCAT EACH ANGLE
-                    print('pix:%d, fld:%s' % (pixInd,fld))
-                    if fld in results[pixInd]:
-                        results[pixInd][fld] = np.append(results[pixInd][fld], dArr[j])
-                    else:
-                        results[pixInd][fld] = dArr[j]
+                wvlInd = int(pixMatch.group(2))-1
+                flds = contents[i+2].split()[skipFlds:]
+                lastLine = i+3 
+                while (lastLine < len(contents)) and not (numericLn.match(contents[lastLine]) is None): 
+                    lastLine+=1 # lastNumericInd+1
+                for ang,dataRow in enumerate(contents[i+3:lastLine]):
+                    dArr = np.array(dataRow.split(), dtype='float64')[skipFlds:]
+                    for j,fld in enumerate(flds):
+                        if fld not in results[pixInd]: results[pixInd][fld] = np.array([]).reshape(0,1)
+                        if results[pixInd][fld].shape[1] == wvlInd: # need another column
+                            nanCol = np.full((results[pixInd][fld].shape[0],1),np.nan)
+                            results[pixInd][fld] = np.block([results[pixInd][fld],nanCol])
+                        if results[pixInd][fld].shape[0] == ang: # need another angle row
+                            nanRow = np.full((1,results[pixInd][fld].shape[1]),np.nan)
+                            results[pixInd][fld] = np.block([[results[pixInd][fld]],[nanRow]])
+                        results[pixInd][fld][ang,wvlInd] = dArr[j]
             i+=1
         return results
     
+    def parseMultiParamFld(self, contents, i, results, ptrn, fdlName, fldName0=False):
+        if not ptrn.match(contents[i]) is None: # RRI by aersol size mode
+            singNumeric = re.compile('^[ ]*[0-9]+[ ]*$')
+            numericLn = re.compile('^[ ]*[0-9]+')
+            lastLine = i+1
+            while not numericLn.match(contents[lastLine]) is None: lastLine+=1
+            Nparams = 0
+            for dataRow in contents[i+1:lastLine]:
+                if not singNumeric.match(dataRow):
+                    dArr = np.array(dataRow.split(), dtype='float64')
+                    for k in range(len(results)):
+                        if fldName0:
+                            results[k][fldName0] = np.append(results[k][fldName0], dArr[0]) if fldName0 in results[k] else dArr[0]
+                        results[k][fdlName] = np.append(results[k][fdlName], dArr[k+1]) if fdlName in results[k] else dArr[k+1]
+                else:
+                    Nparams += 1
+            if Nparams > 1:
+                for k in range(len(results)): # seperate parameters from wavelengths
+                    results[k][fdlName] = results[k][fdlName].reshape(Nparams,-1)
+            i = lastLine - 1
+        
     def findSDATA_FN(self):
         if not os.path.isfile(self.pathYAML):
             warnings.warn('The file '+self.pathYAML+' does not exist! Can not get SDATA filename.', stacklevel=2)
