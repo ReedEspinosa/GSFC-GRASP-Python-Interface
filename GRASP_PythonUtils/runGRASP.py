@@ -95,9 +95,16 @@ class graspRun(object):
             return False
         assert (customOUT or self.findStream_FN()), 'Failed to read stream filename from '+self.pathYAML
         outputFN = customOUT if customOUT else os.path.join(self.dirGRASP, self.findStream_FN())
-        with open(outputFN) as fid:
-            contents = fid.readlines()
+        try:
+            with open(outputFN) as fid:
+                contents = fid.readlines()
+        except:
+            warnings.warn('Could not open %s\n   Returning empty list in place of output data...' % outputFN)
+            return []
         rsltAeroDict = self.parseOutAerosol(contents)
+        if not rsltAeroDict:
+            warnings.warn('Aerosol data was not present, returning empty list in place of output data...')
+            return []
         rsltSurfDict = self.parseOutSurface(contents)
         rsltFitDict = self.parseOutFit(contents)
         rsltDict = [{**aero, **surf, **fit} for aero, surf, fit in zip(rsltAeroDict, rsltSurfDict, rsltFitDict)]
@@ -158,6 +165,9 @@ class graspRun(object):
             self.parseMultiParamFld(contents, i, results, ptrnRRI, 'n')
             self.parseMultiParamFld(contents, i, results, ptrnIRI, 'k')
             i+=1
+        if not results:
+            warnings.warn('No aerosol data found, returning empty dictionary...')
+            return results
         if 'aodMode' in results[0]:
             nsd = int(results[0]['aodMode'].shape[0]/results[0]['aod'].shape[0])
             for k in range(len(results)): # seperate aerosol modes 
