@@ -143,18 +143,23 @@ class graspRun(object):
         ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
         ptrnRRI = re.compile('^[ ]*Wavelength \(um\), REAL Ref\. Index')
         ptrnIRI = re.compile('^[ ]*Wavelength \(um\), IMAG Ref\. Index')
+        ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$')
         i = 0
         nsd = 0
         while i<len(contents):
             if not ptrnLN.match(contents[i]) is None: # lognormal PSD, these fields have unique form
                 mtch = re.search('[ ]*rv \(um\):[ ]*', contents[i+1])
                 rvArr = np.array(contents[i+1][mtch.end():-1].split(), dtype='float64')
-                mtch = re.search('[ ] ln\(sigma\):[ ]*', contents[i+2])
+                mtch = re.search('[ ]*ln\(sigma\):[ ]*', contents[i+2])
                 sigArr = np.array(contents[i+2][mtch.end():-1].split(), dtype='float64')
                 for k in range(len(results)):
                     results[k]['rv'] = np.append(results[k]['rv'], rvArr[k]) if 'rv' in results[k] else rvArr[k]
                     results[k]['sigma'] = np.append(results[k]['sigma'], sigArr[k]) if 'sigma' in results[k] else sigArr[k]
                 i+=2
+            if not ptrnReff.match(contents[i]) is None: # Reff, field has unique form
+                Reffs = np.array(ptrnReff.match(contents[i]).group(1).split(), dtype='float64')
+                for k,Reff in enumerate(Reffs):
+                    results[k]['rEff'] = Reff     
             self.parseMultiParamFld(contents, i, results, ptrnAOD, 'aod', 'lambda')
             self.parseMultiParamFld(contents, i, results, ptrnPSD, 'dVdlnr', 'r')
             self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
@@ -204,7 +209,7 @@ class graspRun(object):
             if not ptrnFIT.match(contents[i]) is None: # We found fitting data
                 FITfnd = True
             pixMatch = ptrnPIX.match(contents[i]) if FITfnd else None
-            if not pixMatch is None: 
+            if not pixMatch is None:  # We found a single pixel & wavelength group
                 pixInd = int(pixMatch.group(1))-1
                 wvlInd = int(pixMatch.group(2))-1
                 flds = contents[i+2].split()[skipFlds:]
