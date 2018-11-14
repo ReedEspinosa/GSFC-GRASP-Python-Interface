@@ -212,21 +212,23 @@ class graspRun(object):
             if not pixMatch is None:  # We found a single pixel & wavelength group
                 pixInd = int(pixMatch.group(1))-1
                 wvlInd = int(pixMatch.group(2))-1
-                flds = contents[i+2].split()[skipFlds:]
-                lastLine = i+3 
-                while (lastLine < len(contents)) and not (numericLn.match(contents[lastLine]) is None): 
-                    lastLine+=1 # lastNumericInd+1
-                for ang,dataRow in enumerate(contents[i+3:lastLine]):
-                    dArr = np.array(dataRow.split(), dtype='float64')[skipFlds:]
-                    for j,fld in enumerate(flds):
-                        if fld not in results[pixInd]: results[pixInd][fld] = np.array([]).reshape(0,1)
-                        if results[pixInd][fld].shape[1] == wvlInd: # need another column
-                            nanCol = np.full((results[pixInd][fld].shape[0],1),np.nan)
-                            results[pixInd][fld] = np.block([results[pixInd][fld],nanCol])
-                        if results[pixInd][fld].shape[0] == ang: # need another angle row
-                            nanRow = np.full((1,results[pixInd][fld].shape[1]),np.nan)
-                            results[pixInd][fld] = np.block([[results[pixInd][fld]],[nanRow]])
-                        results[pixInd][fld][ang,wvlInd] = dArr[j]
+                while not re.search('^[ ]*#[ ]*sza[ ]*vis', contents[i+2]) is None: # loop over measurement types
+                    flds = [s.replace('/','o') for s in contents[i+2].split()[skipFlds:]]
+                    lastLine = i+3 
+                    while (lastLine < len(contents)) and not (numericLn.match(contents[lastLine]) is None): 
+                        lastLine+=1 # lastNumericInd+1
+                    for ang,dataRow in enumerate(contents[i+3:lastLine]): # loop over angles
+                        dArr = np.array(dataRow.split(), dtype='float64')[skipFlds:]
+                        for j,fld in enumerate(flds):
+                            if fld not in results[pixInd]: results[pixInd][fld] = np.array([]).reshape(0,1)
+                            if results[pixInd][fld].shape[1] == wvlInd: # need another column
+                                nanCol = np.full((results[pixInd][fld].shape[0],1),np.nan)
+                                results[pixInd][fld] = np.block([results[pixInd][fld],nanCol])
+                            if results[pixInd][fld].shape[0] == ang: # need another angle row
+                                nanRow = np.full((1,results[pixInd][fld].shape[1]),np.nan)
+                                results[pixInd][fld] = np.block([[results[pixInd][fld]],[nanRow]])
+                            results[pixInd][fld][ang,wvlInd] = dArr[j]
+                    i=min(lastLine-2, len(contents)-3)
             i+=1
         return results
     
