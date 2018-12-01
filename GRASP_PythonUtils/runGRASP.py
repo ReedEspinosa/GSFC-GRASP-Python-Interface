@@ -174,7 +174,8 @@ class graspRun(object):
             warnings.warn('No aerosol data found, returning empty dictionary...')
             return results
         if 'aodMode' in results[0]:
-            nsd = int(results[0]['aodMode'].shape[0]/results[0]['aod'].shape[0])
+            Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]
+            nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
             for k in range(len(results)): # seperate aerosol modes 
                 results[k]['r'] = results[k]['r'].reshape(nsd,-1)
                 results[k]['dVdlnr'] = results[k]['dVdlnr'].reshape(nsd,-1)
