@@ -17,7 +17,7 @@ class graspDB(object):
     def __init__(self, listGraspRunObjs):
         self.grObjs = listGraspRunObjs
         
-    def processData(self, maxCPUs=1, binPathGRASP='/usr/local/bin/grasp'):
+    def processData(self, maxCPUs=1, binPathGRASP='/usr/local/bin/grasp', savePath=False):
         usedDirs = []
         rslts = []
         for grObj in self.grObjs:
@@ -35,9 +35,15 @@ class graspDB(object):
         while any([pObj.poll() is None for pObj in pObjs]): time.sleep(0.1)
         for grObj in self.grObjs:
             rslts.append(grObj.readOutput())
+        if savePath:
+            self.saveResults(rslts, savePath)
         return rslts
     
+    def saveResults(rslts, savePath):
+        return 0 # TODO build this and load function out
     
+
+# can add self.AUX_dict[Npixel] dictionary list to instance w/ additional fields to port into rslts
 class graspRun(object):
     def __init__(self, pathYAML, orbHghtKM=700, dirGRASP=False):
         self.pixels = [];
@@ -107,7 +113,10 @@ class graspRun(object):
             return []
         rsltSurfDict = self.parseOutSurface(contents)
         rsltFitDict = self.parseOutFit(contents)
-        rsltDict = [{**aero, **surf, **fit} for aero, surf, fit in zip(rsltAeroDict, rsltSurfDict, rsltFitDict)]
+        try:
+            rsltDict = [{**aero, **surf, **fit, **aux} for aero, surf, fit, aux in zip(rsltAeroDict, rsltSurfDict, rsltFitDict, self.AUX_dict)] 
+        except AttributeError: # the user did not create AUX_dict
+            rsltDict = [{**aero, **surf, **fit} for aero, surf, fit in zip(rsltAeroDict, rsltSurfDict, rsltFitDict)]
         if self.tempDir and rsltDict and not customOUT:
             rmtree(self.dirGRASP)
         return rsltDict
