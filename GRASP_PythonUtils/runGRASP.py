@@ -7,6 +7,7 @@ import warnings
 import yaml
 import re
 import time
+import pickle
 from datetime import datetime as dt # we want datetime.datetime
 from datetime import timedelta
 from shutil import copyfile, rmtree
@@ -14,12 +15,11 @@ from subprocess import Popen
 import numpy as np
 
 class graspDB(object):
-    def __init__(self, listGraspRunObjs):
+    def __init__(self, listGraspRunObjs=[]):
         self.grObjs = listGraspRunObjs
         
     def processData(self, maxCPUs=1, binPathGRASP='/usr/local/bin/grasp', savePath=False):
         usedDirs = []
-        rslts = []
         for grObj in self.grObjs:
             assert (not grObj.dirGRASP in usedDirs), "Each graspRun instance must use a unique directory!"
             grObj.writeSDATA()
@@ -28,20 +28,27 @@ class graspDB(object):
         pObjs = []
         while i < Nobjs:
             if sum([pObj.poll() is None for pObj in pObjs]) < maxCPUs:
-                print('Starting a new thread for graspRun index %d/%d' % (i,Nobjs-1))
+                print('Starting a new thread for graspRun index %d/%d' % (i+1,Nobjs))
                 pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP))
                 i+=1
             time.sleep(0.1)
         while any([pObj.poll() is None for pObj in pObjs]): time.sleep(0.1)
-        for grObj in self.grObjs:
-            rslts.append(grObj.readOutput())
-        if savePath:
-            self.saveResults(rslts, savePath)
-        return rslts
+        self.rslts = []
+        [self.rslts.extend(grObj.readOutput()) for grObj in self.grObjs] # TODO: note if readOutput returns [] (i.e. error occured w/ that run)
+        if savePath: 
+            with open(savePath, 'wb') as f:
+                pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
+        return self.rslts
     
-    def saveResults(rslts, savePath):
-        return 0 # TODO build this and load function out
-    
+    def loadResults(self, loadPath):
+        print('loadpath is '+loadPath)
+        try:
+            with open(loadPath, 'rb') as f:
+                self.rslts = pickle.load(f)
+            return self.rslts
+        except EnvironmentError:
+            warnings.warn('Could not load valid pickle data from %s.' % loadPath)
+            return []  
 
 # can add self.AUX_dict[Npixel] dictionary list to instance w/ additional fields to port into rslts
 class graspRun(object):
@@ -109,7 +116,7 @@ class graspRun(object):
             return []
         rsltAeroDict = self.parseOutAerosol(contents)
         if not rsltAeroDict:
-            warnings.warn('Aerosol data was not present, returning empty list in place of output data...')
+            warnings.warn('Aerosol data could not be read from %s\n  Returning empty list in place of output data...' % outputFN)
             return []
         rsltSurfDict = self.parseOutSurface(contents)
         rsltFitDict = self.parseOutFit(contents)
@@ -123,10 +130,13 @@ class graspRun(object):
     
     def parseOutDateTime(self, contents):
         results = []
-        ptrnDate = re.compile('^[ ]*Date:[ ]+')
-        ptrnTime = re.compile('^[ ]*Time:[ ]+')
+        ptrnDate = re.compile('^[ ]*Date[ ]*:[ ]+')
+        ptrnTime = re.compile('^[ ]*Time[ ]*:[ ]+')
+        ptrnLon = re.compile('^[ ]*Longitude[ ]*:[ ]+')
+        ptrnLat = re.compile('^[ ]*Latitude[ ]*:[ ]+')
         i = 0
-        while i<len(contents) and len(results)==0:
+        LatLonLinesFnd = 0 # GRASP prints these twice, assume lat/lon are last lines
+        while i<len(contents) and LatLonLinesFnd<2:
             line = contents[i]
             if not ptrnDate.match(line) is None: # Date
                 dtStrCln = line[ptrnDate.match(line).end():-1].split()
@@ -137,11 +147,26 @@ class graspRun(object):
                 for j in range(len(times_list)): 
                     dtNow = dt.combine(dates_list[j], times_list[j])
                     results.append(dict(datetime=dtNow))
+            if not ptrnLon.match(line) is None: # longitude
+                lonVals = np.array(line[ptrnLon.match(line).end():-1].split(), dtype=np.float)
+                for k,lon in enumerate(lonVals):
+                    results[k]['longitude'] = lon
+                LatLonLinesFnd += 1
+            if not ptrnLat.match(line) is None: # longitude
+                latVals = np.array(line[ptrnLat.match(line).end():-1].split(), dtype=np.float)
+                for k,lat in enumerate(latVals):
+                    results[k]['latitude'] = lat
+                LatLonLinesFnd += 1
             i+=1
+        if not len(results[-1].keys())==3:
+            warnings.warn('Failure reading date/lat/lon from GRASP output!')
+            return []
         return results
 
     def parseOutAerosol(self, contents):
         results = self.parseOutDateTime(contents)
+        if len(results)==0:
+            return []
         ptrnPSD = re.compile('^[ ]*(Radius \(um\),)?[ ]*Size Distribution dV\/dlnr \(normalized')
         ptrnLN = re.compile('^[ ]*Parameters of lognormal SD')
         ptrnVol = re.compile('^[ ]*Aerosol volume concentration')
