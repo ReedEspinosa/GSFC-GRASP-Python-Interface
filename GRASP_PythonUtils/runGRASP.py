@@ -8,11 +8,13 @@ import yaml
 import re
 import time
 import pickle
+import matplotlib.pyplot as plt
+import numpy as np
 from datetime import datetime as dt # we want datetime.datetime
 from datetime import timedelta
 from shutil import copyfile, rmtree
 from subprocess import Popen
-import numpy as np
+from scipy.stats import gaussian_kde
 
 class graspDB(object):
     def __init__(self, listGraspRunObjs=[]):
@@ -48,7 +50,48 @@ class graspDB(object):
             return self.rslts
         except EnvironmentError:
             warnings.warn('Could not load valid pickle data from %s.' % loadPath)
-            return []  
+            return []
+        
+    def scatterPlot(self, xVarNm, xInd, yVarNm, yInd, cVarNm=False, cInd=0, Rstats=True, logScl=False, FS=16):
+        xVarVal = self.getVarValues(xVarNm, xInd)
+        yVarVal = self.getVarValues(yVarNm, yInd)
+        # TODO: check for nans and remove them from x, y and c
+        if not cVarNm: #color by density
+            xy = np.log(np.vstack([xVarVal,yVarVal])) if logScl else np.vstack([xVarVal,yVarVal])
+            clrVar = gaussian_kde(xy)(xy)
+        else:
+            clrVar = self.getVarValues(cVarNm, cInd)
+        # GENERATE PLOTS
+        plt.figure()
+        axHnd = plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.')
+        plt.xlabel(self.getLabelStr(xVarNm, xInd))
+        plt.ylabel(self.getLabelStr(yVarNm, yInd))
+        if Rstats:
+            Rcoef = np.corrcoef(xVarVal, yVarVal)[0,1]
+            RMSE = np.sqrt(np.mean((xVarVal - yVarVal)**2))
+            bias = np.mean((yVarVal-xVarVal))
+            textstr = 'N=%d\nR=%.3f\nRMS=%.3f\nbias=%.3f\n'%(len(xVarVal), Rcoef, RMSE, bias)
+            plt.annotate(textstr, xy=(0, 1), xytext=(12, -12), va='top', xycoords='axes fraction', textcoords='offset points')
+        maxVal = np.max(np.r_[xVarVal,yVarVal])
+        if logScl:
+            minVal = np.max(np.r_[xVarVal,yVarVal])
+            plt.plot(np.r_[minVal, maxVal], np.r_[minVal, maxVal], 'k')
+            plt.yscale('log')
+            plt.xscale('log')
+            plt.xlim([minVal, maxVal])
+            plt.ylim([minVal, maxVal])
+        else:
+            plt.plot(np.r_[-1, maxVal], np.r_[-1, maxVal], 'k')
+            plt.xlim([-0.01, maxVal])
+            plt.ylim([-0.01, maxVal])
+        plt.tight_layout()
+        return axHnd
+        
+    def getVarValues(VarNm, Ind):
+        return [] # TODO fill out to return a 1D np array with values
+    
+    def getLabelStr(VarNm, Ind):
+        return '()' # TODO fill out to return wavelength, mode, param number, etc...
 
 # can add self.AUX_dict[Npixel] dictionary list to instance w/ additional fields to port into rslts
 class graspRun(object):
