@@ -52,15 +52,25 @@ class graspDB(object):
             warnings.warn('Could not load valid pickle data from %s.' % loadPath)
             return []
         
-    def scatterPlot(self, xVarNm, xInd, yVarNm, yInd, cVarNm=False, cInd=0, Rstats=True, logScl=False, FS=16):
+    def scatterPlot(self, xVarNm, xInd, yVarNm, yInd, cVarNm=False, cInd=0, Rstats=True, 
+                    logScl=False, one2oneScale=True, FS=16):
+        assert hasattr(self, 'rslts'), 'You must run GRASP or load existing results before plotting.'
         xVarVal = self.getVarValues(xVarNm, xInd)
         yVarVal = self.getVarValues(yVarNm, yInd)
-        # TODO: check for nans and remove them from x, y and c
         if not cVarNm: #color by density
+            vldInd = ~np.any((np.isnan(xVarVal),np.isnan(yVarVal)), axis=0)
+            assert np.any(vldInd), 'Zero valid matchups were found!'
+            xVarVal = xVarVal[vldInd] 
+            yVarVal = yVarVal[vldInd] 
             xy = np.log(np.vstack([xVarVal,yVarVal])) if logScl else np.vstack([xVarVal,yVarVal])
             clrVar = gaussian_kde(xy)(xy)
         else:
             clrVar = self.getVarValues(cVarNm, cInd)
+            vldInd = ~np.any((np.isnan(xVarVal),np.isnan(yVarVal),np.isnan(clrVar)), axis=0)
+            assert np.any(vldInd), 'Zero valid matchups were found!'
+            xVarVal = xVarVal[vldInd] 
+            yVarVal = yVarVal[vldInd] 
+            clrVar = clrVar[vldInd] 
         # GENERATE PLOTS
         plt.figure()
         axHnd = plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.')
@@ -74,24 +84,54 @@ class graspDB(object):
             plt.annotate(textstr, xy=(0, 1), xytext=(12, -12), va='top', xycoords='axes fraction', textcoords='offset points')
         maxVal = np.max(np.r_[xVarVal,yVarVal])
         if logScl:
-            minVal = np.max(np.r_[xVarVal,yVarVal])
-            plt.plot(np.r_[minVal, maxVal], np.r_[minVal, maxVal], 'k')
             plt.yscale('log')
             plt.xscale('log')
-            plt.xlim([minVal, maxVal])
-            plt.ylim([minVal, maxVal])
-        else:
+            if one2oneScale:
+                minVal = np.max(np.r_[xVarVal,yVarVal])
+                plt.plot(np.r_[minVal, maxVal], np.r_[minVal, maxVal], 'k')
+                plt.xlim([minVal, maxVal])
+                plt.ylim([minVal, maxVal])
+        elif one2oneScale:
             plt.plot(np.r_[-1, maxVal], np.r_[-1, maxVal], 'k')
             plt.xlim([-0.01, maxVal])
             plt.ylim([-0.01, maxVal])
         plt.tight_layout()
         return axHnd
         
-    def getVarValues(VarNm, Ind):
-        return [] # TODO fill out to return a 1D np array with values
+    def getVarValues(self, VarNm, IndRaw):
+        Ind = self.standardizeInd(VarNm, IndRaw)
+        varVal = np.array([rslt[VarNm][tuple(Ind)] for rslt in self.rslts])
+        return varVal 
     
-    def getLabelStr(VarNm, Ind):
-        return '()' # TODO fill out to return wavelength, mode, param number, etc...
+    def getLabelStr(self, VarNm, IndRaw):
+        Ind = self.standardizeInd(VarNm, IndRaw)
+        adTxt = ''
+        if np.isin(self.rslts[0]['lambda'].shape[0], self.rslts[0][VarNm].shape): # will trigger false label for some variables if Nwvl matches Nmodes or Nparams
+            wvl = self.rslts[0]['lambda'][Ind[-1]] # wvl is last ind; assume wavelengths are constant
+            adTxt = adTxt + '%5.3g μm, ' % wvl
+        if VarNm=='wtrSurf' or VarNm=='brdf' or VarNm=='bpdf':
+            adTxt = adTxt + 'Param%d, ' % Ind[0]
+        elif self.rslts[0][VarNm].shape[0] == self.rslts[0]['vol'].shape[0]: 
+            adTxt = adTxt + 'Mode%d, ' % Ind[0]
+        if len(adTxt)==1:
+            return VarNm
+        else:
+            return VarNm + ' (' + adTxt[0:-2] + ')'
+    
+    def standardizeInd(self, VarNm, IndRaw):
+        assert (VarNm in self.rslts[0]), '%s not found in retrieval results dict' % VarNm
+        Ind = np.array(IndRaw, ndmin=1)
+        if self.rslts[0][VarNm].ndim < len(Ind):
+            Ind = Ind.squeeze()
+        elif self.rslts[0][VarNm].ndim > len(Ind):
+            if self.rslts[0][VarNm].shape[0]==1: Ind = np.r_[1, Ind]
+            if self.rslts[0][VarNm].shape[-1]==1: Ind = np.r_[Ind, 1]
+        assert self.rslts[0][VarNm].ndim==len(Ind), 'Number of indices does not match diminsions of %s' % VarNm
+        assert self.rslts[0][VarNm].shape[0]>Ind[0], '1st index %d is out of bounds for variable %s' % (Ind[0],VarNm)
+        if len(Ind)==2:
+            assert self.rslts[0][VarNm].shape[1]>Ind[1], '2nd index %d is out of bounds for variable %s' % (Ind[1],VarNm)
+        return Ind
+
 
 # can add self.AUX_dict[Npixel] dictionary list to instance w/ additional fields to port into rslts
 class graspRun(object):
