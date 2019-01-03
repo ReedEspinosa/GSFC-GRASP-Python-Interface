@@ -10,6 +10,7 @@ import time
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from datetime import datetime as dt # we want datetime.datetime
 from datetime import timedelta
 from shutil import copyfile, rmtree
@@ -52,21 +53,24 @@ class graspDB(object):
             warnings.warn('Could not load valid pickle data from %s.' % loadPath)
             return []
         
-    def scatterPlot(self, xVarNm, xInd, yVarNm, yInd, cVarNm=False, cInd=0, Rstats=True, 
-                    logScl=False, one2oneScale=True, FS=16):
+    def scatterPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, cVarNm=False, cInd=0,  
+                    logScl=False, Rstats=False, one2oneScale=False, FS=16):
         assert hasattr(self, 'rslts'), 'You must run GRASP or load existing results before plotting.'
         xVarVal = self.getVarValues(xVarNm, xInd)
         yVarVal = self.getVarValues(yVarNm, yInd)
         if not cVarNm: #color by density
-            vldInd = ~np.any((np.isnan(xVarVal),np.isnan(yVarVal)), axis=0)
+            vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal)), axis=0)
             assert np.any(vldInd), 'Zero valid matchups were found!'
             xVarVal = xVarVal[vldInd] 
             yVarVal = yVarVal[vldInd] 
-            xy = np.log(np.vstack([xVarVal,yVarVal])) if logScl else np.vstack([xVarVal,yVarVal])
-            clrVar = gaussian_kde(xy)(xy)
+            if type(xVarVal[0])==dt or type(yVarVal[0])==dt: # don't color datetimes by density
+                clrVar = np.zeros(xVarVal.shape[0])
+            else:
+                xy = np.log(np.vstack([xVarVal,yVarVal])) if logScl else np.vstack([xVarVal,yVarVal])
+                clrVar = gaussian_kde(xy)(xy)
         else:
             clrVar = self.getVarValues(cVarNm, cInd)
-            vldInd = ~np.any((np.isnan(xVarVal),np.isnan(yVarVal),np.isnan(clrVar)), axis=0)
+            vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal),pd.isnull(clrVar)), axis=0)
             assert np.any(vldInd), 'Zero valid matchups were found!'
             xVarVal = xVarVal[vldInd] 
             yVarVal = yVarVal[vldInd] 
@@ -76,56 +80,75 @@ class graspDB(object):
         axHnd = plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.')
         plt.xlabel(self.getLabelStr(xVarNm, xInd))
         plt.ylabel(self.getLabelStr(yVarNm, yInd))
+        nonNumpy = not (type(xVarVal[0]).__module__ == np.__name__ and type(yVarVal[0]).__module__ == np.__name__)
+        if Rstats and nonNumpy:
+            warnings.warn('Rstats can not be calculated for non-numpy types')
+            Rstats = False
+        if one2oneScale and nonNumpy:
+            warnings.warn('one2oneScale can not be used with non-numpy types')
+            one2oneScale = False
         if Rstats:
             Rcoef = np.corrcoef(xVarVal, yVarVal)[0,1]
             RMSE = np.sqrt(np.mean((xVarVal - yVarVal)**2))
             bias = np.mean((yVarVal-xVarVal))
             textstr = 'N=%d\nR=%.3f\nRMS=%.3f\nbias=%.3f\n'%(len(xVarVal), Rcoef, RMSE, bias)
             plt.annotate(textstr, xy=(0, 1), xytext=(12, -12), va='top', xycoords='axes fraction', textcoords='offset points')
-        maxVal = np.max(np.r_[xVarVal,yVarVal])
         if logScl:
             plt.yscale('log')
             plt.xscale('log')
-            if one2oneScale:
+        if one2oneScale:
+            maxVal = np.max(np.r_[xVarVal,yVarVal])
+            if logScl:
                 minVal = np.max(np.r_[xVarVal,yVarVal])
                 plt.plot(np.r_[minVal, maxVal], np.r_[minVal, maxVal], 'k')
                 plt.xlim([minVal, maxVal])
                 plt.ylim([minVal, maxVal])
-        elif one2oneScale:
-            plt.plot(np.r_[-1, maxVal], np.r_[-1, maxVal], 'k')
-            plt.xlim([-0.01, maxVal])
-            plt.ylim([-0.01, maxVal])
+            else:
+                plt.plot(np.r_[-1, maxVal], np.r_[-1, maxVal], 'k')
+                plt.xlim([-0.01, maxVal])
+                plt.ylim([-0.01, maxVal])
+        if cVarNm:
+            clrHnd = plt.colorbar()
+            clrHnd.set_label(self.getLabelStr(cVarNm, cInd))
         plt.tight_layout()
         return axHnd
         
     def getVarValues(self, VarNm, IndRaw):
         Ind = self.standardizeInd(VarNm, IndRaw)
-        varVal = np.array([rslt[VarNm][tuple(Ind)] for rslt in self.rslts])
-        return varVal 
+        if not Ind: # datetimes and lat/lons are scalars and not indexable
+            if IndRaw!=0:
+                warnings.warn('Ignoring index value %d for scalar %s' % (IndRaw,VarNm))
+            return np.array([rslt[VarNm] for rslt in self.rslts])
+        return np.array([rslt[VarNm][tuple(Ind)] for rslt in self.rslts]) 
     
     def getLabelStr(self, VarNm, IndRaw):
         Ind = self.standardizeInd(VarNm, IndRaw)
         adTxt = ''
-        if np.isin(self.rslts[0]['lambda'].shape[0], self.rslts[0][VarNm].shape): # will trigger false label for some variables if Nwvl matches Nmodes or Nparams
-            wvl = self.rslts[0]['lambda'][Ind[-1]] # wvl is last ind; assume wavelengths are constant
-            adTxt = adTxt + '%5.3g μm, ' % wvl
-        if VarNm=='wtrSurf' or VarNm=='brdf' or VarNm=='bpdf':
-            adTxt = adTxt + 'Param%d, ' % Ind[0]
-        elif self.rslts[0][VarNm].shape[0] == self.rslts[0]['vol'].shape[0]: 
-            adTxt = adTxt + 'Mode%d, ' % Ind[0]
-        if len(adTxt)==1:
+        if type(self.rslts[0][VarNm]) == dt:            
+            adTxt = 'year, '
+        elif Ind:
+            if np.isin(self.rslts[0]['lambda'].shape[0], self.rslts[0][VarNm].shape): # may trigger false label for some variables if Nwvl matches Nmodes or Nparams
+                wvl = self.rslts[0]['lambda'][Ind[-1]] # wvl is last ind; assume wavelengths are constant
+                adTxt = adTxt + '%5.3g μm, ' % wvl
+            if VarNm=='wtrSurf' or VarNm=='brdf' or VarNm=='bpdf':
+                adTxt = adTxt + 'Param%d, ' % Ind[0]
+            elif self.rslts[0][VarNm].shape[0] == self.rslts[0]['vol'].shape[0]: 
+                adTxt = adTxt + 'Mode%d, ' % Ind[0]
+        if len(adTxt)==0:
             return VarNm
         else:
             return VarNm + ' (' + adTxt[0:-2] + ')'
     
     def standardizeInd(self, VarNm, IndRaw):
         assert (VarNm in self.rslts[0]), '%s not found in retrieval results dict' % VarNm
+        if type(self.rslts[0][VarNm]) != np.ndarray: # no indexing for these...
+            return False
         Ind = np.array(IndRaw, ndmin=1)
         if self.rslts[0][VarNm].ndim < len(Ind):
-            Ind = Ind.squeeze()
+            Ind = Ind[Ind!=0]
         elif self.rslts[0][VarNm].ndim > len(Ind):
-            if self.rslts[0][VarNm].shape[0]==1: Ind = np.r_[1, Ind]
-            if self.rslts[0][VarNm].shape[-1]==1: Ind = np.r_[Ind, 1]
+            if self.rslts[0][VarNm].shape[0]==1: Ind = np.r_[0, Ind]
+            if self.rslts[0][VarNm].shape[-1]==1: Ind = np.r_[Ind, 0]
         assert self.rslts[0][VarNm].ndim==len(Ind), 'Number of indices does not match diminsions of %s' % VarNm
         assert self.rslts[0][VarNm].shape[0]>Ind[0], '1st index %d is out of bounds for variable %s' % (Ind[0],VarNm)
         if len(Ind)==2:
