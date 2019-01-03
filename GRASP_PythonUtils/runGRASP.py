@@ -41,23 +41,22 @@ class graspDB(object):
         if savePath: 
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
+        self.rslts = np.array(self.rslts) # numpy lists indexed w/ only assignment (no copy) but prior code built for std. list
         return self.rslts
     
     def loadResults(self, loadPath):
-        print('loadpath is '+loadPath)
         try:
             with open(loadPath, 'rb') as f:
-                self.rslts = pickle.load(f)
+                self.rslts = np.array(pickle.load(f))
             return self.rslts
         except EnvironmentError:
             warnings.warn('Could not load valid pickle data from %s.' % loadPath)
-            return []
-        
-    def scatterPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, cVarNm=False, cInd=0,  
-                    logScl=False, Rstats=False, one2oneScale=False, FS=16):
+            return []    
+    def scatterPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, cVarNm=False, cInd=0, customAx=False,
+                    logScl=False, Rstats=False, one2oneScale=False, FS=16, rsltInds=slice(None)):
         assert hasattr(self, 'rslts'), 'You must run GRASP or load existing results before plotting.'
-        xVarVal = self.getVarValues(xVarNm, xInd)
-        yVarVal = self.getVarValues(yVarNm, yInd)
+        xVarVal = self.getVarValues(xVarNm, xInd, rsltInds)
+        yVarVal = self.getVarValues(yVarNm, yInd, rsltInds)
         if not cVarNm: #color by density
             vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal)), axis=0)
             assert np.any(vldInd), 'Zero valid matchups were found!'
@@ -69,15 +68,16 @@ class graspDB(object):
                 xy = np.log(np.vstack([xVarVal,yVarVal])) if logScl else np.vstack([xVarVal,yVarVal])
                 clrVar = gaussian_kde(xy)(xy)
         else:
-            clrVar = self.getVarValues(cVarNm, cInd)
+            clrVar = self.getVarValues(cVarNm, cInd, rsltInds)
             vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal),pd.isnull(clrVar)), axis=0)
             assert np.any(vldInd), 'Zero valid matchups were found!'
             xVarVal = xVarVal[vldInd] 
             yVarVal = yVarVal[vldInd] 
             clrVar = clrVar[vldInd] 
         # GENERATE PLOTS
-        plt.figure()
-        axHnd = plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.')
+        if customAx:
+            plt.sca(customAx)
+        plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.')
         plt.xlabel(self.getLabelStr(xVarNm, xInd))
         plt.ylabel(self.getLabelStr(yVarNm, yInd))
         nonNumpy = not (type(xVarVal[0]).__module__ == np.__name__ and type(yVarVal[0]).__module__ == np.__name__)
@@ -111,25 +111,25 @@ class graspDB(object):
             clrHnd = plt.colorbar()
             clrHnd.set_label(self.getLabelStr(cVarNm, cInd))
         plt.tight_layout()
-        return axHnd
+        return 
         
-    def getVarValues(self, VarNm, IndRaw):
-        Ind = self.standardizeInd(VarNm, IndRaw)
-        if not Ind: # datetimes and lat/lons are scalars and not indexable
-            if IndRaw!=0:
-                warnings.warn('Ignoring index value %d for scalar %s' % (IndRaw,VarNm))
-            return np.array([rslt[VarNm] for rslt in self.rslts])
-        return np.array([rslt[VarNm][tuple(Ind)] for rslt in self.rslts]) 
+    def getVarValues(self, VarNm, fldIndRaw, rsltInds=slice(None)):
+        fldInd = self.standardizeInd(VarNm, fldIndRaw)
+        if fldInd==-1: # datetimes and lat/lons are scalars and not indexable
+            if fldIndRaw!=0:
+                warnings.warn('Ignoring index value %d for scalar %s' % (fldIndRaw,VarNm))
+            return np.array([rslt[VarNm] for rslt in self.rslts[rsltInds]])
+        return np.array([rslt[VarNm][tuple(fldInd)] for rslt in self.rslts[rsltInds]]) 
     
     def getLabelStr(self, VarNm, IndRaw):
         Ind = self.standardizeInd(VarNm, IndRaw)
         adTxt = ''
         if type(self.rslts[0][VarNm]) == dt:            
             adTxt = 'year, '
-        elif Ind:
+        elif Ind!=-1:
             if np.isin(self.rslts[0]['lambda'].shape[0], self.rslts[0][VarNm].shape): # may trigger false label for some variables if Nwvl matches Nmodes or Nparams
                 wvl = self.rslts[0]['lambda'][Ind[-1]] # wvl is last ind; assume wavelengths are constant
-                adTxt = adTxt + '%5.3g μm, ' % wvl
+                adTxt = adTxt + '%5.2g μm, ' % wvl
             if VarNm=='wtrSurf' or VarNm=='brdf' or VarNm=='bpdf':
                 adTxt = adTxt + 'Param%d, ' % Ind[0]
             elif self.rslts[0][VarNm].shape[0] == self.rslts[0]['vol'].shape[0]: 
@@ -142,7 +142,7 @@ class graspDB(object):
     def standardizeInd(self, VarNm, IndRaw):
         assert (VarNm in self.rslts[0]), '%s not found in retrieval results dict' % VarNm
         if type(self.rslts[0][VarNm]) != np.ndarray: # no indexing for these...
-            return False
+            return -1
         Ind = np.array(IndRaw, ndmin=1)
         if self.rslts[0][VarNm].ndim < len(Ind):
             Ind = Ind[Ind!=0]
@@ -471,13 +471,3 @@ class pixel(object):
         return " ".join((baseStr, measStrAll, settingStr, '\n'))
     
          
-                  
-                  
-     
-     
-     
-     
-     
-     
-     
-                  
