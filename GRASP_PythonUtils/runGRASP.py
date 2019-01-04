@@ -51,10 +51,20 @@ class graspDB(object):
             return self.rslts
         except EnvironmentError:
             warnings.warn('Could not load valid pickle data from %s.' % loadPath)
-            return []    
+            return []
+    
+    def histPlot(self, VarNm, Ind=0, customAx=False, FS=16, rsltInds=slice(None)):
+        VarVal = self.getVarValues(VarNm, Ind, rsltInds)
+        VarVal = VarVal[~pd.isnull(VarVal)] 
+        assert VarVal.shape[0]>0, 'Zero valid matchups were found!'
+        if customAx: plt.sca(customAx)
+        plt.hist(VarVal, bins='auto')
+        plt.xlabel(self.getLabelStr(VarNm, Ind))
+        plt.ylabel('frequency')
+        plt.tight_layout()
+    
     def scatterPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, cVarNm=False, cInd=0, customAx=False,
                     logScl=False, Rstats=False, one2oneScale=False, FS=16, rsltInds=slice(None)):
-        assert hasattr(self, 'rslts'), 'You must run GRASP or load existing results before plotting.'
         xVarVal = self.getVarValues(xVarNm, xInd, rsltInds)
         yVarVal = self.getVarValues(yVarNm, yInd, rsltInds)
         if not cVarNm: #color by density
@@ -75,8 +85,7 @@ class graspDB(object):
             yVarVal = yVarVal[vldInd] 
             clrVar = clrVar[vldInd] 
         # GENERATE PLOTS
-        if customAx:
-            plt.sca(customAx)
+        if customAx: plt.sca(customAx)
         plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.')
         plt.xlabel(self.getLabelStr(xVarNm, xInd))
         plt.ylabel(self.getLabelStr(yVarNm, yInd))
@@ -111,9 +120,64 @@ class graspDB(object):
             clrHnd = plt.colorbar()
             clrHnd.set_label(self.getLabelStr(cVarNm, cInd))
         plt.tight_layout()
-        return 
         
+    def diffPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, customAx=False, rsltInds=slice(None),
+                 FS=16, logSpaceBins=True, lambdaFuncEE=False):  # lambdaFuncEE = lambda x: 0.03+0.1*x (DT C6 Ocean EE)
+        xVarVal = self.getVarValues(xVarNm, xInd, rsltInds)
+        yVarVal = self.getVarValues(yVarNm, yInd, rsltInds)
+        vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal)), axis=0)
+        assert np.any(vldInd), 'Zero valid matchups were found!'
+        xVarVal = xVarVal[vldInd] 
+        yVarVal = yVarVal[vldInd] 
+        if logSpaceBins:
+            binEdge = np.exp(np.histogram(np.log(xVarVal),bins='auto')[1])
+            binMid = np.sqrt(binEdge[1:]*binEdge[:-1])
+        else:
+            binEdge = np.histogram(xVarVal,bins='auto')[1]
+            binMid = (binEdge[1:]+binEdge[:-1])/2            
+        varDif = yVarVal-xVarVal
+        varRng = np.zeros([binMid.shape[0],3]) # lower (16%), mean, upper (84%)
+        for i in range(binMid.shape[0]):
+            varDifNow = varDif[np.logical_and(xVarVal > binEdge[i], xVarVal <= binEdge[i+1])]
+            if varDifNow.shape[0]==0:
+                varRng[i,:] = np.nan
+            else:
+                varRng[i,0] = np.percentile(varDifNow, 16)
+                varRng[i,1] = np.mean(varDifNow)
+                varRng[i,2] = np.percentile(varDifNow, 84)
+        binMid = binMid[~np.isnan(varRng[:,0])]
+        varRng = varRng[~np.isnan(varRng[:,0]),:]
+        if customAx: plt.sca(customAx)
+        if logSpaceBins: plt.xscale('log')
+        plt.plot([binEdge[0],binEdge[-1]], [0,0], 'k')
+        if lambdaFuncEE:
+            if logSpaceBins: 
+                x = np.logspace(np.log10(binEdge[0]), np.log10(binEdge[-1]), 1000)
+            else:
+                x = np.linspace(binEdge[0], binEdge[-1], 1000)
+            y = lambdaFuncEE(x)
+            plt.plot(x, y, '--', color=[0.5,0.5,0.5])
+            plt.plot(x, -y, '--', color=[0.5,0.5,0.5])
+        errBnds = np.abs(varRng[:,1].reshape(-1,1)-varRng[:,[0,2]]).T
+        plt.errorbar(binMid, varRng[:,1], errBnds, ecolor='r', color='r', marker='s', linstyle=None)
+        plt.xlim([binEdge[0], binEdge[-1]])
+        plt.xlabel(self.getLabelStr(xVarNm, xInd))
+        plt.ylabel('%s-%s' % (yVarNm, xVarNm))
+        if lambdaFuncEE:
+            Nval = xVarVal.shape[0]
+            inEE = 100*np.sum(np.abs(varDif) < lambdaFuncEE(xVarVal))/Nval
+            in2EE = 100*np.sum(np.abs(varDif) < 2*lambdaFuncEE(xVarVal))/Nval
+            txtStr = 'N=%d\nwithin 1xEE: %4.1f%%\nwithin 2xEE: %4.1f%%' % (Nval,inEE,in2EE)
+            b = lambdaFuncEE(0)
+            m = lambdaFuncEE(1) - b
+            if np.all(y==m*x+b): # safe to assume EE function is linear
+                txtStr = txtStr + '\nEE=%.2g+%.2gτ' % (b,m)
+            plt.annotate(txtStr, xy=(0, 1), xytext=(6, -6), va='top', xycoords='axes fraction',
+                         textcoords='offset points', FontSize=FS)
+        plt.tight_layout()
+            
     def getVarValues(self, VarNm, fldIndRaw, rsltInds=slice(None)):
+        assert hasattr(self, 'rslts'), 'You must run GRASP or load existing results before plotting.'
         fldInd = self.standardizeInd(VarNm, fldIndRaw)
         if fldInd==-1: # datetimes and lat/lons are scalars and not indexable
             if fldIndRaw!=0:
