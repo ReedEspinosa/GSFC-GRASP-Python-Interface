@@ -67,11 +67,14 @@ class graspDB(object):
                     logScl=False, Rstats=False, one2oneScale=False, FS=16, rsltInds=slice(None)):
         xVarVal = self.getVarValues(xVarNm, xInd, rsltInds)
         yVarVal = self.getVarValues(yVarNm, yInd, rsltInds)
+        zeroErrStr = 'Values must be greater than zero for log scale!'
+        noValPntsErrstr = 'Zero valid matchups were found!'
         if not cVarNm: #color by density
             vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal)), axis=0)
-            assert np.any(vldInd), 'Zero valid matchups were found!'
+            assert np.any(vldInd), noValPntsErrstr
             xVarVal = xVarVal[vldInd] 
             yVarVal = yVarVal[vldInd] 
+            assert (not logScl) | ((xVarVal>0).all() and (yVarVal>0).all()), zeroErrStr
             if type(xVarVal[0])==dt or type(yVarVal[0])==dt: # don't color datetimes by density
                 clrVar = np.zeros(xVarVal.shape[0])
             else:
@@ -80,10 +83,11 @@ class graspDB(object):
         else:
             clrVar = self.getVarValues(cVarNm, cInd, rsltInds)
             vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal),pd.isnull(clrVar)), axis=0)
-            assert np.any(vldInd), 'Zero valid matchups were found!'
+            assert np.any(vldInd), noValPntsErrstr
             xVarVal = xVarVal[vldInd] 
             yVarVal = yVarVal[vldInd] 
-            clrVar = clrVar[vldInd] 
+            clrVar = clrVar[vldInd]
+            assert not logScl | ((xVarVal>0).all() and (yVarVal>0).all()), zeroErrStr
         # GENERATE PLOTS
         if customAx: plt.sca(customAx)
         plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.')
@@ -108,7 +112,7 @@ class graspDB(object):
         if one2oneScale:
             maxVal = np.max(np.r_[xVarVal,yVarVal])
             if logScl:
-                minVal = np.max(np.r_[xVarVal,yVarVal])
+                minVal = np.min(np.r_[xVarVal,yVarVal])
                 plt.plot(np.r_[minVal, maxVal], np.r_[minVal, maxVal], 'k')
                 plt.xlim([minVal, maxVal])
                 plt.ylim([minVal, maxVal])
@@ -116,9 +120,14 @@ class graspDB(object):
                 plt.plot(np.r_[-1, maxVal], np.r_[-1, maxVal], 'k')
                 plt.xlim([-0.01, maxVal])
                 plt.ylim([-0.01, maxVal])
+        elif logScl: # there is a bug in matplotlib that screws up scale
+            plt.xlim([xVarVal.min(), xVarVal.max()])
+            plt.ylim([yVarVal.min(), yVarVal.max()])
         if cVarNm:
             clrHnd = plt.colorbar()
             clrHnd.set_label(self.getLabelStr(cVarNm, cInd))
+        plt.yscale('log') #HACK
+        plt.ylim([yVarVal.min(), yVarVal.max()]) #HACK
         plt.tight_layout()
         
     def diffPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, customAx=False, rsltInds=slice(None),
@@ -179,25 +188,25 @@ class graspDB(object):
     def getVarValues(self, VarNm, fldIndRaw, rsltInds=slice(None)):
         assert hasattr(self, 'rslts'), 'You must run GRASP or load existing results before plotting.'
         fldInd = self.standardizeInd(VarNm, fldIndRaw)
-        if fldInd==-1: # datetimes and lat/lons are scalars and not indexable
+        if np.any(fldInd==-1): # datetimes and lat/lons are scalars and not indexable
             if fldIndRaw!=0:
                 warnings.warn('Ignoring index value %d for scalar %s' % (fldIndRaw,VarNm))
             return np.array([rslt[VarNm] for rslt in self.rslts[rsltInds]])
         return np.array([rslt[VarNm][tuple(fldInd)] for rslt in self.rslts[rsltInds]]) 
     
     def getLabelStr(self, VarNm, IndRaw):
-        Ind = self.standardizeInd(VarNm, IndRaw)
+        fldInd = self.standardizeInd(VarNm, IndRaw)
         adTxt = ''
         if type(self.rslts[0][VarNm]) == dt:            
             adTxt = 'year, '
-        elif Ind!=-1:
+        elif np.all(fldInd!=-1):
             if np.isin(self.rslts[0]['lambda'].shape[0], self.rslts[0][VarNm].shape): # may trigger false label for some variables if Nwvl matches Nmodes or Nparams
-                wvl = self.rslts[0]['lambda'][Ind[-1]] # wvl is last ind; assume wavelengths are constant
+                wvl = self.rslts[0]['lambda'][fldInd[-1]] # wvl is last ind; assume wavelengths are constant
                 adTxt = adTxt + '%5.2g μm, ' % wvl
             if VarNm=='wtrSurf' or VarNm=='brdf' or VarNm=='bpdf':
-                adTxt = adTxt + 'Param%d, ' % Ind[0]
+                adTxt = adTxt + 'Param%d, ' % fldInd[0]
             elif self.rslts[0][VarNm].shape[0] == self.rslts[0]['vol'].shape[0]: 
-                adTxt = adTxt + 'Mode%d, ' % Ind[0]
+                adTxt = adTxt + 'Mode%d, ' % fldInd[0]
         if len(adTxt)==0:
             return VarNm
         else:
@@ -206,18 +215,18 @@ class graspDB(object):
     def standardizeInd(self, VarNm, IndRaw):
         assert (VarNm in self.rslts[0]), '%s not found in retrieval results dict' % VarNm
         if type(self.rslts[0][VarNm]) != np.ndarray: # no indexing for these...
-            return -1
+            return np.r_[-1]
         Ind = np.array(IndRaw, ndmin=1)
         if self.rslts[0][VarNm].ndim < len(Ind):
             Ind = Ind[Ind!=0]
         elif self.rslts[0][VarNm].ndim > len(Ind):
             if self.rslts[0][VarNm].shape[0]==1: Ind = np.r_[0, Ind]
             if self.rslts[0][VarNm].shape[-1]==1: Ind = np.r_[Ind, 0]
-        assert self.rslts[0][VarNm].ndim==len(Ind), 'Number of indices does not match diminsions of %s' % VarNm
+        assert self.rslts[0][VarNm].ndim==len(Ind), 'Number of indices (%d) does not match diminsions of %s' % (len(Ind),VarNm)
         assert self.rslts[0][VarNm].shape[0]>Ind[0], '1st index %d is out of bounds for variable %s' % (Ind[0],VarNm)
         if len(Ind)==2:
             assert self.rslts[0][VarNm].shape[1]>Ind[1], '2nd index %d is out of bounds for variable %s' % (Ind[1],VarNm)
-        return Ind
+        return np.array(Ind)
 
 
 # can add self.AUX_dict[Npixel] dictionary list to instance w/ additional fields to port into rslts
