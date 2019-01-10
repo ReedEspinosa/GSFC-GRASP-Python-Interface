@@ -126,8 +126,8 @@ class graspDB(object):
         if cVarNm:
             clrHnd = plt.colorbar()
             clrHnd.set_label(self.getLabelStr(cVarNm, cInd))
-        plt.yscale('log') #HACK
-        plt.ylim([yVarVal.min(), yVarVal.max()]) #HACK
+#        plt.yscale('log') #HACK
+#        plt.ylim([yVarVal.min(), yVarVal.max()]) #HACK
         plt.tight_layout()
         
     def diffPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, customAx=False, rsltInds=slice(None),
