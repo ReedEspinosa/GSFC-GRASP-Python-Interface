@@ -53,7 +53,7 @@ class graspDB(object):
             warnings.warn('Could not load valid pickle data from %s.' % loadPath)
             return []
     
-    def histPlot(self, VarNm, Ind=0, customAx=False, FS=16, rsltInds=slice(None)):
+    def histPlot(self, VarNm, Ind=0, customAx=False, FS=14, rsltInds=slice(None), pltLabel=False):
         VarVal = self.getVarValues(VarNm, Ind, rsltInds)
         VarVal = VarVal[~pd.isnull(VarVal)] 
         assert VarVal.shape[0]>0, 'Zero valid matchups were found!'
@@ -61,10 +61,11 @@ class graspDB(object):
         plt.hist(VarVal, bins='auto')
         plt.xlabel(self.getLabelStr(VarNm, Ind))
         plt.ylabel('frequency')
-        plt.tight_layout()
-    
+        self.plotCleanUp(pltLabel)
+        
     def scatterPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, cVarNm=False, cInd=0, customAx=False,
-                    logScl=False, Rstats=False, one2oneScale=False, FS=16, rsltInds=slice(None)):
+                    logScl=False, Rstats=False, one2oneScale=False, FS=14, rsltInds=slice(None),
+                    pltLabel=False):
         xVarVal = self.getVarValues(xVarNm, xInd, rsltInds)
         yVarVal = self.getVarValues(yVarNm, yInd, rsltInds)
         zeroErrStr = 'Values must be greater than zero for log scale!'
@@ -126,12 +127,10 @@ class graspDB(object):
         if cVarNm:
             clrHnd = plt.colorbar()
             clrHnd.set_label(self.getLabelStr(cVarNm, cInd))
-#        plt.yscale('log') #HACK
-#        plt.ylim([yVarVal.min(), yVarVal.max()]) #HACK
-        plt.tight_layout()
+        self.plotCleanUp(pltLabel)
         
     def diffPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, customAx=False, rsltInds=slice(None),
-                 FS=16, logSpaceBins=True, lambdaFuncEE=False):  # lambdaFuncEE = lambda x: 0.03+0.1*x (DT C6 Ocean EE)
+                 FS=14, logSpaceBins=True, lambdaFuncEE=False, pltLabel=False):  # lambdaFuncEE = lambda x: 0.03+0.1*x (DT C6 Ocean EE)
         xVarVal = self.getVarValues(xVarNm, xInd, rsltInds)
         yVarVal = self.getVarValues(yVarNm, yInd, rsltInds)
         vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal)), axis=0)
@@ -139,11 +138,11 @@ class graspDB(object):
         xVarVal = xVarVal[vldInd] 
         yVarVal = yVarVal[vldInd] 
         if logSpaceBins:
-            binEdge = np.exp(np.histogram(np.log(xVarVal),bins='auto')[1])
+            binEdge = np.exp(np.histogram(np.log(xVarVal),bins='sturges')[1])
             binMid = np.sqrt(binEdge[1:]*binEdge[:-1])
         else:
-            binEdge = np.histogram(xVarVal,bins='auto')[1]
-            binMid = (binEdge[1:]+binEdge[:-1])/2            
+            binEdge = np.histogram(xVarVal,bins='sturges')[1]
+            binMid = (binEdge[1:]+binEdge[:-1])/2
         varDif = yVarVal-xVarVal
         varRng = np.zeros([binMid.shape[0],3]) # lower (16%), mean, upper (84%)
         for i in range(binMid.shape[0]):
@@ -183,7 +182,9 @@ class graspDB(object):
                 txtStr = txtStr + '\nEE=%.2g+%.2gτ' % (b,m)
             plt.annotate(txtStr, xy=(0, 1), xytext=(6, -6), va='top', xycoords='axes fraction',
                          textcoords='offset points', FontSize=FS)
-        plt.tight_layout()
+            plt.ylim([np.min([pltY, 2*y.max()]) for pltY in plt.ylim()]) # confine ylim to twice max(EE)
+        plt.ylim([-np.abs(plt.ylim()).max(), np.abs(plt.ylim()).max()]) # force zero line to middle
+        self.plotCleanUp(pltLabel)
             
     def getVarValues(self, VarNm, fldIndRaw, rsltInds=slice(None)):
         assert hasattr(self, 'rslts'), 'You must run GRASP or load existing results before plotting.'
@@ -222,12 +223,18 @@ class graspDB(object):
         elif self.rslts[0][VarNm].ndim > len(Ind):
             if self.rslts[0][VarNm].shape[0]==1: Ind = np.r_[0, Ind]
             if self.rslts[0][VarNm].shape[-1]==1: Ind = np.r_[Ind, 0]
-        assert self.rslts[0][VarNm].ndim==len(Ind), 'Number of indices (%d) does not match diminsions of %s' % (len(Ind),VarNm)
+        assert self.rslts[0][VarNm].ndim==len(Ind), 'Number of indices (%d) does not match diminsions of %s (%d)' % (len(Ind),VarNm,self.rslts[0][VarNm].ndim)
         assert self.rslts[0][VarNm].shape[0]>Ind[0], '1st index %d is out of bounds for variable %s' % (Ind[0],VarNm)
         if len(Ind)==2:
             assert self.rslts[0][VarNm].shape[1]>Ind[1], '2nd index %d is out of bounds for variable %s' % (Ind[1],VarNm)
         return np.array(Ind)
 
+    def plotCleanUp(self, pltLabel=False):
+        if pltLabel:
+            plt.suptitle(pltLabel)
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        else:
+            plt.tight_layout()
 
 # can add self.AUX_dict[Npixel] dictionary list to instance w/ additional fields to port into rslts
 class graspRun(object):
