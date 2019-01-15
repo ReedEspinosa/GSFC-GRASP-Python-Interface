@@ -201,9 +201,14 @@ class graspDB(object):
         if type(self.rslts[0][VarNm]) == dt:            
             adTxt = 'year, '
         elif np.all(fldInd!=-1):
-            if np.isin(self.rslts[0]['lambda'].shape[0], self.rslts[0][VarNm].shape): # may trigger false label for some variables if Nwvl matches Nmodes or Nparams
+            wvl = 0
+            if VarNm=='aodDT' and 'lambdaDT' in self.rslts[0].keys():
+                wvl = self.rslts[0]['lambdaDT'][fldInd[-1]]
+            elif VarNm=='aodDB':
+                wvl = self.rslts[0]['lambdaDB'][fldInd[-1]]
+            elif np.isin(self.rslts[0]['lambda'].shape[0], self.rslts[0][VarNm].shape): # may trigger false label for some variables if Nwvl matches Nmodes or Nparams
                 wvl = self.rslts[0]['lambda'][fldInd[-1]] # wvl is last ind; assume wavelengths are constant
-                adTxt = adTxt + '%5.2g μm, ' % wvl
+            if wvl>0: adTxt = adTxt + '%5.2g μm, ' % wvl
             if VarNm=='wtrSurf' or VarNm=='brdf' or VarNm=='bpdf':
                 adTxt = adTxt + 'Param%d, ' % fldInd[0]
             elif self.rslts[0][VarNm].shape[0] == self.rslts[0]['vol'].shape[0]: 
