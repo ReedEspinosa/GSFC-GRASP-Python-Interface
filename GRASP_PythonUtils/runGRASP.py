@@ -88,7 +88,7 @@ class graspDB(object):
             xVarVal = xVarVal[vldInd] 
             yVarVal = yVarVal[vldInd] 
             clrVar = clrVar[vldInd]
-            assert not logScl | ((xVarVal>0).all() and (yVarVal>0).all()), zeroErrStr
+            assert (not logScl) | ((xVarVal>0).all() and (yVarVal>0).all()), zeroErrStr
         # GENERATE PLOTS
         if customAx: plt.sca(customAx)
         plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.')
