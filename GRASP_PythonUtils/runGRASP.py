@@ -21,23 +21,32 @@ class graspDB(object):
     def __init__(self, listGraspRunObjs=[]):
         self.grObjs = listGraspRunObjs
         
-    def processData(self, maxCPUs=1, binPathGRASP='/usr/local/bin/grasp', savePath=False):
+    def processData(self, maxCPUs=1, binPathGRASP='/usr/local/bin/grasp', savePath=False, nodesSLURM=0):
         usedDirs = []
         for grObj in self.grObjs:
             assert (not grObj.dirGRASP in usedDirs), "Each graspRun instance must use a unique directory!"
+            usedDirs.append(grObj.dirGRASP)
             grObj.writeSDATA()
-        i = 0
-        Nobjs = len(self.grObjs)
-        pObjs = []
-        while i < Nobjs:
-            if sum([pObj.poll() is None for pObj in pObjs]) < maxCPUs:
-                print('Starting a new thread for graspRun index %d/%d' % (i+1,Nobjs))
-                pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP))
-                i+=1
-            time.sleep(0.1)
-        while any([pObj.poll() is None for pObj in pObjs]): time.sleep(0.1)
+        if nodesSLURM==0:
+            i = 0
+            Nobjs = len(self.grObjs)
+            pObjs = []
+            while i < Nobjs:
+                if sum([pObj.poll() is None for pObj in pObjs]) < maxCPUs:
+                    print('Starting a new thread for graspRun index %d/%d' % (i+1,Nobjs))
+                    pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP))
+                    i+=1
+                time.sleep(0.1)
+            while any([pObj.poll() is None for pObj in pObjs]): time.sleep(0.1)
+        else:
+            # N steps through self.grObjs maxCPU's at a time
+            # write runGRASP_N.sh using new dryRun option on runGRASP foreach maxCPU self.grObjs
+            #   (dry run option would just return the command grasp settings...yml)
+            # edit slurmTest2.sh to call runGRASP_N.sh with --array=1-N
+            # set approriate flags so that grObj.readOutput() can be called without error  
+            assert False, 'SLURM IS NOT YET SUPPORTED'
         self.rslts = []
-        [self.rslts.extend(grObj.readOutput()) for grObj in self.grObjs] # TODO: note if readOutput returns [] (i.e. error occured w/ that run)
+        [self.rslts.extend(grObj.readOutput()) for grObj in self.grObjs]
         if savePath: 
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
@@ -214,7 +223,7 @@ class graspDB(object):
             if wvl>0: adTxt = adTxt + '%5.2g μm, ' % wvl
             if VarNm=='wtrSurf' or VarNm=='brdf' or VarNm=='bpdf':
                 adTxt = adTxt + 'Param%d, ' % fldInd[0]
-            elif self.rslts[0][VarNm].shape[0] == self.rslts[0]['vol'].shape[0]: 
+            elif not np.isscalar(self.rslts[0]['vol']) and self.rslts[0][VarNm].shape[0] == self.rslts[0]['vol'].shape[0]: 
                 adTxt = adTxt + 'Mode%d, ' % fldInd[0]
         if len(adTxt)==0:
             return VarNm
@@ -502,6 +511,8 @@ class graspRun(object):
         if not ('input'  in data_loaded) or not ('file' in data_loaded['input']):
             warnings.warn('The file '+self.pathYAML+' did not have field output.segment.stream! Can not get stream filename.', stacklevel=2)
             return False
+        if data_loaded["output"]["segment"]["stream"] == 'screen':
+            warnings.warn('The field output.segment.stream in '+self.pathYAML+' is set to screen. Reading from stdout is not currently supported.', stacklevel=2)
         return data_loaded["output"]["segment"]["stream"]
     
     def genSDATAHead(self, unqTimes):
