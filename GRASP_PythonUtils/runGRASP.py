@@ -24,8 +24,9 @@ class graspDB(object):
     def processData(self, maxCPUs=1, binPathGRASP='/usr/local/bin/grasp', savePath=False, nodesSLURM=0):
         usedDirs = []
         for grObj in self.grObjs:
-            assert (not grObj.dirGRASP in usedDirs), "Each graspRun instance must use a unique directory!"
-            usedDirs.append(grObj.dirGRASP)
+            if grObj.dirGRASP: # If not it will be deduced later when writing SDATA
+                assert (not grObj.dirGRASP in usedDirs), "Each graspRun instance must use a unique directory!"
+                usedDirs.append(grObj.dirGRASP)
             grObj.writeSDATA()
         if nodesSLURM==0:
             i = 0
@@ -85,7 +86,7 @@ class graspDB(object):
             assert np.any(vldInd), noValPntsErrstr
             xVarVal = xVarVal[vldInd] 
             yVarVal = yVarVal[vldInd] 
-            assert (not logScl) | ((xVarVal>0).all() and (yVarVal>0).all()), zeroErrStr
+            assert (not logScl) or ((xVarVal>0).all() and (yVarVal>0).all()), zeroErrStr
             if type(xVarVal[0])==dt or type(yVarVal[0])==dt: # don't color datetimes by density
                 clrVar = np.zeros(xVarVal.shape[0])
             else:
@@ -98,10 +99,10 @@ class graspDB(object):
             xVarVal = xVarVal[vldInd] 
             yVarVal = yVarVal[vldInd] 
             clrVar = clrVar[vldInd]
-            assert (not logScl) | ((xVarVal>0).all() and (yVarVal>0).all()), zeroErrStr
+            assert (not logScl) or ((xVarVal>0).all() and (yVarVal>0).all()), zeroErrStr
         # GENERATE PLOTS
         if customAx: plt.sca(customAx)
-        plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.')
+        plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.', s=2)
         plt.xlabel(self.getLabelStr(xVarNm, xInd))
         plt.ylabel(self.getLabelStr(yVarNm, yInd))
         nonNumpy = not (type(xVarVal[0]).__module__ == np.__name__ and type(yVarVal[0]).__module__ == np.__name__)
@@ -236,7 +237,7 @@ class graspDB(object):
             return np.r_[-1]
         Ind = np.array(IndRaw, ndmin=1)
         if self.rslts[0][VarNm].ndim < len(Ind):
-            Ind = Ind[Ind!=0]
+            Ind = np.r_[0] if np.all(Ind==0) else Ind[Ind!=0] 
         elif self.rslts[0][VarNm].ndim > len(Ind):
             if self.rslts[0][VarNm].shape[0]==1: Ind = np.r_[0, Ind]
             if self.rslts[0][VarNm].shape[-1]==1: Ind = np.r_[Ind, 0]
@@ -277,6 +278,7 @@ class graspRun(object):
             return False
         if not self.dirGRASP and self.tempDir:
                 self.dirGRASP = tempfile.mkdtemp()
+                print('Writing SDATA file to %s' % self.dirGRASP)
         self.pathSDATA = os.path.join(self.dirGRASP, self.findSDATA_FN());
         assert (self.pathSDATA), 'Failed to read SDATA filename from '+self.pathYAML
         unqTimes = np.unique([pix.dtNm for pix in self.pixels])
