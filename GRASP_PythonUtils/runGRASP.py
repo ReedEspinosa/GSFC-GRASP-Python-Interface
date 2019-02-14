@@ -4,7 +4,7 @@
 import tempfile
 import os.path
 import warnings
-import yaml
+import yaml # may require `conda install pyyaml`
 import re
 import time
 import pickle
@@ -95,6 +95,7 @@ class graspDB(object):
         else:
             clrVar = self.getVarValues(cVarNm, cInd, rsltInds)
             vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal),pd.isnull(clrVar)), axis=0)
+#            vldInd = np.logical_and(vldInd, clrVar>np.percentile(clrVar,70.0)) # to stretch color scale
             assert np.any(vldInd), noValPntsErrstr
             xVarVal = xVarVal[vldInd] 
             yVarVal = yVarVal[vldInd] 
@@ -376,6 +377,7 @@ class graspRun(object):
         ptrnLN = re.compile('^[ ]*Parameters of lognormal SD')
         ptrnVol = re.compile('^[ ]*Aerosol volume concentration')
         ptrnSPH = re.compile('^[ ]*% of spherical particles')
+        ptrnHGNT = re.compile('^[ ]*Aerosol profile mean height')
         ptrnAOD = re.compile('^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
         ptrnAODmode = re.compile('^[ ]*Wavelength \(um\),[ ]+AOD_Particle_mode')
         ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
@@ -402,7 +404,8 @@ class graspRun(object):
             self.parseMultiParamFld(contents, i, results, ptrnAOD, 'aod', 'lambda')
             self.parseMultiParamFld(contents, i, results, ptrnPSD, 'dVdlnr', 'r')
             self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
-            self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')            
+            self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
+            self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')   
             self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode')
             self.parseMultiParamFld(contents, i, results, ptrnSSA, 'ssa')
             self.parseMultiParamFld(contents, i, results, ptrnSSAmode, 'ssaMode')
