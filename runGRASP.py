@@ -13,8 +13,8 @@ import numpy as np
 import pandas as pd
 from datetime import datetime as dt # we want datetime.datetime
 from datetime import timedelta
-from shutil import copyfile, rmtree
-from subprocess import Popen
+from shutil import copyfile
+from subprocess import Popen,PIPE
 from scipy.stats import gaussian_kde
 
 class graspDB(object):
@@ -39,15 +39,24 @@ class graspDB(object):
                     i+=1
                 time.sleep(0.1)
             while any([pObj.poll() is None for pObj in pObjs]): time.sleep(0.1)
+            failedRuns = np.array([pObj.returncode for pObj in pObjs])>0
+            for flRn in failedRuns.nonzero()[0]:
+                print(' !!! Exit code %d in: %s' % (pObjs[flRn].returncode, self.grObjs[flRn].dirGRASP))
+                for line in iter(pObjs[flRn].stdout.readline, b''):
+                    errMtch = re.match('^ERROR:.*$', line.decode("utf-8"))
+                    if errMtch is not None: print(errMtch.group(0))
+            [pObj.stdout.close() for pObj in pObjs]
         else:
             # N steps through self.grObjs maxCPU's at a time
             # write runGRASP_N.sh using new dryRun option on runGRASP foreach maxCPU self.grObjs
             #   (dry run option would just return the command grasp settings...yml)
             # edit slurmTest2.sh to call runGRASP_N.sh with --array=1-N
             # set approriate flags so that grObj.readOutput() can be called without error  
+            # failedRuns = [bool with true for grObjs that failed to run with exit code 0]
             assert False, 'SLURM IS NOT YET SUPPORTED'
         self.rslts = []
-        [self.rslts.extend(grObj.readOutput()) for grObj in self.grObjs]
+#        [self.rslts.extend(grObj.readOutput()) for grObj in self.grObjs[~failedRuns]]
+        [self.rslts.extend(self.grObjs[i].readOutput()) for i in np.nonzero(~failedRuns)[0]]
         if savePath: 
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
@@ -92,10 +101,11 @@ class graspDB(object):
             else:
                 xy = np.log(np.vstack([xVarVal,yVarVal])) if logScl else np.vstack([xVarVal,yVarVal])
                 clrVar = gaussian_kde(xy)(xy)
+                if 'aod' in xVarNm: clrVar = clrVar**0.25
         else:
             clrVar = self.getVarValues(cVarNm, cInd, rsltInds)
             vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal),pd.isnull(clrVar)), axis=0)
-#            vldInd = np.logical_and(vldInd, clrVar>np.percentile(clrVar,70.0)) # to stretch color scale
+#            vldInd = np.logical_and(vldInd, np.abs(clrVar)<np.nanpercentile(np.abs(clrVar),20.0)) # HACK to stretch color scale
             assert np.any(vldInd), noValPntsErrstr
             xVarVal = xVarVal[vldInd] 
             yVarVal = yVarVal[vldInd] 
@@ -103,7 +113,8 @@ class graspDB(object):
             assert (not logScl) or ((xVarVal>0).all() and (yVarVal>0).all()), zeroErrStr
         # GENERATE PLOTS
         if customAx: plt.sca(customAx)
-        plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.', s=2)
+        MS = 2 if xVarVal.shape[0]<5000 else 1
+        plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.', s=MS, cmap='inferno')
         plt.xlabel(self.getLabelStr(xVarNm, xInd))
         plt.ylabel(self.getLabelStr(yVarNm, yInd))
         nonNumpy = not (type(xVarVal[0]).__module__ == np.__name__ and type(yVarVal[0]).__module__ == np.__name__)
@@ -117,9 +128,10 @@ class graspDB(object):
             Rcoef = np.corrcoef(xVarVal, yVarVal)[0,1]
             RMSE = np.sqrt(np.mean((xVarVal - yVarVal)**2))
             bias = np.mean((yVarVal-xVarVal))
-            textstr = 'N=%d\nR=%.3f\nRMS=%.3f\nbias=%.3f\n'%(len(xVarVal), Rcoef, RMSE, bias)
-            plt.annotate(textstr, xy=(0, 1), xytext=(4, -4), va='top', xycoords='axes fraction',
-                         textcoords='offset points', color='r')
+            textstr = 'N=%d\nR=%.3f\nRMS=%.3f\nbias=%.3f'%(len(xVarVal), Rcoef, RMSE, bias)
+            tHnd = plt.annotate(textstr, xy=(0, 1), xytext=(4.5, -4.5), va='top', xycoords='axes fraction',
+                         textcoords='offset points', color='b', FontSize=FS)
+            tHnd.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='None'))
         if logScl:
             plt.yscale('log')
             plt.xscale('log')
@@ -133,7 +145,7 @@ class graspDB(object):
             else:
                 plt.plot(np.r_[-1, maxVal], np.r_[-1, maxVal], 'k')
                 plt.xlim([-0.01, maxVal])
-                plt.ylim([-0.01, maxVal])
+                plt.ylim([-0.01, maxVal])           
         elif logScl: # there is a bug in matplotlib that screws up scale
             plt.xlim([xVarVal.min(), xVarVal.max()])
             plt.ylim([yVarVal.min(), yVarVal.max()])
@@ -144,7 +156,7 @@ class graspDB(object):
         
     def diffPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, customAx=False,
                  rsltInds=slice(None), FS=14, logSpaceBins=True, lambdaFuncEE=False, # lambdaFuncEE = lambda x: 0.03+0.1*x (DT C6 Ocean EE)
-                 pltLabel=False, clnLayout=True): #clnLayout==False produces some speed up
+                 pltLabel=False, clnLayout=True): #clnLayout==False produces moderate speed up
         xVarVal = self.getVarValues(xVarNm, xInd, rsltInds)
         yVarVal = self.getVarValues(yVarNm, yInd, rsltInds)
         vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal)), axis=0)
@@ -157,6 +169,11 @@ class graspDB(object):
         else:
             binEdge = np.histogram(xVarVal,bins='sturges')[1]
             binMid = (binEdge[1:]+binEdge[:-1])/2
+        if 'aod' in xVarNm:
+            binEdge = np.delete(binEdge,np.nonzero(binMid<0.005)[0]+1)
+            binMid = binMid[binMid>=0.005]
+            binEdge = np.delete(binEdge,np.nonzero(binMid>2.5)[0])
+            binMid = binMid[binMid<=2.5]
         varDif = yVarVal-xVarVal
         varRng = np.zeros([binMid.shape[0],3]) # lower (16%), mean, upper (84%)
         for i in range(binMid.shape[0]):
@@ -182,7 +199,7 @@ class graspDB(object):
             plt.plot(x, -y, '--', color=[0.5,0.5,0.5])
         errBnds = np.abs(varRng[:,1].reshape(-1,1)-varRng[:,[0,2]]).T
         plt.errorbar(binMid, varRng[:,1], errBnds, ecolor='r', color='r', marker='s', linstyle=None)
-        plt.xlim([binEdge[0], binEdge[-1]])
+        plt.xlim([binMid[0]/1.2, 1.2*binMid[-1]])
         plt.xlabel(self.getLabelStr(xVarNm, xInd))
         plt.ylabel('%s-%s' % (yVarNm, xVarNm))
         if lambdaFuncEE:
@@ -194,7 +211,7 @@ class graspDB(object):
             m = lambdaFuncEE(1) - b
             if np.all(y==m*x+b): # safe to assume EE function is linear
                 txtStr = txtStr + '\nEE=%.2g+%.2gτ' % (b,m)
-            plt.annotate(txtStr, xy=(0, 1), xytext=(6, -6), va='top', xycoords='axes fraction',
+            plt.annotate(txtStr, xy=(0, 1), xytext=(4.5, -4.5), va='top', xycoords='axes fraction',
                          textcoords='offset points', FontSize=FS, color='b')
             plt.ylim([np.min([pltY, 2*y.max()]) for pltY in plt.ylim()]) # confine ylim to twice max(EE)
         plt.ylim([-np.abs(plt.ylim()).max(), np.abs(plt.ylim()).max()]) # force zero line to middle
@@ -257,7 +274,7 @@ class graspDB(object):
 
 # can add self.AUX_dict[Npixel] dictionary list to instance w/ additional fields to port into rslts
 class graspRun(object):
-    def __init__(self, pathYAML, orbHghtKM=700, dirGRASP=False):
+    def __init__(self, pathYAML=None, orbHghtKM=700, dirGRASP=False):
         self.pixels = [];
         self.pathYAML = pathYAML;
         self.pathSDATA = False;
@@ -299,13 +316,14 @@ class graspRun(object):
             return False
         pathNewYAML = os.path.join(self.dirGRASP, os.path.basename(self.pathYAML));
         copyfile(self.pathYAML, pathNewYAML) # copy each time so user can update orginal YAML
-        self.pObj = Popen([binPathGRASP, pathNewYAML])
+        self.pObj = Popen([binPathGRASP, pathNewYAML], stdout=PIPE)
         if not parallel:
             self.pObj.wait()
+            self.pObj.stdout.close()
             self.invRslt = self.readOutput()          
         return self.pObj # returns Popen object, (PopenObj.poll() is not None) == True when complete
             
-    def readOutput(self, customOUT=False): # customSDATA is full path of unrelated SDATA file to read
+    def readOutput(self, customOUT=False): # customOUT is full path of unrelated SDATA file to read
         if not customOUT and not self.pObj:
             warnings.warn('You must call runGRASP() before reading the output!')
             return False
@@ -326,12 +344,16 @@ class graspRun(object):
             return []
         rsltSurfDict = self.parseOutSurface(contents)
         rsltFitDict = self.parseOutFit(contents)
+        rsltPMDict = self.parsePhaseMatrix(contents)
+        rsltDict = []
         try:
-            rsltDict = [{**aero, **surf, **fit, **aux} for aero, surf, fit, aux in zip(rsltAeroDict, rsltSurfDict, rsltFitDict, self.AUX_dict)] 
+            for aero, surf, fit, pm, aux in zip(rsltAeroDict, rsltSurfDict, rsltFitDict, rsltPMDict, self.AUX_dict):
+                rsltDict.append({**aero, **surf, **fit, **pm, **aux})
         except AttributeError: # the user did not create AUX_dict
-            rsltDict = [{**aero, **surf, **fit} for aero, surf, fit in zip(rsltAeroDict, rsltSurfDict, rsltFitDict)]
-        if self.tempDir and rsltDict and not customOUT:
-            rmtree(self.dirGRASP)
+            for aero, surf, fit, pm in zip(rsltAeroDict, rsltSurfDict, rsltFitDict, rsltPMDict):
+                rsltDict.append({**aero, **surf, **fit, **pm})
+#        if self.tempDir and rsltDict and not customOUT: # HACK: commented out to prevent cleaning of run data
+#            rmtree(self.dirGRASP)
         return rsltDict
     
     def parseOutDateTime(self, contents):
@@ -439,7 +461,33 @@ class graspRun(object):
             self.parseMultiParamFld(contents, i, results, ptrnWater, 'wtrSurf')            
             i+=1
         return results
-    
+
+    def parsePhaseMatrix(self, contents): # DOES NOT DISTGUINSH WAVELENGTHS AND ISD
+        results = self.parseOutDateTime(contents)
+        ptrnPMall = re.compile('^[ ]*Phase Matrix[ ]*$')
+        ptrnPMfit = re.compile('^[ ]*ipix=([0-9]+)[ ]+yymmdd = [0-9]+-[0-9]+-[0-9]+[ ]+hhmmss[ ]*=[ ]*[0-9][0-9]:[0-9][0-9]:[0-9][0-9][ ]*$')
+        ptrnPMfitWave = re.compile('^[ ]*wl=[ ]*([0-9].[0-9]+)[ ]+isd=([0-9]+)[ ]+sca=')
+        FITfnd = False
+        Nang=181
+        skipFlds = 1 # first field is just angle number
+        pixInd = -1
+        i=0
+        while i<len(contents):
+            if not ptrnPMall.match(contents[i]) is None: # We found fitting data
+                FITfnd = True
+            pixMatch = ptrnPMfit.match(contents[i]) if FITfnd else None
+            if not pixMatch is None: pixInd = int(pixMatch.group(1))-1 # We found a single pixel
+            pixMatchWv = ptrnPMfitWave.match(contents[i]) if (FITfnd and pixInd>=0) else None
+            if not pixMatchWv is None:  # We found a single pixel & wavelength group
+#                wvlVal = float(pixMatch.group(1)) trust wavelength ordering of GRASP output matches class instance
+                flds = [s.replace('/','o') for s in contents[i+1].split()[skipFlds:]]
+                PMdata = np.array([ln.split() for ln in contents[i+2:i+2+Nang]], np.float64)
+                for j,fld in enumerate(flds): 
+                    if fld not in results[pixInd]: results[pixInd][fld] = np.zeros([Nang,0])
+                    results[pixInd][fld] = np.block([results[pixInd][fld], np.atleast_2d(PMdata[:,j+skipFlds]).T])
+            i+=1
+        return results
+                
     def parseOutFit(self, contents):
         results = self.parseOutDateTime(contents)
         ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING[ ]*[\*]+[ ]*$')
@@ -555,7 +603,7 @@ class pixel(object):
         self.nwl += 1
          
     def genString(self):
-        baseStrFrmt = '%2d %2d 1 0 0 %10.5f %10.5f %6.1f %6.2f %d' # everything up to meas fields
+        baseStrFrmt = '%2d %2d 1 0 0 %10.5f %10.5f %7.2f %6.2f %d' # everything up to meas fields
         baseStr = baseStrFrmt % (self.ix, self.iy, self.lon, self.lat, self.masl, self.land_prct, self.nwl)
         wlStr = " ".join(['%6.4f' % obj['wl'] for obj in self.measVals])
         nipStr = " ".join(['%d' % obj['nip'] for obj in self.measVals])        
@@ -563,13 +611,13 @@ class pixel(object):
         meas_typeStr = " ".join(['%d' % n for n in allVals])        
         allVals = np.block([obj['nbvm'] for obj in self.measVals])
         nbvmStr = " ".join(['%d' % n for n in allVals])        
-        szaStr = " ".join(['%6.2f' % obj['sza'] for obj in self.measVals])        
+        szaStr = " ".join(['%7.3f' % obj['sza'] for obj in self.measVals])        
         allVals = np.block([obj['thetav'] for obj in self.measVals])
-        thetavStr = " ".join(['%6.2f' % n for n in allVals])        
+        thetavStr = " ".join(['%7.3f' % n for n in allVals])        
         allVals = np.block([obj['phi'] for obj in self.measVals])
-        phiStr = " ".join(['%6.2f' % n for n in allVals])
+        phiStr = " ".join(['%7.3f' % n for n in allVals])
         allVals = np.block([obj['measurements'] for obj in self.measVals])
-        measStr = " ".join(['%10.6f' % n for n in allVals])
+        measStr = " ".join(['%14.10f' % n for n in allVals])
         settingStr = '0 '*2*len(meas_typeStr.split(" "))
         measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr))
         return " ".join((baseStr, measStrAll, settingStr, '\n'))
