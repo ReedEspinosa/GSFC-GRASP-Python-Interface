@@ -36,4 +36,28 @@ def simpsonsRule(f,a,b,N=50):
     y = f(x)
     S = dx/3 * np.sum(y[0:-1:2] + 4*y[1::2] + y[2::2])
     return S
-    
+
+def logNormal(mu, sig, r=None):
+    """
+    logNormal: (float, float, array*) -> (array, array)
+    Parameters:
+        mu: median radius
+        sig: regular (not geometric) sigma
+        r: optional array of radii at which to return dX/dr 
+    Returns tupple with two arrays (dX/dr, r) 
+    """
+    if r is None:
+        Nr = 1e4 # number of radii
+        Nfct = 5 # r spans this many geometric std factors above and below mu
+        bot = np.log10(mu) - Nfct*sig/np.log(10)
+        top = np.log10(mu) + Nfct*sig/np.log(10)
+        r = np.logspace(bot,top,Nr)
+    nrmFct = 1/(sig*np.sqrt(2*np.pi))
+    dxdr = nrmFct*(r**-1)*np.exp(-((np.log(r)-np.log(mu))**2)/(2*sig**2))
+    return dxdr,r
+        
+        
+        
+        
+        
+        

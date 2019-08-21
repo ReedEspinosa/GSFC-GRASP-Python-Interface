@@ -462,7 +462,7 @@ class graspRun(object):
             i+=1
         return results
 
-    def parsePhaseMatrix(self, contents): # DOES NOT DISTGUINSH WAVELENGTHS AND ISD
+    def parsePhaseMatrix(self, contents): # DOES NOT DISTGUINSH WAVELENGTHS AND ISD (will preserve order in GRASP output)
         results = self.parseOutDateTime(contents)
         ptrnPMall = re.compile('^[ ]*Phase Matrix[ ]*$')
         ptrnPMfit = re.compile('^[ ]*ipix=([0-9]+)[ ]+yymmdd = [0-9]+-[0-9]+-[0-9]+[ ]+hhmmss[ ]*=[ ]*[0-9][0-9]:[0-9][0-9]:[0-9][0-9][ ]*$')
