@@ -318,6 +318,7 @@ class graspRun(object):
         copyfile(self.pathYAML, pathNewYAML) # copy each time so user can update orginal YAML
         self.pObj = Popen([binPathGRASP, pathNewYAML], stdout=PIPE)
         if not parallel:
+            print('Running GRASP...')
             self.pObj.wait()
             self.pObj.stdout.close()
             self.invRslt = self.readOutput()          
@@ -596,8 +597,18 @@ class pixel(object):
         self.nwl = 0
         self.measVals = []
          
-    def addMeas(self, wl, msTyp, nbvm, sza, thtv, phi, msrmnts): # this is called once for each wavelength of data
+    def addMeas(self, wl, msTyp, nbvm, sza, thtv, phi, msrmnts): # this is called once for each wavelength of data (see frmtMsg below)
+        frmtMsg = 'Each measurement must have unqiue wavelength! \n\
+            For more than one measurement type or viewing geometry pass msTyp, thtv, phi and msrments as vectors: \n\
+            len(thtv)=len(phi)=sum(nbvm); len(msTyp)=len(nbvm) \n\
+            msrments=[meas[msTyp[0],thtv[0],phi[0]], meas[msTyp[0],thtv[1],phi[1]],...,meas[msTyp[0],thtv[nbvm[0]],phi[nbvm[0]]],meas[msTyp[1],thtv[nbvm[0]+1],phi[nbvm[0]+1]],...]'
+        msTyp = np.array(msTyp)
+        nbvm = np.array(nbvm)
+        thtv = np.array(thtv)
+        phi = np.array(phi)
         msrmnts = np.array(msrmnts)
+        assert thtv.shape[0]==phi.shape[0] and msTyp.shape[0]==nbvm.shape[0] and nbvm.sum()==thtv.shape[0], frmtMsg
+        assert wl not in [valDict['wl'] for valDict in self.measVals], frmtMsg
         newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts)
         self.measVals.append(newMeas)
         self.nwl += 1

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+#from scipy import integrate
 
 def angstrmIntrp(lmbdIn, tau, lmbdTrgt):
     tau = tau[lmbdIn.argsort()]
@@ -41,7 +42,7 @@ def logNormal(mu, sig, r=None):
     """
     logNormal: (float, float, array*) -> (array, array)
     Parameters:
-        mu: median radius
+        mu: median radius (this is exp(mu) at https://en.wikipedia.org/wiki/Log-normal_distribution)
         sig: regular (not geometric) sigma
         r: optional array of radii at which to return dX/dr 
     Returns tupple with two arrays (dX/dr, r) 
@@ -55,7 +56,11 @@ def logNormal(mu, sig, r=None):
     nrmFct = 1/(sig*np.sqrt(2*np.pi))
     dxdr = nrmFct*(r**-1)*np.exp(-((np.log(r)-np.log(mu))**2)/(2*sig**2))
     return dxdr,r
-        
+
+def effRadius(r, dvdlnr):
+    vol = np.trapz(dvdlnr/r,r)
+    area = np.trapz(dvdlnr/r**2,r)
+    return vol/area
         
         
         
