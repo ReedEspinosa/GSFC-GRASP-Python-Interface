@@ -10,13 +10,14 @@ import numpy as np
 import os
 import sys
 sys.path.append(os.path.join(".."))
-import GRASP_scripts.runGRASP as rg
-import GRASP_scripts.retrievalSimulation as rs
+import runGRASP as rg
+import simulateRetrieval as rs
 
 fwdModelYAMLpath = '/Users/wrespino/Synced/Remote_Sensing_Projects/A-CCP/canonical_cases/settings_FWD_IQU_5lambda_Template.yml'
 bckYAMLpath = '/Users/wrespino/Synced/Remote_Sensing_Projects/A-CCP/canonical_cases/settings_BCK_IQU_5lambda_Template.yml'
 savePath = '/Users/wrespino/Desktop/testFwd_SPH90.pkl'
-Nsims = 30
+Nsims = 4
+maxCPU = 2
 
 # DUMMY MEASUREMENTS (determined by architecture, should ultimatly move to seperate scripts)
 #  For more than one measurement type or viewing geometry pass msTyp, nbvm, thtv, phi and msrments as vectors: \n\
@@ -44,8 +45,8 @@ def addError(meas, measNm):
     elif measNm=='Q' or measNm=='U':
         return meas*(1+np.random.normal()*0.005)
     else:
-        assert False, 'Unkown measurement string, can not add error!'
+        assert False, 'Unknown measurement string, can not add error!'
 
 simA = rs.simulation(nowPix, addError, measNm) # defines new instance for this architecture
-simA.runSim(fwdModelYAMLpath, bckYAMLpath, Nsims, savePath) # runs the simulation for given set of conditions 
+simA.runSim(fwdModelYAMLpath, bckYAMLpath, Nsims, maxCPU=maxCPU, savePath=savePath) # runs the simulation for given set of conditions 
 # NOTE: this last line ultimatly could be loop over all canonical cases OR various numbers of simultations to test convergance

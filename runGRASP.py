@@ -19,8 +19,26 @@ from subprocess import Popen,PIPE
 from scipy.stats import gaussian_kde
 
 class graspDB(object):
-    def __init__(self, listGraspRunObjs=[]):
-        self.grObjs = listGraspRunObjs
+    def __init__(self, graspRunObjs=[], maxCPU=None, maxT=None):
+        if graspRunObjs is list:
+            self.grObjs = graspRunObjs
+        elif 'graspRun' in type(graspRunObjs).__name__:
+            assert maxCPU or maxT, 'maxCPU or maxT must be provided to subdivide the graspRun! If you want to process a single run sequentially pass it as a single element list.'
+            self.grObjs = []
+            Npix = len(graspRunObjs.pixels)
+            if maxCPU and maxT:
+                grspChnkSz = int(min(Npix/maxCPU, maxT))
+            else:
+                grspChnkSz = int(maxT if maxT else Npix/maxCPU)
+            strtInds = np.r_[0:Npix:grspChnkSz]
+            for strtInd in strtInds:
+                gObj = graspRun(graspRunObjs.pathYAML, graspRunObjs.orbHght/1e3, graspRunObjs.dirGRASP)
+                endInd = min(strtInd+grspChnkSz, Npix)
+                for ind in range(strtInd, endInd):
+                    gObj.addPix(graspRunObjs.pixels[ind])
+                self.grObjs.append(gObj)
+        else:
+            assert False, 'graspRunObj must be either a list or graspRun object!'
         
     def processData(self, maxCPUs=1, binPathGRASP='/usr/local/bin/grasp', savePath=False, nodesSLURM=0):
         usedDirs = []
@@ -407,7 +425,7 @@ class graspRun(object):
         ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
         ptrnRRI = re.compile('^[ ]*Wavelength \(um\), REAL Ref\. Index')
         ptrnIRI = re.compile('^[ ]*Wavelength \(um\), IMAG Ref\. Index')
-        ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$')
+        ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2
         i = 0
         nsd = 0
         while i<len(contents):
