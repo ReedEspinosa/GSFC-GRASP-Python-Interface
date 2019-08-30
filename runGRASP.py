@@ -8,6 +8,7 @@ import yaml # may require `conda install pyyaml`
 import re
 import time
 import pickle
+import copy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -288,7 +289,7 @@ class graspRun(object):
         self.pObj = False
     
     def addPix(self, newPixel): # this is called once for each pixel
-        self.pixels.append(newPixel)
+        self.pixels.append(copy.deepcopy(newPixel)) # deepcopy prevents new pixel from changing via original pixel object outside of graspRun object
         
     def writeSDATA(self):
         if len(self.pixels) == 0:
@@ -312,8 +313,7 @@ class graspRun(object):
 
     def runGRASP(self, parallel=False, binPathGRASP='/usr/local/bin/grasp'):
         if not self.pathSDATA:
-            warnings.warn('You must call writeSDATA() before running GRASP!')
-            return False
+            self.writeSDATA()
         pathNewYAML = os.path.join(self.dirGRASP, os.path.basename(self.pathYAML));
         copyfile(self.pathYAML, pathNewYAML) # copy each time so user can update orginal YAML
         self.pObj = Popen([binPathGRASP, pathNewYAML], stdout=PIPE)
@@ -598,17 +598,17 @@ class pixel(object):
         self.measVals = []
          
     def addMeas(self, wl, msTyp, nbvm, sza, thtv, phi, msrmnts): # this is called once for each wavelength of data (see frmtMsg below)
-        frmtMsg = 'Each measurement must have unqiue wavelength! \n\
-            For more than one measurement type or viewing geometry pass msTyp, thtv, phi and msrments as vectors: \n\
-            len(thtv)=len(phi)=sum(nbvm); len(msTyp)=len(nbvm) \n\
+        frmtMsg = '\n\
+            For more than one measurement type or viewing geometry pass msTyp, nbvm, thtv, phi and msrments as vectors: \n\
+            len(msrments)=len(thtv)=len(phi)=sum(nbvm); len(msTyp)=len(nbvm) \n\
             msrments=[meas[msTyp[0],thtv[0],phi[0]], meas[msTyp[0],thtv[1],phi[1]],...,meas[msTyp[0],thtv[nbvm[0]],phi[nbvm[0]]],meas[msTyp[1],thtv[nbvm[0]+1],phi[nbvm[0]+1]],...]'
-        msTyp = np.array(msTyp)
-        nbvm = np.array(nbvm)
-        thtv = np.array(thtv)
-        phi = np.array(phi)
-        msrmnts = np.array(msrmnts)
-        assert thtv.shape[0]==phi.shape[0] and msTyp.shape[0]==nbvm.shape[0] and nbvm.sum()==thtv.shape[0], frmtMsg
-        assert wl not in [valDict['wl'] for valDict in self.measVals], frmtMsg
+        msTyp = np.atleast_1d(msTyp)
+        nbvm = np.atleast_1d(nbvm)
+        thtv = np.atleast_1d(thtv)
+        phi = np.atleast_1d(phi)
+        msrmnts = np.atleast_1d(msrmnts)
+        assert thtv.shape[0]==phi.shape[0] and msTyp.shape[0]==nbvm.shape[0] and nbvm.sum()==thtv.shape[0], 'Each measurement must conform to the following format:' + frmtMsg
+        assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!' + frmtMsg
         newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts)
         self.measVals.append(newMeas)
         self.nwl += 1
