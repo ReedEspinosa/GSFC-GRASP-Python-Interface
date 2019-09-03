@@ -8,6 +8,7 @@ import runGRASP as rg
 
 class simulation(object):
     def __init__(self, nowPix, addError, measNm):
+        if nowPix is None: return
         self.nowPix = nowPix
         self.addError = addError
         self.measNm = measNm
@@ -47,15 +48,22 @@ class simulation(object):
         self.rsltBck = loadData[:-1]
         self.rsltFwd = loadData[-1]
 
-    def analyzeSim(self, mode=0):
-        analyzeVars = ['aod', 'n', 'k', 'rv', 'sigma', 'sph', 'ssa']
+    def analyzeSim(self, wvlnthInd=0):
+        varsSpctrl = ['aod', 'n', 'k', 'ssa']
+        varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc']
         rmsErr = dict()
         assert (not self.rsltBck is None) and self.rsltFwd, 'You must call loadSim() or runSim() before you can calculate statistics!'
-        for av in analyzeVars:
-            rtrvd = [rs[av] for rs in self.rsltBck]
-            true = self.rsltFwd[av]
-            rmsErr[av] = np.sqrt(np.mean((rtrvd-true)**2))
+        for av in varsSpctrl+varsMorph:
+            if av in varsSpctrl:
+                rtrvd = [rs[av][...,wvlnthInd] for rs in self.rsltBck] # wavelength is always the last dimension
+                true = self.rsltFwd[av][...,wvlnthInd]
+            else:
+                rtrvd = [rs[av] for rs in self.rsltBck]
+                true = self.rsltFwd[av]
+            rmsErr[av] = np.sqrt(np.mean((rtrvd-true)**2)) #TODO: make this spit out vector if more than one mode (also test/double check above)
         return rmsErr
+    
+    
         
         
         

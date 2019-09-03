@@ -12,6 +12,7 @@ import copy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import miscFunctions as mf
 from datetime import datetime as dt # we want datetime.datetime
 from datetime import timedelta
 from shutil import copyfile
@@ -38,7 +39,7 @@ class graspDB(object):
                     gObj.addPix(graspRunObjs.pixels[ind])
                 self.grObjs.append(gObj)
         else:
-            assert False, 'graspRunObj must be either a list or graspRun object!'
+            assert not graspRunObjs, 'graspRunObj must be either a list or graspRun object!'
         
     def processData(self, maxCPUs=1, binPathGRASP='/usr/local/bin/grasp', savePath=False, nodesSLURM=0):
         usedDirs = []
@@ -425,7 +426,7 @@ class graspRun(object):
         ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
         ptrnRRI = re.compile('^[ ]*Wavelength \(um\), REAL Ref\. Index')
         ptrnIRI = re.compile('^[ ]*Wavelength \(um\), IMAG Ref\. Index')
-        ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2
+        ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
         i = 0
         nsd = 0
         while i<len(contents):
@@ -459,11 +460,15 @@ class graspRun(object):
         if 'aodMode' in results[0]:
             Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]
             nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
-            for k in range(len(results)): # seperate aerosol modes 
-                results[k]['r'] = results[k]['r'].reshape(nsd,-1)
-                results[k]['dVdlnr'] = results[k]['dVdlnr'].reshape(nsd,-1)
-                results[k]['aodMode'] = results[k]['aodMode'].reshape(nsd,-1)
-                results[k]['ssaMode'] = results[k]['ssaMode'].reshape(nsd,-1)
+            for rs in results: # seperate aerosol modes 
+                rs['r'] = rs['r'].reshape(nsd,-1)
+                rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
+                rs['aodMode'] = rs['aodMode'].reshape(nsd,-1)
+                rs['ssaMode'] = rs['ssaMode'].reshape(nsd,-1)
+        if ('r' in results[0]) and np.all(results[0]['r'][0]==results[0]['r']): # check if all r value are same at all lambda, may remove this condition later but makes logic much more complicated
+            for rs in results:
+                dvdlnr = (rs['dVdlnr']*np.atleast_2d(rs['vol']).T).sum(axis=0)
+                rs['rEffCalc'] = (mf.effRadius(rs['r'][0], dvdlnr))
         return results
     
     def parseOutSurface(self, contents):
