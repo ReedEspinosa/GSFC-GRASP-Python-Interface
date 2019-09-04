@@ -45,7 +45,7 @@ class graspDB(object):
         else:
             assert not graspRunObjs, 'graspRunObj must be either a list or graspRun object!'
         
-    def processData(self, maxCPUs=1, binPathGRASP='/usr/local/bin/grasp', savePath=False, nodesSLURM=0):
+    def processData(self, maxCPUs=1, binPathGRASP=None, savePath=False, krnlPathGRASP=None, nodesSLURM=0):
         usedDirs = []
         for grObj in self.grObjs:
             if grObj.dirGRASP: # If not it will be deduced later when writing SDATA
@@ -59,7 +59,7 @@ class graspDB(object):
             while i < Nobjs:
                 if sum([pObj.poll() is None for pObj in pObjs]) < maxCPUs:
                     print('Starting a new thread for graspRun index %d/%d' % (i+1,Nobjs))
-                    pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP))
+                    pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP, krnlPathGRASP))
                     i+=1
                 time.sleep(0.1)
             while any([pObj.poll() is None for pObj in pObjs]): time.sleep(0.1)
@@ -338,11 +338,14 @@ class graspRun(object):
             fid.write(SDATAstr)
             fid.close()
 
-    def runGRASP(self, parallel=False, binPathGRASP='/usr/local/bin/grasp'):
+    def runGRASP(self, parallel=False, binPathGRASP=None, krnlPathGRASP=None):
+        if not binPathGRASP: binPathGRASP = '/usr/local/bin/grasp'
+        
         if not self.pathSDATA:
             self.writeSDATA()
         pathNewYAML = os.path.join(self.dirGRASP, os.path.basename(self.pathYAML));
         copyfile(self.pathYAML, pathNewYAML) # copy each time so user can update orginal YAML
+        if krnlPathGRASP: self.YAMLmodify('path_to_internal_files', krnlPathGRASP, pathNewYAML)
         self.pObj = Popen([binPathGRASP, pathNewYAML], stdout=PIPE)
         if not parallel:
             print('Running GRASP...')
@@ -599,6 +602,18 @@ class graspRun(object):
         if data_loaded["output"]["segment"]["stream"] == 'screen':
             warnings.warn('The field output.segment.stream in '+self.pathYAML+' is set to screen. Reading from stdout is not currently supported.', stacklevel=2)
         return data_loaded["output"]["segment"]["stream"]
+
+    def YAMLmodify(self, fldName, newVal, YAMLpath=None):
+        # Set yaml field name string (fldName) to a new string value (newVal) [NOTE: WILL APPLY TO EVERY MATCH]
+        if not YAMLpath: YAMLpath = self.pathYAML
+        assert pathYAML, 'pathYAML is unset! Which YAML file is to be modified?'
+        with open(pathYAML, 'r') as file:
+            data = file.readlines()
+        for i, d in enumerate(data):
+            if re.match('^[ ]*' + fldName, d): # this lets us ignore matches in comments
+                data[i] = ' '*d.find(fldName) + fldName + ': ' + newVal + '\n'
+        with open(pathYAML, 'w') as file:
+            file.writelines(data)
     
     def genSDATAHead(self, unqTimes):
         nx = max([pix.ix for pix in self.pixels])

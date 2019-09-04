@@ -7,25 +7,26 @@ import pickle
 import runGRASP as rg
 
 class simulation(object):
-    def __init__(self, nowPix=None, addError=None, measNm=None, binPathGRASP=False):
+    def __init__(self, nowPix=None, addError=None, measNm=None):
         if nowPix is None: return
         self.nowPix = nowPix
         self.addError = addError
         self.measNm = measNm
-        self.binPathGRASP = binPathGRASP
         self.nbvm = np.array([mv['nbvm'] for mv in nowPix.measVals])
         self.rsltBck = None
         self.rsltFwd = None
     
-    def runSim(self, fwdModelYAMLpath, bckYAMLpath, Nsims=100, maxCPU=4, binPathGRASP=None, savePath=None):
+    def runSim(self, fwdModelYAMLpath, bckYAMLpath, Nsims=100, maxCPU=4, binPathGRASP=None, savePath=None, intrnlFileGRASP=None):
         assert not self.nowPix is None, 'A dummy pixel (nowPix), error function (addError) and value names (measNm) are to run a simulation.' 
         # RUN THE FOWARD MODEL
         gObjFwd = rg.graspRun(fwdModelYAMLpath)
+        if intrnlFileGRASP: gObjFwd.YAMLmodify('path_to_internal_files', intrnlFileGRASP)
         gObjFwd.addPix(self.nowPix)
-        gObjFwd.runGRASP(binPathGRASP=self.binPathGRASP)
+        gObjFwd.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=intrnlFileGRASP)
         self.rsltFwd = gObjFwd.readOutput()[0]
         # ADD NOISE AND PERFORM RETRIEVALS
         gObjBck = rg.graspRun(bckYAMLpath)
+        if intrnlFileGRASP: gObjFwd.YAMLmodify('path_to_internal_files', intrnlFileGRASP)
         for i in range(Nsims):
             self.nowPix.dtNm = copy.copy(self.nowPix.dtNm)
             for l, msDct in enumerate(self.nowPix.measVals):
@@ -38,7 +39,7 @@ class simulation(object):
             self.nowPix.dtNm = self.nowPix.dtNm+1 # otherwise GRASP will whine
             gObjBck.addPix(self.nowPix)
         gDB = rg.graspDB(gObjBck, maxCPU)
-        self.rsltBck = gDB.processData(maxCPU, binPathGRASP) if binPathGRASP else gDB.processData(maxCPU)
+        self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP)
         # SAVE RESULTS
         if savePath:
             with open(savePath, 'wb') as f:
