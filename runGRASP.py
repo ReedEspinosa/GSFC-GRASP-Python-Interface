@@ -9,7 +9,6 @@ import re
 import time
 import pickle
 import copy
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import miscFunctions as mf
@@ -18,6 +17,11 @@ from datetime import timedelta
 from shutil import copyfile
 from subprocess import Popen,PIPE
 from scipy.stats import gaussian_kde
+try:
+    import matplotlib.pyplot as plt
+    pltLoad = True
+except ImportError:
+    pltLoad = False
 
 class graspDB(object):
     def __init__(self, graspRunObjs=[], maxCPU=None, maxT=None):
@@ -94,6 +98,7 @@ class graspDB(object):
     
     def histPlot(self, VarNm, Ind=0, customAx=False, FS=14, rsltInds=slice(None), 
                  pltLabel=False, clnLayout=True): #clnLayout==False produces some speed up
+       	assert pltLoad, 'matplotlib could not be loaded, plotting features unavailable.'
         VarVal = self.getVarValues(VarNm, Ind, rsltInds)
         VarVal = VarVal[~pd.isnull(VarVal)] 
         assert VarVal.shape[0]>0, 'Zero valid matchups were found!'
@@ -106,6 +111,7 @@ class graspDB(object):
     def scatterPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, cVarNm=False, cInd=0, customAx=False,
                     logScl=False, Rstats=False, one2oneScale=False, FS=14, rsltInds=slice(None),
                     pltLabel=False, clnLayout=True): #clnLayout==False produces some speed up
+        assert pltLoad, 'matplotlib could not be loaded, plotting features unavailable.'
         xVarVal = self.getVarValues(xVarNm, xInd, rsltInds)
         yVarVal = self.getVarValues(yVarNm, yInd, rsltInds)
         zeroErrStr = 'Values must be greater than zero for log scale!'
@@ -177,6 +183,7 @@ class graspDB(object):
     def diffPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, customAx=False,
                  rsltInds=slice(None), FS=14, logSpaceBins=True, lambdaFuncEE=False, # lambdaFuncEE = lambda x: 0.03+0.1*x (DT C6 Ocean EE)
                  pltLabel=False, clnLayout=True): #clnLayout==False produces moderate speed up
+        assert pltLoad, 'matplotlib could not be loaded, plotting features unavailable.'
         xVarVal = self.getVarValues(xVarNm, xInd, rsltInds)
         yVarVal = self.getVarValues(yVarNm, yInd, rsltInds)
         vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal)), axis=0)
@@ -286,6 +293,7 @@ class graspDB(object):
         return np.array(Ind)
 
     def plotCleanUp(self, pltLabel=False, clnLayout=True):
+        assert pltLoad, 'matplotlib could not be loaded, plotting features unavailable.'
         if pltLabel:
             plt.suptitle(pltLabel)
             if clnLayout: plt.tight_layout(rect=[0, 0.03, 1, 0.95])

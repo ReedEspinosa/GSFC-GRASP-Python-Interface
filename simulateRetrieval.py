@@ -7,11 +7,12 @@ import pickle
 import runGRASP as rg
 
 class simulation(object):
-    def __init__(self, nowPix=None, addError=None, measNm=None):
+    def __init__(self, nowPix=None, addError=None, measNm=None, binPathGRASP=False):
         if nowPix is None: return
         self.nowPix = nowPix
         self.addError = addError
         self.measNm = measNm
+        self.binPathGRASP = binPathGRASP
         self.nbvm = np.array([mv['nbvm'] for mv in nowPix.measVals])
         self.rsltBck = None
         self.rsltFwd = None
@@ -21,7 +22,7 @@ class simulation(object):
         # RUN THE FOWARD MODEL
         gObjFwd = rg.graspRun(fwdModelYAMLpath)
         gObjFwd.addPix(self.nowPix)
-        gObjFwd.runGRASP()
+        gObjFwd.runGRASP(binPathGRASP=self.binPathGRASP)
         self.rsltFwd = gObjFwd.readOutput()[0]
         # ADD NOISE AND PERFORM RETRIEVALS
         gObjBck = rg.graspRun(bckYAMLpath)

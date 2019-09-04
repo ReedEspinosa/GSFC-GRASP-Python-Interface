@@ -13,11 +13,16 @@ sys.path.append(os.path.join(".."))
 import runGRASP as rg
 import simulateRetrieval as rs
 
-fwdModelYAMLpath = '/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_5lambda_CASE-6a-onlyMARINE_V0.yml'
-bckYAMLpath = '/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/settings_BCK_IQU_5lambda_Template.yml'
-savePath = '/Users/wrespino/Desktop/testCase_PolMISR_6aMARINE.pkl'
-Nsims = 20
-maxCPU = 2
+#fwdModelYAMLpath = '/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_5lambda_CASE-6a-onlyMARINE_V0.yml'
+#bckYAMLpath = '/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/settings_BCK_IQU_5lambda_Template.yml'
+#savePath = '/Users/wrespino/Desktop/testCase_PolMISR_6aMARINE.pkl'
+basePath = os.environ['NOBACKUP']
+fwdModelYAMLpath = os.path.join(basePath, 'MADCAP_scripts/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_5lambda_CASE-6a-onlyMARINE_V0.yml')
+bckYAMLpath = os.path.join(basePath, '$$MADCAP_scripts/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_5lambda_CASE-6a-onlyMARINE_V0.yml')
+savePath = os.path.join(basePath, 'synced/Working/testDISCOVER_PolMISR_6aMARINE.pkl')
+dirGRASP = os.path.join(basePath, 'grasp_open/build/bin/grasp')
+Nsims = 32
+maxCPU = 16
 
 # DUMMY MEASUREMENTS (determined by architecture, should ultimatly move to seperate scripts)
 #  For more than one measurement type or viewing geometry pass msTyp, nbvm, thtv, phi and msrments as vectors: \n\
@@ -47,7 +52,7 @@ def addError(meas, measNm):
     else:
         assert False, 'Unknown measurement string, can not add error!'
 
-simA = rs.simulation(nowPix, addError, measNm) # defines new instance for this architecture
+simA = rs.simulation(nowPix, addError, measNm, dirGRASP) # defines new instance for this architecture
 simA.runSim(fwdModelYAMLpath, bckYAMLpath, Nsims, maxCPU=maxCPU, savePath=savePath) # runs the simulation for given set of conditions 
 rmsErr, meanBias = simA.analyzeSim()
 # NOTE: this last line ultimatly could be loop over all canonical cases OR various numbers of simultations to test convergance
