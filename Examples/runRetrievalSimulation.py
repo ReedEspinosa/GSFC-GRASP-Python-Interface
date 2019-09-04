@@ -49,5 +49,5 @@ def addError(meas, measNm):
 
 simA = rs.simulation(nowPix, addError, measNm) # defines new instance for this architecture
 simA.runSim(fwdModelYAMLpath, bckYAMLpath, Nsims, maxCPU=maxCPU, savePath=savePath) # runs the simulation for given set of conditions 
-simA.analyzeSim()
+rmsErr, meanBias = simA.analyzeSim()
 # NOTE: this last line ultimatly could be loop over all canonical cases OR various numbers of simultations to test convergance

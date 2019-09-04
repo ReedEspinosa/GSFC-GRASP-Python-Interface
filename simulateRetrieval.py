@@ -7,7 +7,7 @@ import pickle
 import runGRASP as rg
 
 class simulation(object):
-    def __init__(self, nowPix, addError, measNm):
+    def __init__(self, nowPix=None, addError=None, measNm=None):
         if nowPix is None: return
         self.nowPix = nowPix
         self.addError = addError
@@ -17,6 +17,7 @@ class simulation(object):
         self.rsltFwd = None
     
     def runSim(self, fwdModelYAMLpath, bckYAMLpath, Nsims=100, maxCPU=4, binPathGRASP=None, savePath=None):
+        assert not self.nowPix is None, 'A dummy pixel (nowPix), error function (addError) and value names (measNm) are to run a simulation.' 
         # RUN THE FOWARD MODEL
         gObjFwd = rg.graspRun(fwdModelYAMLpath)
         gObjFwd.addPix(self.nowPix)
@@ -52,6 +53,7 @@ class simulation(object):
         varsSpctrl = ['aod', 'n', 'k', 'ssa']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc']
         rmsErr = dict()
+        meanBias = dict()
         assert (not self.rsltBck is None) and self.rsltFwd, 'You must call loadSim() or runSim() before you can calculate statistics!'
         for av in varsSpctrl+varsMorph:
             if av in varsSpctrl:
@@ -60,8 +62,9 @@ class simulation(object):
             else:
                 rtrvd = [rs[av] for rs in self.rsltBck]
                 true = self.rsltFwd[av]
-            rmsErr[av] = np.sqrt(np.mean((rtrvd-true)**2)) #TODO: make this spit out vector if more than one mode (also test/double check above)
-        return rmsErr
+            rmsErr[av] = np.sqrt(np.mean((true-rtrvd)**2, axis=0))
+            meanBias[av] = np.mean(true-rtrvd, axis=0)
+        return rmsErr, meanBias
     
     
         
