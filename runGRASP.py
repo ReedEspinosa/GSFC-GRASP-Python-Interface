@@ -340,7 +340,6 @@ class graspRun(object):
 
     def runGRASP(self, parallel=False, binPathGRASP=None, krnlPathGRASP=None):
         if not binPathGRASP: binPathGRASP = '/usr/local/bin/grasp'
-        
         if not self.pathSDATA:
             self.writeSDATA()
         pathNewYAML = os.path.join(self.dirGRASP, os.path.basename(self.pathYAML));
@@ -606,13 +605,13 @@ class graspRun(object):
     def YAMLmodify(self, fldName, newVal, YAMLpath=None):
         # Set yaml field name string (fldName) to a new string value (newVal) [NOTE: WILL APPLY TO EVERY MATCH]
         if not YAMLpath: YAMLpath = self.pathYAML
-        assert pathYAML, 'pathYAML is unset! Which YAML file is to be modified?'
-        with open(pathYAML, 'r') as file:
+        assert YAMLpath, 'pathYAML is unset! Which YAML file is to be modified?'
+        with open(YAMLpath, 'r') as file:
             data = file.readlines()
         for i, d in enumerate(data):
             if re.match('^[ ]*' + fldName, d): # this lets us ignore matches in comments
                 data[i] = ' '*d.find(fldName) + fldName + ': ' + newVal + '\n'
-        with open(pathYAML, 'w') as file:
+        with open(YAMLpath, 'w') as file:
             file.writelines(data)
     
     def genSDATAHead(self, unqTimes):

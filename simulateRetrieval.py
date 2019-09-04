@@ -20,13 +20,11 @@ class simulation(object):
         assert not self.nowPix is None, 'A dummy pixel (nowPix), error function (addError) and value names (measNm) are to run a simulation.' 
         # RUN THE FOWARD MODEL
         gObjFwd = rg.graspRun(fwdModelYAMLpath)
-        if intrnlFileGRASP: gObjFwd.YAMLmodify('path_to_internal_files', intrnlFileGRASP)
         gObjFwd.addPix(self.nowPix)
         gObjFwd.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=intrnlFileGRASP)
         self.rsltFwd = gObjFwd.readOutput()[0]
         # ADD NOISE AND PERFORM RETRIEVALS
         gObjBck = rg.graspRun(bckYAMLpath)
-        if intrnlFileGRASP: gObjFwd.YAMLmodify('path_to_internal_files', intrnlFileGRASP)
         for i in range(Nsims):
             self.nowPix.dtNm = copy.copy(self.nowPix.dtNm)
             for l, msDct in enumerate(self.nowPix.measVals):
