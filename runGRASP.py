@@ -47,6 +47,7 @@ class graspDB(object):
         
     def processData(self, maxCPUs=1, binPathGRASP=None, savePath=False, krnlPathGRASP=None, nodesSLURM=0):
         usedDirs = []
+        t0 = time.time()
         for grObj in self.grObjs:
             if grObj.dirGRASP: # If not it will be deduced later when writing SDATA
                 assert (not grObj.dirGRASP in usedDirs), "Each graspRun instance must use a unique directory!"
@@ -81,6 +82,8 @@ class graspDB(object):
         self.rslts = []
 #        [self.rslts.extend(grObj.readOutput()) for grObj in self.grObjs[~failedRuns]]
         [self.rslts.extend(self.grObjs[i].readOutput()) for i in np.nonzero(~failedRuns)[0]]
+        dt = time.time() - t0
+        print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dt, len(self.rslts)/dt)) 
         if savePath: 
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
@@ -98,7 +101,7 @@ class graspDB(object):
     
     def histPlot(self, VarNm, Ind=0, customAx=False, FS=14, rsltInds=slice(None), 
                  pltLabel=False, clnLayout=True): #clnLayout==False produces some speed up
-       	assert pltLoad, 'matplotlib could not be loaded, plotting features unavailable.'
+        assert pltLoad, 'matplotlib could not be loaded, plotting features unavailable.'
         VarVal = self.getVarValues(VarNm, Ind, rsltInds)
         VarVal = VarVal[~pd.isnull(VarVal)] 
         assert VarVal.shape[0]>0, 'Zero valid matchups were found!'

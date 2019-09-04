@@ -23,13 +23,13 @@ import simulateRetrieval as rs
 # DISCOVER
 basePath = os.environ['NOBACKUP']
 dirGRASP = os.path.join(basePath, 'grasp_open/build/bin/grasp')
-krnlPath = os.path.join(basePath, 'wrespino/local/share/grasp/kernels')
+krnlPath = os.path.join(basePath, 'local/share/grasp/kernels')
 fwdModelYAMLpath = os.path.join(basePath, 'MADCAP_scripts/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_5lambda_CASE-6a-onlyMARINE_V0.yml')
 bckYAMLpath = os.path.join(basePath, 'MADCAP_scripts/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_5lambda_CASE-6a-onlyMARINE_V0.yml')
 savePath = os.path.join(basePath, 'synced/Working/testDISCOVER_PolMISR_6aMARINE.pkl')
 
-Nsims = 32
-maxCPU = 16
+Nsims = 560
+maxCPU = 28
 
 # DUMMY MEASUREMENTS (determined by architecture, should ultimatly move to seperate scripts)
 #  For more than one measurement type or viewing geometry pass msTyp, nbvm, thtv, phi and msrments as vectors: \n\
