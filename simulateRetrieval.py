@@ -4,28 +4,17 @@
 import numpy as np
 import copy
 import pickle
-import re
 import runGRASP as rg
 
 class simulation(object):
-    def __init__(self, nowPix=None, addError=None):
+    def __init__(self, nowPix=None):
         if nowPix is None: return
         assert np.all(np.diff([[mt for mt in mv['meas_type']] for mv in nowPix.measVals])>0), 'nowPix.measVals[l][\'meas_type\'] must be in ascending order at each l'
         self.nowPix = nowPix
-        self.addError = addError
-        self.measNm = np.array([[self.msType2msName(mt) for mt in mv['meas_type']] for mv in self.nowPix.measVals])
         self.nbvm = np.array([mv['nbvm'] for mv in nowPix.measVals])
         self.rsltBck = None
         self.rsltFwd = None
-        
-    def msType2msName(self, msTypeInt):
-        msType = str(msTypeInt)
-        msType = msType.replace('41','I')
-        msType = msType.replace('42','Q')
-        msType = msType.replace('43','U')
-        assert re.match('^[A-z]+$', msType), 'Could not match msType %s to a valid measurment name!' % msType
-        return msType
-    
+
     def runSim(self, fwdModelYAMLpath, bckYAMLpath, Nsims=100, maxCPU=4, binPathGRASP=None, savePath=None, intrnlFileGRASP=None):
         assert not self.nowPix is None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.' 
         # RUN THE FOWARD MODEL
@@ -39,7 +28,7 @@ class simulation(object):
             for l, msDct in enumerate(self.nowPix.measVals):
                 edgInd = np.r_[0, np.cumsum(self.nbvm[l,:])]
                 msDct['measurements'] = copy.copy(msDct['measurements']) # we are about to write to this
-                msDct['measurements'] = self.addError(l, self.rsltFwd, self.measNm[l,:], edgInd)
+                msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd, edgInd)
             self.nowPix.dtNm = copy.copy(self.nowPix.dtNm+1) # otherwise GRASP will whine
             gObjBck.addPix(self.nowPix)
         gDB = rg.graspDB(gObjBck, maxCPU)
