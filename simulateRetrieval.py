@@ -4,20 +4,30 @@
 import numpy as np
 import copy
 import pickle
+import re
 import runGRASP as rg
 
 class simulation(object):
-    def __init__(self, nowPix=None, addError=None, measNm=None):
+    def __init__(self, nowPix=None, addError=None):
         if nowPix is None: return
+        assert np.all(np.diff([[mt for mt in mv['meas_type']] for mv in nowPix.measVals])>0), 'nowPix.measVals[l][\'meas_type\'] must be in ascending order at each l'
         self.nowPix = nowPix
         self.addError = addError
-        self.measNm = measNm
+        self.measNm = np.array([[self.msType2msName(mt) for mt in mv['meas_type']] for mv in self.nowPix.measVals])
         self.nbvm = np.array([mv['nbvm'] for mv in nowPix.measVals])
         self.rsltBck = None
         self.rsltFwd = None
+        
+    def msType2msName(self, msTypeInt):
+        msType = str(msTypeInt)
+        msType = msType.replace('41','I')
+        msType = msType.replace('42','Q')
+        msType = msType.replace('43','U')
+        assert re.match('^[A-z]+$', msType), 'Could not match msType %s to a valid measurment name!' % msType
+        return msType
     
     def runSim(self, fwdModelYAMLpath, bckYAMLpath, Nsims=100, maxCPU=4, binPathGRASP=None, savePath=None, intrnlFileGRASP=None):
-        assert not self.nowPix is None, 'A dummy pixel (nowPix), error function (addError) and value names (measNm) are to run a simulation.' 
+        assert not self.nowPix is None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.' 
         # RUN THE FOWARD MODEL
         gObjFwd = rg.graspRun(fwdModelYAMLpath)
         gObjFwd.addPix(self.nowPix)
@@ -26,15 +36,11 @@ class simulation(object):
         # ADD NOISE AND PERFORM RETRIEVALS
         gObjBck = rg.graspRun(bckYAMLpath)
         for i in range(Nsims):
-            self.nowPix.dtNm = copy.copy(self.nowPix.dtNm)
             for l, msDct in enumerate(self.nowPix.measVals):
                 edgInd = np.r_[0, np.cumsum(self.nbvm[l,:])]
-                msDct['measurements'] = copy.copy(msDct['measurements']) # we are going to write to this
-                for i in range(len(self.nbvm[l,:])):
-                    fwdSim = self.rsltFwd['fit_'+self.measNm[l,i]][:,l]
-                    fwdSim = copy.copy(self.addError(fwdSim, self.measNm[l,i]))
-                    msDct['measurements'][edgInd[i]:edgInd[i+1]] = fwdSim
-            self.nowPix.dtNm = self.nowPix.dtNm+1 # otherwise GRASP will whine
+                msDct['measurements'] = copy.copy(msDct['measurements']) # we are about to write to this
+                msDct['measurements'] = self.addError(l, self.rsltFwd, self.measNm[l,:], edgInd)
+            self.nowPix.dtNm = copy.copy(self.nowPix.dtNm+1) # otherwise GRASP will whine
             gObjBck.addPix(self.nowPix)
         gDB = rg.graspDB(gObjBck, maxCPU)
         self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP)
