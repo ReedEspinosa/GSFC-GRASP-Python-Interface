@@ -23,9 +23,9 @@ basePath = os.environ['NOBACKUP']
 dirGRASP = os.path.join(basePath, 'grasp_open/build/bin/grasp')
 krnlPath = os.path.join(basePath, 'local/share/grasp/kernels')
 fwdModelYAMLpath = os.path.join(basePath, 'MADCAP_scripts/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_5lambda_CASE-6a-onlyMARINE_V0.yml')
-bckYAMLpath = os.path.join(basePath, 'MADCAP_scripts/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_5lambda_CASE-6a-onlyMARINE_V0.yml')
-savePath = os.path.join(basePath, 'synced/Working/testDISCOVER_PolMISR_6aMARINE.pkl')
-Nsims = 560
+bckYAMLpath = os.path.join(basePath, 'MADCAP_scripts/ACCP_ArchitectureAndCanonicalCases/settings_BCK_IQU_5lambda_Template.yml')
+savePath = os.path.join(basePath, 'synced/Working/testDISCOVER_PolMISR_6aMARINE_Sep7_V1.pkl')
+Nsims = 84
 maxCPU = 28
 
 def addError(measNm, l, rsltFwd, edgInd):
@@ -56,7 +56,7 @@ msTyp = [41, 42, 43] # must be in ascending order
 nbvm = 9*np.ones(len(msTyp), np.int)
 sza = 30
 relPhi = 0
-thtv = np.tile([70.5, 60.0, 45.6, 26.1, 0, 26.1, 45.6, 60.0, 70.5], len(msTyp))
+thtv = np.tile([-70.5, -60.0, -45.6, -26.1, 0, 26.1, 45.6, 60.0, 70.5], len(msTyp))
 wvls = [0.36, 0.55, 0.87, 1.23, 1.65] # Nλ=5
 meas = np.r_[np.repeat(0.1, nbvm[0]), np.repeat(0.01, nbvm[1]), np.repeat(0.01, nbvm[2])] 
 phi = np.array([relPhi if tv>0 else relPhi+180 for tv in thtv]) # assume all observations fall within a plane
