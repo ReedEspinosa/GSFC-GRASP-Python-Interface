@@ -59,7 +59,7 @@ relPhi = 0
 thtv = np.tile([-70.5, -60.0, -45.6, -26.1, 0, 26.1, 45.6, 60.0, 70.5], len(msTyp))
 wvls = [0.36, 0.55, 0.87, 1.23, 1.65] # Nλ=5
 meas = np.r_[np.repeat(0.1, nbvm[0]), np.repeat(0.01, nbvm[1]), np.repeat(0.01, nbvm[2])] 
-phi = np.array([relPhi if tv>0 else relPhi+180 for tv in thtv]) # assume all observations fall within a plane
+phi = np.repeat(relPhi, len(thtv)) # currently we assume all observations fall within a plane
 nowPix = rg.pixel(730123.0, 1, 1, 0, 0, 0, 100)
 for wvl in wvls: # This will be expanded for wavelength dependent measurement types/geometry
     nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv, phi, meas)

@@ -653,7 +653,9 @@ class pixel(object):
         msTyp = np.atleast_1d(msTyp)
         nbvm = np.atleast_1d(nbvm)
         thtv = np.atleast_1d(thtv)
-        phi = np.atleast_1d(phi)
+        phi = np.atleast_1d(phi) + 180*(np.array(thtv)<0) # GRASP doesn't like thtv < 0
+        if np.any(phi<0): warnings.warn('GRASP RT performance is hindered when phi<0, values in the range 0<phi<360 are preferred.')
+        thtv = np.abs(thtv) 
         msrmnts = np.atleast_1d(msrmnts)
         assert thtv.shape[0]==phi.shape[0] and msTyp.shape[0]==nbvm.shape[0] and nbvm.sum()==thtv.shape[0], 'Each measurement must conform to the following format:' + frmtMsg
         assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!' + frmtMsg
