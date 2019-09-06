@@ -56,7 +56,7 @@ msTyp = [41, 42, 43] # must be in ascending order
 nbvm = 9*np.ones(len(msTyp), np.int)
 sza = 30
 relPhi = 0
-thtv = np.tile([70.5, 60.0, 45.6, 26.1, 0, 26.1, 45.6, 60.0, 70.5], len(msTyp))
+thtv = np.tile([-70.5, -60.0, -45.6, -26.1, 0, 26.1, 45.6, 60.0, 70.5], len(msTyp))
 wvls = [0.36, 0.55, 0.87, 1.23, 1.65] # Nλ=5
 meas = np.r_[np.repeat(0.1, nbvm[0]), np.repeat(0.01, nbvm[1]), np.repeat(0.01, nbvm[2])] 
 phi = np.array([relPhi if tv>0 else relPhi+180 for tv in thtv]) # assume all observations fall within a plane
