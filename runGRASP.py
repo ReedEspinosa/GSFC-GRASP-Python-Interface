@@ -25,16 +25,17 @@ except ImportError:
 
 class graspDB(object):
     def __init__(self, graspRunObjs=[], maxCPU=None, maxT=None):
-        if graspRunObjs is list:
+        self.maxCPU = maxCPU
+        if type(graspRunObjs) is list:
             self.grObjs = graspRunObjs
         elif 'graspRun' in type(graspRunObjs).__name__:
             assert maxCPU or maxT, 'maxCPU or maxT must be provided to subdivide the graspRun! If you want to process a single run sequentially pass it as a single element list.'
             self.grObjs = []
             Npix = len(graspRunObjs.pixels)
             if maxCPU and maxT:
-                grspChnkSz = int(min(Npix/maxCPU, maxT))
+                grspChnkSz = int(min(int(np.ceil(Npix/maxCPU)), maxT))
             else:
-                grspChnkSz = int(maxT if maxT else Npix/maxCPU)
+                grspChnkSz = int(maxT if maxT else int(np.ceil(Npix/maxCPU)))
             strtInds = np.r_[0:Npix:grspChnkSz]
             for strtInd in strtInds:
                 gObj = graspRun(graspRunObjs.pathYAML, graspRunObjs.orbHght/1e3, graspRunObjs.dirGRASP)
@@ -45,7 +46,9 @@ class graspDB(object):
         else:
             assert not graspRunObjs, 'graspRunObj must be either a list or graspRun object!'
         
-    def processData(self, maxCPUs=1, binPathGRASP=None, savePath=False, krnlPathGRASP=None, nodesSLURM=0):
+    def processData(self, maxCPUs=None, binPathGRASP=None, savePath=False, krnlPathGRASP=None, nodesSLURM=0):
+        if not maxCPUs:
+            maxCPUs = self.maxCPU if self.maxCPU else 2
         usedDirs = []
         t0 = time.time()
         for grObj in self.grObjs:
@@ -371,13 +374,13 @@ class graspRun(object):
         except:
             warnings.warn('Could not open %s\n   Returning empty list in place of output data...' % outputFN)
             return []
-        rsltAeroDict = self.parseOutAerosol(contents)
+        rsltAeroDict, wavelengths = self.parseOutAerosol(contents)
         if not rsltAeroDict:
             warnings.warn('Aerosol data could not be read from %s\n  Returning empty list in place of output data...' % outputFN)
             return []
         rsltSurfDict = self.parseOutSurface(contents)
         rsltFitDict = self.parseOutFit(contents)
-        rsltPMDict = self.parsePhaseMatrix(contents)
+        rsltPMDict = self.parsePhaseMatrix(contents, wavelengths)
         rsltDict = []
         try:
             for aero, surf, fit, pm, aux in zip(rsltAeroDict, rsltSurfDict, rsltFitDict, rsltPMDict, self.AUX_dict):
@@ -467,9 +470,10 @@ class graspRun(object):
             self.parseMultiParamFld(contents, i, results, ptrnRRI, 'n')
             self.parseMultiParamFld(contents, i, results, ptrnIRI, 'k')
             i+=1
-        if not results:
-            warnings.warn('No aerosol data found, returning empty dictionary...')
+        if not results or not 'lambda' in results[0]:
+            warnings.warn('Limited or no aerosol data found, returning incomplete dictionary...')
             return results
+        wavelengths = results[0]['lambda']
         if 'aodMode' in results[0]:
             Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]
             nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
@@ -482,7 +486,7 @@ class graspRun(object):
             for rs in results:
                 dvdlnr = (rs['dVdlnr']*np.atleast_2d(rs['vol']).T).sum(axis=0)
                 rs['rEffCalc'] = (mf.effRadius(rs['r'][0], dvdlnr))
-        return results
+        return results, wavelengths
     
     def parseOutSurface(self, contents):
         results = self.parseOutDateTime(contents)
@@ -499,11 +503,11 @@ class graspRun(object):
             i+=1
         return results
 
-    def parsePhaseMatrix(self, contents): # DOES NOT DISTGUINSH WAVELENGTHS AND ISD (will preserve order in GRASP output)
+    def parsePhaseMatrix(self, contents, wavelengths): # wavelengths is need here specificly b/c PM elements don't give index (only value in um)
         results = self.parseOutDateTime(contents)
         ptrnPMall = re.compile('^[ ]*Phase Matrix[ ]*$')
         ptrnPMfit = re.compile('^[ ]*ipix=([0-9]+)[ ]+yymmdd = [0-9]+-[0-9]+-[0-9]+[ ]+hhmmss[ ]*=[ ]*[0-9][0-9]:[0-9][0-9]:[0-9][0-9][ ]*$')
-        ptrnPMfitWave = re.compile('^[ ]*wl=[ ]*([0-9].[0-9]+)[ ]+isd=([0-9]+)[ ]+sca=')
+        ptrnPMfitWave = re.compile('^[ ]*wl=[ ]*([0-9]+.[0-9]+)[ ]+isd=([0-9]+)[ ]+sca=')
         FITfnd = False
         Nang=181
         skipFlds = 1 # first field is just angle number
@@ -515,13 +519,20 @@ class graspRun(object):
             pixMatch = ptrnPMfit.match(contents[i]) if FITfnd else None
             if not pixMatch is None: pixInd = int(pixMatch.group(1))-1 # We found a single pixel
             pixMatchWv = ptrnPMfitWave.match(contents[i]) if (FITfnd and pixInd>=0) else None
-            if not pixMatchWv is None:  # We found a single pixel & wavelength group
-#                wvlVal = float(pixMatch.group(1)) trust wavelength ordering of GRASP output matches class instance
+            if not pixMatchWv is None:  # We found a single pixel & wavelength & isd group
+                l = np.nonzero(float(pixMatchWv.group(1)) == wavelengths)[0][0]
+                isd = int(pixMatchWv.group(2))-1# this is isdGRASP-1, ie. indexed at zero)
                 flds = [s.replace('/','o') for s in contents[i+1].split()[skipFlds:]]
                 PMdata = np.array([ln.split() for ln in contents[i+2:i+2+Nang]], np.float64)
                 for j,fld in enumerate(flds): 
-                    if fld not in results[pixInd]: results[pixInd][fld] = np.zeros([Nang,0])
-                    results[pixInd][fld] = np.block([results[pixInd][fld], np.atleast_2d(PMdata[:,j+skipFlds]).T])
+                    if fld not in results[pixInd] : results[pixInd][fld] = np.zeros([Nang,0,0]) # OR JUST MAKE THIS A 3D ARRAY
+                    if results[pixInd][fld].shape[1] == isd: # make bigger along isd dim
+                        shp = results[pixInd][fld].shape
+                        results[pixInd][fld] = np.concatenate((results[pixInd][fld], np.full([shp[0],1,shp[2]], np.nan)), axis=1)
+                    if results[pixInd][fld].shape[2] == l: # make one larger along lambda dim
+                        shp = results[pixInd][fld].shape
+                        results[pixInd][fld] = np.concatenate((results[pixInd][fld], np.full([shp[0],shp[1],1], np.nan)), axis=2)
+                    results[pixInd][fld][:,isd,l] = PMdata[:,j+skipFlds]
             i+=1
         return results
                 
