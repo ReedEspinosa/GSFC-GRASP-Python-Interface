@@ -310,27 +310,26 @@ class graspDB(object):
 class graspRun(object):
     def __init__(self, pathYAML=None, orbHghtKM=700, dirGRASP=False):
         self.pixels = [];
-        self.pathYAML = pathYAML;
         self.pathSDATA = False;
-        if not dirGRASP:
-            self.tempDir = True
-            self.dirGRASP = False
+        if pathYAML:
+            self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP
+            print('Working in %s' % self.dirGRASP)
+            self.pathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML))
+            copyfile(pathYAML, self.pathYAML)
         else:
-            self.tempDir = False
-            self.dirGRASP = dirGRASP
+            self.pathYAML = None
+            self.dirGRASP = None
         self.orbHght = orbHghtKM*1000
         self.pObj = False
     
     def addPix(self, newPixel): # this is called once for each pixel
-        self.pixels.append(copy.deepcopy(newPixel)) # deepcopy prevents new pixel from changing via original pixel object outside of graspRun object
+        self.pixels.append(copy.deepcopy(newPixel)) # deepcopy need to prevent changing via original pixel object outside of graspRun object
         
     def writeSDATA(self):
         if len(self.pixels) == 0:
             warnings.warn('You must call addPix() at least once before writting SDATA!')
             return False
-        if not self.dirGRASP and self.tempDir:
-                self.dirGRASP = tempfile.mkdtemp()
-                print('Writing SDATA file to %s' % self.dirGRASP)
+        assert self.pathYAML, 'You must initialize graspRun with a YAML file to write SDATA'
         self.pathSDATA = os.path.join(self.dirGRASP, self.findSDATA_FN());
         assert (self.pathSDATA), 'Failed to read SDATA filename from '+self.pathYAML
         unqTimes = np.unique([pix.dtNm for pix in self.pixels])
@@ -348,10 +347,8 @@ class graspRun(object):
         if not binPathGRASP: binPathGRASP = '/usr/local/bin/grasp'
         if not self.pathSDATA:
             self.writeSDATA()
-        pathNewYAML = os.path.join(self.dirGRASP, os.path.basename(self.pathYAML));
-        copyfile(self.pathYAML, pathNewYAML) # copy each time so user can update orginal YAML
-        if krnlPathGRASP: self.YAMLmodify('path_to_internal_files', krnlPathGRASP, pathNewYAML)
-        self.pObj = Popen([binPathGRASP, pathNewYAML], stdout=PIPE)
+        if krnlPathGRASP: self.YAMLmodify('path_to_internal_files', krnlPathGRASP)
+        self.pObj = Popen([binPathGRASP, self.pathYAML], stdout=PIPE)
         if not parallel:
             print('Running GRASP...')
             self.pObj.wait()
@@ -388,8 +385,6 @@ class graspRun(object):
         except AttributeError: # the user did not create AUX_dict
             for aero, surf, fit, pm in zip(rsltAeroDict, rsltSurfDict, rsltFitDict, rsltPMDict):
                 rsltDict.append({**aero, **surf, **fit, **pm})
-#        if self.tempDir and rsltDict and not customOUT: # HACK: commented out to prevent cleaning of run data
-#            rmtree(self.dirGRASP)
         return rsltDict
     
     def parseOutDateTime(self, contents):
@@ -520,7 +515,7 @@ class graspRun(object):
             if not pixMatch is None: pixInd = int(pixMatch.group(1))-1 # We found a single pixel
             pixMatchWv = ptrnPMfitWave.match(contents[i]) if (FITfnd and pixInd>=0) else None
             if not pixMatchWv is None:  # We found a single pixel & wavelength & isd group
-                l = np.nonzero(float(pixMatchWv.group(1)) == wavelengths)[0][0]
+                l = np.nonzero(np.isclose(float(pixMatchWv.group(1)), wavelengths))[0][0]
                 isd = int(pixMatchWv.group(2))-1# this is isdGRASP-1, ie. indexed at zero)
                 flds = [s.replace('/','o') for s in contents[i+1].split()[skipFlds:]]
                 PMdata = np.array([ln.split() for ln in contents[i+2:i+2+Nang]], np.float64)
@@ -615,19 +610,34 @@ class graspRun(object):
         if data_loaded["output"]["segment"]["stream"] == 'screen':
             warnings.warn('The field output.segment.stream in '+self.pathYAML+' is set to screen. Reading from stdout is not currently supported.', stacklevel=2)
         return data_loaded["output"]["segment"]["stream"]
-
-    def YAMLmodify(self, fldName, newVal, YAMLpath=None):
-        # Set yaml field name string (fldName) to a new string value (newVal) [NOTE: WILL APPLY TO EVERY MATCH]
+            
+    def YAMLmodify(self, fldPath, newVal, YAMLpath=None):
+        # TODO: create lambda adjuster; chracterisitics[N], mode[N], etc. mean we will want to keep significant logic from YAML_adjustLambda.py
+        # Set yaml field name string (fldPath) to a new string value (newVal), ex. fldPath = 'retrieval.constraints.characteristic[1]...'
         if not YAMLpath: YAMLpath = self.pathYAML
+        if isinstance(newVal,np.ndarray): newVal = newVal.tolist() # yaml module doesn't handle numby array gracefully 
         assert YAMLpath, 'pathYAML is unset! Which YAML file is to be modified?'
-        with open(YAMLpath, 'r') as file:
-            data = file.readlines()
-        for i, d in enumerate(data):
-            if re.match('^[ ]*' + fldName, d): # this lets us ignore matches in comments
-                data[i] = ' '*d.find(fldName) + fldName + ': ' + newVal + '\n'
-        with open(YAMLpath, 'w') as file:
-            file.writelines(data)
-    
+        if fldPath == 'path_to_internal_files': # We add a few shortcuts here...
+            fldPath = 'retrieval.general.path_to_internal_files'
+        elif fldPath == 'stop_before_performing_retrieval':
+            fldPath = 'retrieval.convergence.stop_before_performing_retrieval'
+        # TODO: For refractive index (and others) we could loop through all ...['charcateristic[N]']['type'] looking for match
+        #        dl['retrieval']['constraints']['characteristic[3]']['mode[1]']['value']['inital_guess'] = [1,2,3]
+        with open(YAMLpath, 'r') as stream:
+            dl = yaml.load(stream)
+        if not self.YAMLrecursion(dl, np.array(fldPath.split('.')), newVal):
+            warnings.warn('%s not found at specified location in YAML, a new field was created.' % fldPath)
+        with open(YAMLpath, 'w') as outfile:
+            yaml.dump(dl, outfile, default_flow_style=None, indent=4, width=1000)
+            
+    def YAMLrecursion(self, yamlDict, fldPath, newVal=None):
+        if not fldPath[0] in yamlDict: return None
+        if fldPath.shape[0] > 1:
+            return self.YAMLrecursion(yamlDict[fldPath[0]], fldPath[1::], newVal)
+        else:
+            if not newVal is None: yamlDict[fldPath[0]] = newVal
+            return yamlDict[fldPath[0]]
+
     def genSDATAHead(self, unqTimes):
         nx = max([pix.ix for pix in self.pixels])
         ny = max([pix.iy for pix in self.pixels])
