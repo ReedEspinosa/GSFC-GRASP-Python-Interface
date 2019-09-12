@@ -38,7 +38,7 @@ class graspDB(object):
                 grspChnkSz = int(maxT if maxT else int(np.ceil(Npix/maxCPU)))
             strtInds = np.r_[0:Npix:grspChnkSz]
             for strtInd in strtInds:
-                gObj = graspRun(graspRunObjs.pathYAML, graspRunObjs.orbHght/1e3, graspRunObjs.dirGRASP)
+                gObj = graspRun(graspRunObjs.yamlObj.YAMLpath, graspRunObjs.orbHght/1e3, graspRunObjs.dirGRASP)
                 endInd = min(strtInd+grspChnkSz, Npix)
                 for ind in range(strtInd, endInd):
                     gObj.addPix(graspRunObjs.pixels[ind])
@@ -314,11 +314,12 @@ class graspRun(object):
         if pathYAML:
             self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP
             print('Working in %s' % self.dirGRASP)
-            self.pathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML))
-            copyfile(pathYAML, self.pathYAML)
+            newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML))
+            self.yamlObj = graspYAML(pathYAML, newPathYAML)
         else:
-            self.pathYAML = None
+            assert not dirGRASP, 'You can not have a workin directory (dirGRASP) without a YAML file (pathYAML)!'
             self.dirGRASP = None
+            self.yamlObj = graspYAML()
         self.orbHght = orbHghtKM*1000
         self.pObj = False
     
@@ -329,9 +330,9 @@ class graspRun(object):
         if len(self.pixels) == 0:
             warnings.warn('You must call addPix() at least once before writting SDATA!')
             return False
-        assert self.pathYAML, 'You must initialize graspRun with a YAML file to write SDATA'
-        self.pathSDATA = os.path.join(self.dirGRASP, self.findSDATA_FN());
-        assert (self.pathSDATA), 'Failed to read SDATA filename from '+self.pathYAML
+        assert self.yamlObj.YAMLpath, 'You must initialize graspRun with a YAML file to write SDATA'
+        self.pathSDATA = os.path.join(self.dirGRASP, self.yamlObj.YAMLmodify('sdata_fn'));
+        assert (self.pathSDATA), 'Failed to read SDATA filename from '+self.yamlObj.YAMLpath
         unqTimes = np.unique([pix.dtNm for pix in self.pixels])
         SDATAstr = self.genSDATAHead(unqTimes)
         for unqTime in unqTimes:
@@ -348,7 +349,7 @@ class graspRun(object):
         if not self.pathSDATA:
             self.writeSDATA()
         if krnlPathGRASP: self.YAMLmodify('path_to_internal_files', krnlPathGRASP)
-        self.pObj = Popen([binPathGRASP, self.pathYAML], stdout=PIPE)
+        self.pObj = Popen([binPathGRASP, self.yamlObj.YAMLpath], stdout=PIPE)
         if not parallel:
             print('Running GRASP...')
             self.pObj.wait()
@@ -363,8 +364,8 @@ class graspRun(object):
         if not customOUT and self.pObj.poll() is None:
             warnings.warn('GRASP has not yet terminated, output can only be read after retrieval is complete.')
             return False
-        assert (customOUT or self.findStream_FN()), 'Failed to read stream filename from '+self.pathYAML
-        outputFN = customOUT if customOUT else os.path.join(self.dirGRASP, self.findStream_FN())
+        assert (customOUT or self.yamlObj.YAMLmodify('stream_fn')), 'Failed to read stream filename from '+self.yamlObj.YAMLpath
+        outputFN = customOUT if customOUT else os.path.join(self.dirGRASP, self.yamlObj.YAMLmodify('stream_fn'))
         try:
             with open(outputFN) as fid:
                 contents = fid.readlines()
@@ -586,58 +587,15 @@ class graspRun(object):
                 for k in range(len(results)): # seperate parameters from wavelengths
                     results[k][fdlName] = results[k][fdlName].reshape(Nparams,-1)
             i = lastLine - 1
-        
-    def findSDATA_FN(self):
-        if not os.path.isfile(self.pathYAML):
-            warnings.warn('The file '+self.pathYAML+' does not exist! Can not get SDATA filename.', stacklevel=2)
-            return False
-        with open(self.pathYAML, 'r') as stream:
-            data_loaded = yaml.load(stream)
-        if not ('input'  in data_loaded) or not ('file' in data_loaded['input']):
-            warnings.warn('The file '+self.pathYAML+' did not have field input.file! Can not get SDATA filename.', stacklevel=2)
-            return False
-        return data_loaded["input"]["file"]
+                
+    def YAMLadjustLambda(self, Nlambda):
+        # make YAML file correspond to Nlambda wavelengths (expands and cuts from last wavelength)
+        return self.yamlObj.YAMLadjustLambda(Nlambda)
     
-    def findStream_FN(self):
-        if not os.path.isfile(self.pathYAML):
-            warnings.warn('The file '+self.pathYAML+' does not exist! Can not get stream filename.', stacklevel=2)
-            return False
-        with open(self.pathYAML, 'r') as stream:
-            data_loaded = yaml.load(stream)
-        if not ('input'  in data_loaded) or not ('file' in data_loaded['input']):
-            warnings.warn('The file '+self.pathYAML+' did not have field output.segment.stream! Can not get stream filename.', stacklevel=2)
-            return False
-        if data_loaded["output"]["segment"]["stream"] == 'screen':
-            warnings.warn('The field output.segment.stream in '+self.pathYAML+' is set to screen. Reading from stdout is not currently supported.', stacklevel=2)
-        return data_loaded["output"]["segment"]["stream"]
-            
-    def YAMLmodify(self, fldPath, newVal, YAMLpath=None):
-        # TODO: create lambda adjuster; chracterisitics[N], mode[N], etc. mean we will want to keep significant logic from YAML_adjustLambda.py
+    def YAMLmodify(self, fldPath, newVal=None):
         # Set yaml field name string (fldPath) to a new string value (newVal), ex. fldPath = 'retrieval.constraints.characteristic[1]...'
-        if not YAMLpath: YAMLpath = self.pathYAML
-        if isinstance(newVal,np.ndarray): newVal = newVal.tolist() # yaml module doesn't handle numby array gracefully 
-        assert YAMLpath, 'pathYAML is unset! Which YAML file is to be modified?'
-        if fldPath == 'path_to_internal_files': # We add a few shortcuts here...
-            fldPath = 'retrieval.general.path_to_internal_files'
-        elif fldPath == 'stop_before_performing_retrieval':
-            fldPath = 'retrieval.convergence.stop_before_performing_retrieval'
-        # TODO: For refractive index (and others) we could loop through all ...['charcateristic[N]']['type'] looking for match
-        #        dl['retrieval']['constraints']['characteristic[3]']['mode[1]']['value']['inital_guess'] = [1,2,3]
-        with open(YAMLpath, 'r') as stream:
-            dl = yaml.load(stream)
-        if not self.YAMLrecursion(dl, np.array(fldPath.split('.')), newVal):
-            warnings.warn('%s not found at specified location in YAML, a new field was created.' % fldPath)
-        with open(YAMLpath, 'w') as outfile:
-            yaml.dump(dl, outfile, default_flow_style=None, indent=4, width=1000)
+        return self.yamlObj.YAMLmodify(fldPath, newVal)
             
-    def YAMLrecursion(self, yamlDict, fldPath, newVal=None):
-        if not fldPath[0] in yamlDict: return None
-        if fldPath.shape[0] > 1:
-            return self.YAMLrecursion(yamlDict[fldPath[0]], fldPath[1::], newVal)
-        else:
-            if not newVal is None: yamlDict[fldPath[0]] = newVal
-            return yamlDict[fldPath[0]]
-
     def genSDATAHead(self, unqTimes):
         nx = max([pix.ix for pix in self.pixels])
         ny = max([pix.iy for pix in self.pixels])
@@ -704,4 +662,101 @@ class pixel(object):
         measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr))
         return " ".join((baseStr, measStrAll, settingStr, '\n'))
     
-         
+class graspYAML(object):
+    def __init__(self, baseYAMLpath=None, workingYAMLpath=None):
+        assert not (workingYAMLpath and not baseYAMLpath), 'baseYAMLpath must be provided to create a new YAML file at workingYAMLpath!'
+        if workingYAMLpath: 
+            copyfile(baseYAMLpath, workingYAMLpath)
+            self.YAMLpath = workingYAMLpath
+        else:
+            self.YAMLpath = baseYAMLpath
+        self.dl = None
+        
+    def YAMLadjustLambda(self, Nlambda, YAMLpath=None): # HINT: assumes all index of wavelength involved cover every wavelength
+        lambdaTypes = ['surface_water_CxMnk_iso_noPol', 
+               'surface_land_brdf_ross_li', 
+               'surface_land_polarized_maignan_breon', 
+               'real_part_of_refractive_index_spectral_dependent',
+               'imaginary_part_of_refractive_index_spectral_dependent']
+        for lt in lambdaTypes: # loop over constraint types
+            m = 1;
+            while self.YAMLmodify('%s.%d' % (lt,m)): # loop over each mode
+                for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
+                    orgVal = self.YAMLmodify('%s.%d.%s' % (lt,m,f))
+                    if len(orgVal) < Nlambda:
+                        self.YAMLmodify('%s.%d.%s' % (lt,m,f), orgVal[0:Nlambda], False)
+                    else:
+                        rpts = Nlambda - len(orgVal)
+                        if f=='index_of_wavelength_involved':
+                            newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
+                        else:
+                            newVal = orgVal + np.repeat(orgVal[-1],rpts).tolist()
+                        self.YAMLmodify('%s.%d.%s' % (lt,m,f), newVal, False)
+                m+=1
+        for n in range(len(self.YAMLmodify('retrieval.noises'))): # adjust the noise lambda as well
+            m = 1
+            while self.YAMLmodify('retrieval.noises.noise[%d].measurement_type[%d]' % (n,m)):
+                    fldNm = 'retrieval.noises.noise[%d].measurement_type[%d].index_of_wavelength_involved' % (n,m)
+                    orgVal = self.YAMLmodify(fldNm)
+                    if len(orgVal) < Nlambda:
+                        newVal = orgVal[0:Nlambda]
+                    else:
+                        rpts = Nlambda - len(orgVal)                
+                        newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
+                    self.YAMLmodify(fldNm, newVal, False)
+        self.writeYAML()
+    
+    def YAMLmodify(self, fldPath, newVal=None, write2disk=True): # will also return fldPath if newVal=None
+        if isinstance(newVal,np.ndarray): newVal = newVal.tolist() # yaml module doesn't handle numby array gracefully 
+        self.loadYAML()
+        fldPath = self.exapndFldPath(fldPath)
+        prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal)
+        if not prsntVal:
+            msgTail = 'new field created' if newVal else 'returning none'
+            warnings.warn('%s not found at specified location in YAML, %s...' % (fldPath,msgTail))
+        if newVal and write2disk: self.writeYAML() # if no change was made no need to re-write the file
+        return prsntVal
+            
+    def exapndFldPath(self, fldPath):
+        self.loadYAML()
+        if fldPath == 'path_to_internal_files': # <-SHORTCUT: fldPath='path_to_internal_files'
+            return 'retrieval.general.path_to_internal_files'
+        elif fldPath == 'stop_before_performing_retrieval': # <-SHORTCUT:
+            return 'retrieval.convergence.stop_before_performing_retrieval'
+        elif fldPath == 'stream_fn': # <-SHORTCUT:
+            return 'output.segment.stream'
+        elif fldPath == 'sdata_fn': # <-SHORTCUT:
+            return 'input.file'
+        charN = np.nonzero([val['type'] in fldPath for val in self.dl['retrieval']['constraints'].values()])[0]
+        if charN.size>0: # <-SHORTCUT: any type, ex. fldPath='aerosol_concentration' (set mode 1, value)
+            fPvct = fldPath.split('.') #  OR fldPath='aerosol_concentration.2' (mode 2, value)
+            mode = fPvct[1] if len(fPvct) > 1 else 1 # OR fldPath='aerosol_concentration.2.min' (mode 3, min)
+            fld = fPvct[2] if len(fPvct) > 2 else 'value'
+            return 'retrieval.constraints.characteristic[%d].mode[%s].initial_guess.%s' % (charN[0], mode, fld)
+        return fldPath
+        
+    def writeYAML(self):
+        with open(self.YAMLpath, 'w') as outfile:
+                yaml.dump(self.dl, outfile, default_flow_style=None, indent=4, width=1000)
+                
+    def loadYAML(self):
+        assert self.YAMLpath, 'You must provide a YAML file path to perform a task utilizing a YAML file!'
+        if not self.dl:
+            assert os.path.isfile(self.YAMLpath), 'The file '+self.YAMLpath+' does not exist!'
+            with open(self.YAMLpath, 'r') as stream:
+                self.dl = yaml.load(stream)
+        
+    def YAMLrecursion(self, yamlDict, fldPath, newVal=None):
+        if not fldPath[0] in yamlDict: return None
+        if fldPath.shape[0] > 1:
+            return self.YAMLrecursion(yamlDict[fldPath[0]], fldPath[1::], newVal)
+        else:
+            if not newVal is None: yamlDict[fldPath[0]] = newVal
+            return yamlDict[fldPath[0]]
+                 
+                 
+                 
+                 
+                 
+                 
+                 
