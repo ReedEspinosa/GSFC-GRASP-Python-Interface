@@ -61,13 +61,13 @@ for bn in range(Nbin):
         k = -optTbl['refimag'][bn,0,wvInds]
         k = np.minimum(k, kBnds[1])
         k = np.maximum(k, kBnds[0])
-        gspRunNow.YAMLmodify(lgnrmfld, szVars[bn])
-        gspRunNow.YAMLmodify(RRIfld, n) 
-        gspRunNow.YAMLmodify(IRIfld, k)
+        gspRunNow.yamlObj.access(lgnrmfld, szVars[bn])
+        gspRunNow.yamlObj.access(RRIfld, n) 
+        gspRunNow.yamlObj.access(IRIfld, k)
         gspRunNow.addPix(nowPix)
         gspRun.append(gspRunNow)
 gDB = rg.graspDB(gspRun, maxCPU)
-#rslts = gDB.processData(savePath=savePath_netCDF[0:-2]+'pkl', binPathGRASP=binPathGRASP)
+rslts = gDB.processData(savePath=savePath_netCDF[0:-2]+'pkl', binPathGRASP=binPathGRASP)
 
 root_grp = Dataset(savePath_netCDF, 'w', format='NETCDF4')
 #root_grp = Dataset('/Users/wrespino/Desktop/netCDF_TEST.nc', 'w', format='NETCDF4')
