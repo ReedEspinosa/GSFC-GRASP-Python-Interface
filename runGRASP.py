@@ -331,7 +331,7 @@ class graspRun(object):
             warnings.warn('You must call addPix() at least once before writting SDATA!')
             return False
         assert self.yamlObj.YAMLpath, 'You must initialize graspRun with a YAML file to write SDATA'
-        self.pathSDATA = os.path.join(self.dirGRASP, self.yamlObj.YAMLmodify('sdata_fn'));
+        self.pathSDATA = os.path.join(self.dirGRASP, self.yamlObj.access('sdata_fn'));
         assert (self.pathSDATA), 'Failed to read SDATA filename from '+self.yamlObj.YAMLpath
         unqTimes = np.unique([pix.dtNm for pix in self.pixels])
         SDATAstr = self.genSDATAHead(unqTimes)
@@ -348,7 +348,7 @@ class graspRun(object):
         if not binPathGRASP: binPathGRASP = '/usr/local/bin/grasp'
         if not self.pathSDATA:
             self.writeSDATA()
-        if krnlPathGRASP: self.YAMLmodify('path_to_internal_files', krnlPathGRASP)
+        if krnlPathGRASP: self.access('path_to_internal_files', krnlPathGRASP)
         self.pObj = Popen([binPathGRASP, self.yamlObj.YAMLpath], stdout=PIPE)
         if not parallel:
             print('Running GRASP...')
@@ -364,8 +364,8 @@ class graspRun(object):
         if not customOUT and self.pObj.poll() is None:
             warnings.warn('GRASP has not yet terminated, output can only be read after retrieval is complete.')
             return False
-        assert (customOUT or self.yamlObj.YAMLmodify('stream_fn')), 'Failed to read stream filename from '+self.yamlObj.YAMLpath
-        outputFN = customOUT if customOUT else os.path.join(self.dirGRASP, self.yamlObj.YAMLmodify('stream_fn'))
+        assert (customOUT or self.yamlObj.access('stream_fn')), 'Failed to read stream filename from '+self.yamlObj.YAMLpath
+        outputFN = customOUT if customOUT else os.path.join(self.dirGRASP, self.yamlObj.access('stream_fn'))
         try:
             with open(outputFN) as fid:
                 contents = fid.readlines()
@@ -587,14 +587,6 @@ class graspRun(object):
                 for k in range(len(results)): # seperate parameters from wavelengths
                     results[k][fdlName] = results[k][fdlName].reshape(Nparams,-1)
             i = lastLine - 1
-                
-    def YAMLadjustLambda(self, Nlambda):
-        # make YAML file correspond to Nlambda wavelengths (expands and cuts from last wavelength)
-        return self.yamlObj.YAMLadjustLambda(Nlambda)
-    
-    def YAMLmodify(self, fldPath, newVal=None):
-        # Set yaml field name string (fldPath) to a new string value (newVal), ex. fldPath = 'retrieval.constraints.characteristic[1]...'
-        return self.yamlObj.YAMLmodify(fldPath, newVal)
             
     def genSDATAHead(self, unqTimes):
         nx = max([pix.ix for pix in self.pixels])
@@ -672,7 +664,7 @@ class graspYAML(object):
             self.YAMLpath = baseYAMLpath
         self.dl = None
         
-    def YAMLadjustLambda(self, Nlambda, YAMLpath=None): # HINT: assumes all index of wavelength involved cover every wavelength
+    def adjustLambda(self, Nlambda, YAMLpath=None): # HINT: assumes all index of wavelength involved cover every wavelength
         lambdaTypes = ['surface_water_CxMnk_iso_noPol', 
                'surface_land_brdf_ross_li', 
                'surface_land_polarized_maignan_breon', 
@@ -680,38 +672,41 @@ class graspYAML(object):
                'imaginary_part_of_refractive_index_spectral_dependent']
         for lt in lambdaTypes: # loop over constraint types
             m = 1;
-            while self.YAMLmodify('%s.%d' % (lt,m)): # loop over each mode
+            while self.access('%s.%d' % (lt,m), verbose=False): # loop over each mode
                 for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
-                    orgVal = self.YAMLmodify('%s.%d.%s' % (lt,m,f))
-                    if len(orgVal) < Nlambda:
-                        self.YAMLmodify('%s.%d.%s' % (lt,m,f), orgVal[0:Nlambda], False)
+                    orgVal = self.access('%s.%d.%s' % (lt,m,f))
+                    if len(orgVal) >= Nlambda:
+                        self.access('%s.%d.%s' % (lt,m,f), orgVal[0:Nlambda], False)
                     else:
                         rpts = Nlambda - len(orgVal)
                         if f=='index_of_wavelength_involved':
                             newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
                         else:
                             newVal = orgVal + np.repeat(orgVal[-1],rpts).tolist()
-                        self.YAMLmodify('%s.%d.%s' % (lt,m,f), newVal, False)
+                        self.access('%s.%d.%s' % (lt,m,f), newVal, False)
                 m+=1
-        for n in range(len(self.YAMLmodify('retrieval.noises'))): # adjust the noise lambda as well
+        for n in range(len(self.access('retrieval.noises'))): # adjust the noise lambda as well
             m = 1
-            while self.YAMLmodify('retrieval.noises.noise[%d].measurement_type[%d]' % (n,m)):
-                    fldNm = 'retrieval.noises.noise[%d].measurement_type[%d].index_of_wavelength_involved' % (n,m)
-                    orgVal = self.YAMLmodify(fldNm)
-                    if len(orgVal) < Nlambda:
-                        newVal = orgVal[0:Nlambda]
-                    else:
-                        rpts = Nlambda - len(orgVal)                
-                        newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
-                    self.YAMLmodify(fldNm, newVal, False)
+            while self.access('retrieval.noises.noise[%d].measurement_type[%d]' % (n+1,m), verbose=False):
+                fldNm = 'retrieval.noises.noise[%d].measurement_type[%d].index_of_wavelength_involved' % (n+1,m)
+                orgVal = self.access(fldNm)
+                if len(orgVal) >= Nlambda:
+                    newVal = orgVal[0:Nlambda]
+                else:
+                    rpts = Nlambda - len(orgVal)                
+                    newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
+                print(fldNm)
+                print(newVal)
+                self.access(fldNm, newVal, False)
+                m+=1
         self.writeYAML()
     
-    def YAMLmodify(self, fldPath, newVal=None, write2disk=True): # will also return fldPath if newVal=None
+    def access(self, fldPath, newVal=None, write2disk=True, verbose=True): # will also return fldPath if newVal=None
         if isinstance(newVal,np.ndarray): newVal = newVal.tolist() # yaml module doesn't handle numby array gracefully 
         self.loadYAML()
         fldPath = self.exapndFldPath(fldPath)
         prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal)
-        if not prsntVal:
+        if not prsntVal and verbose:
             msgTail = 'new field created' if newVal else 'returning none'
             warnings.warn('%s not found at specified location in YAML, %s...' % (fldPath,msgTail))
         if newVal and write2disk: self.writeYAML() # if no change was made no need to re-write the file
@@ -732,7 +727,7 @@ class graspYAML(object):
             fPvct = fldPath.split('.') #  OR fldPath='aerosol_concentration.2' (mode 2, value)
             mode = fPvct[1] if len(fPvct) > 1 else 1 # OR fldPath='aerosol_concentration.2.min' (mode 3, min)
             fld = fPvct[2] if len(fPvct) > 2 else 'value'
-            return 'retrieval.constraints.characteristic[%d].mode[%s].initial_guess.%s' % (charN[0], mode, fld)
+            return 'retrieval.constraints.characteristic[%d].mode[%s].initial_guess.%s' % (charN[0]+1, mode, fld)
         return fldPath
         
     def writeYAML(self):
