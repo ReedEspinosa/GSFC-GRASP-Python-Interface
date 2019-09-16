@@ -672,22 +672,22 @@ class graspYAML(object):
                'imaginary_part_of_refractive_index_spectral_dependent']
         for lt in lambdaTypes: # loop over constraint types
             m = 1;
-            while self.access('%s.%d' % (lt,m), verbose=False): # loop over each mode
+            while self.access('%s.%d' % (lt,m)): # loop over each mode
                 for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
                     orgVal = self.access('%s.%d.%s' % (lt,m,f))
                     if len(orgVal) >= Nlambda:
-                        self.access('%s.%d.%s' % (lt,m,f), orgVal[0:Nlambda], False)
+                        self.access('%s.%d.%s' % (lt,m,f), orgVal[0:Nlambda], write2disk=False)
                     else:
                         rpts = Nlambda - len(orgVal)
                         if f=='index_of_wavelength_involved':
                             newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
                         else:
                             newVal = orgVal + np.repeat(orgVal[-1],rpts).tolist()
-                        self.access('%s.%d.%s' % (lt,m,f), newVal, False)
+                        self.access('%s.%d.%s' % (lt,m,f), newVal, write2disk=False)
                 m+=1
         for n in range(len(self.access('retrieval.noises'))): # adjust the noise lambda as well
             m = 1
-            while self.access('retrieval.noises.noise[%d].measurement_type[%d]' % (n+1,m), verbose=False):
+            while self.access('retrieval.noises.noise[%d].measurement_type[%d]' % (n+1,m)):
                 fldNm = 'retrieval.noises.noise[%d].measurement_type[%d].index_of_wavelength_involved' % (n+1,m)
                 orgVal = self.access(fldNm)
                 if len(orgVal) >= Nlambda:
@@ -697,7 +697,7 @@ class graspYAML(object):
                     newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
                 print(fldNm)
                 print(newVal)
-                self.access(fldNm, newVal, False)
+                self.access(fldNm, newVal, write2disk=False)
                 m+=1
         self.writeYAML()
     
@@ -706,9 +706,16 @@ class graspYAML(object):
         self.loadYAML()
         fldPath = self.exapndFldPath(fldPath)
         prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal)
-        if not prsntVal and verbose:
-            msgTail = 'new field created' if newVal else 'returning none'
-            warnings.warn('%s not found at specified location in YAML, %s...' % (fldPath,msgTail))
+        if not prsntVal and verbose and newVal: # we were supposed to change a value but the field wasn't there
+            if verbose: warnings.warn('%s not found at specified location in YAML' % fldPath)
+            mtch = re.match('retrieval.constraints.characteristic\[[0-9]+\].mode\[([0-9]+)\]', fldPath)
+            if mtch: # we may still be able to add the value if we append a mode
+                lastModePath = np.r_[fldPath.split('.')[0:3] + ['mode[%d]' % (int(mtch.group(1))-1)] + fldPath.split('.')[4:]]
+                if self.YAMLrecursion(self.dl, lastModePath): # this field does exist in the previous mode, we will copy it
+                    if verbose: print('The field does exists in previous mode of the same characterisitics, using it as a template to append a new mode...')
+                    lastModeVal = self.YAMLrecursion(self.dl, lastModePath[0:4])
+                    self.dl['retrieval']['constraints'][fldPath.split('.')[2]]['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lastModeVal)
+                    prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal) # new mode exist now, write value to it
         if newVal and write2disk: self.writeYAML() # if no change was made no need to re-write the file
         return prsntVal
             
