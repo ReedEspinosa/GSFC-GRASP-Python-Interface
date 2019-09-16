@@ -15,10 +15,10 @@ class simulation(object):
         self.rsltBck = None
         self.rsltFwd = None
 
-    def runSim(self, fwdModelYAMLpath, bckYAMLpath, Nsims=100, maxCPU=4, binPathGRASP=None, savePath=None, intrnlFileGRASP=None):
+    def runSim(self, fwdModelYAMLpath, bckYAMLpath, Nsims=100, maxCPU=4, binPathGRASP=None, savePath=None, intrnlFileGRASP=None, releaseYAML=True):
         assert not self.nowPix is None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.' 
         # RUN THE FOWARD MODEL
-        gObjFwd = rg.graspRun(fwdModelYAMLpath)
+        gObjFwd = rg.graspRun(fwdModelYAMLpath, releaseYAML=releaseYAML)
         gObjFwd.addPix(self.nowPix)
         gObjFwd.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=intrnlFileGRASP)
         self.rsltFwd = gObjFwd.readOutput()[0]

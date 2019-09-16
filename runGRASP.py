@@ -38,7 +38,7 @@ class graspDB(object):
                 grspChnkSz = int(maxT if maxT else int(np.ceil(Npix/maxCPU)))
             strtInds = np.r_[0:Npix:grspChnkSz]
             for strtInd in strtInds:
-                gObj = graspRun(graspRunObjs.yamlObj.YAMLpath, graspRunObjs.orbHght/1e3, graspRunObjs.dirGRASP)
+                gObj = graspRun(graspRunObjs.yamlObj.YAMLpath, graspRunObjs.orbHght/1e3, releaseYAML=graspRunObjs.releaseYAML) # not specifying dirGRASP so a new temp dir is created
                 endInd = min(strtInd+grspChnkSz, Npix)
                 for ind in range(strtInd, endInd):
                     gObj.addPix(graspRunObjs.pixels[ind])
@@ -308,19 +308,23 @@ class graspDB(object):
 
 # can add self.AUX_dict[Npixel] dictionary list to instance w/ additional fields to port into rslts
 class graspRun(object):
-    def __init__(self, pathYAML=None, orbHghtKM=700, dirGRASP=False):
-        self.pixels = [];
+    def __init__(self, pathYAML=None, orbHghtKM=700, dirGRASP=None, releaseYAML=False):
+        self.releaseYAML = releaseYAML # allow automated modification of YAML, all index of wavelength involved fields MUST cover every wavelength
         self.pathSDATA = False;
         if pathYAML:
             self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP
             print('Working in %s' % self.dirGRASP)
-            newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML))
-            self.yamlObj = graspYAML(pathYAML, newPathYAML)
+            if os.path.dirname(pathYAML) == self.dirGRASP:
+                self.yamlObj = graspYAML(pathYAML)
+            else:
+                newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML))
+                self.yamlObj = graspYAML(pathYAML, newPathYAML)
         else:
             assert not dirGRASP, 'You can not have a workin directory (dirGRASP) without a YAML file (pathYAML)!'
             self.dirGRASP = None
             self.yamlObj = graspYAML()
         self.orbHght = orbHghtKM*1000
+        self.pixels = [];
         self.pObj = False
     
     def addPix(self, newPixel): # this is called once for each pixel
@@ -348,6 +352,7 @@ class graspRun(object):
         if not binPathGRASP: binPathGRASP = '/usr/local/bin/grasp'
         if not self.pathSDATA:
             self.writeSDATA()
+        if self.releaseYAML: self.yamlObj.adjustLambda(np.max([px.nwl for px in self.pixels]))
         if krnlPathGRASP: self.access('path_to_internal_files', krnlPathGRASP)
         self.pObj = Popen([binPathGRASP, self.yamlObj.YAMLpath], stdout=PIPE)
         if not parallel:
@@ -695,8 +700,6 @@ class graspYAML(object):
                 else:
                     rpts = Nlambda - len(orgVal)                
                     newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
-                print(fldNm)
-                print(newVal)
                 self.access(fldNm, newVal, write2disk=False)
                 m+=1
         self.writeYAML()
@@ -706,7 +709,7 @@ class graspYAML(object):
         self.loadYAML()
         fldPath = self.exapndFldPath(fldPath)
         prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal)
-        if not prsntVal and verbose and newVal: # we were supposed to change a value but the field wasn't there
+        if not prsntVal and newVal: # we were supposed to change a value but the field wasn't there
             if verbose: warnings.warn('%s not found at specified location in YAML' % fldPath)
             mtch = re.match('retrieval.constraints.characteristic\[[0-9]+\].mode\[([0-9]+)\]', fldPath)
             if mtch: # we may still be able to add the value if we append a mode
@@ -716,6 +719,9 @@ class graspYAML(object):
                     lastModeVal = self.YAMLrecursion(self.dl, lastModePath[0:4])
                     self.dl['retrieval']['constraints'][fldPath.split('.')[2]]['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lastModeVal)
                     prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal) # new mode exist now, write value to it
+                    if not 'mode[%d]' % int(mtch.group(1)) in self.dl['retrieval']['phase_matrix']['radius'].keys(): # phase_matrix radius not present from this mode
+                        lstModeRadius = self.dl['retrieval']['phase_matrix']['radius']['mode[%d]' % (int(mtch.group(1))-1)] # we copy it from previous mode
+                        self.dl['retrieval']['phase_matrix']['radius']['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lstModeRadius)
         if newVal and write2disk: self.writeYAML() # if no change was made no need to re-write the file
         return prsntVal
             

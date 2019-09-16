@@ -67,7 +67,8 @@ for wvl in wvls: # This will be expanded for wavelength dependent measurement ty
 
 # RUN SIMULATION
 simA = rs.simulation(nowPix) # defines new instance for this architecture
-simA.runSim(fwdModelYAMLpath, bckYAMLpath, Nsims, maxCPU=maxCPU, savePath=savePath, binPathGRASP=dirGRASP, intrnlFileGRASP=krnlPath) # runs the simulation for given set of conditions 
+# runs the simulation for given set of conditions, releaseYAML=True -> index of wavelength involved YAML fields MUST cover every wavelength BUT bckYAML Nλ does not have to match fwd calulcation
+simA.runSim(fwdModelYAMLpath, bckYAMLpath, Nsims, maxCPU=maxCPU, savePath=savePath, binPathGRASP=dirGRASP, intrnlFileGRASP=krnlPath, releaseYAML=True) 
 rmsErr, meanBias = simA.analyzeSim()
 print(rmsErr)
 print(meanBias)
