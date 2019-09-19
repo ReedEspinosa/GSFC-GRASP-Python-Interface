@@ -308,12 +308,12 @@ class graspDB(object):
 
 # can add self.AUX_dict[Npixel] dictionary list to instance w/ additional fields to port into rslts
 class graspRun(object):
-    def __init__(self, pathYAML=None, orbHghtKM=700, dirGRASP=None, releaseYAML=False):
+    def __init__(self, pathYAML=None, orbHghtKM=700, dirGRASP=None, releaseYAML=False, quietStart=False):
         self.releaseYAML = releaseYAML # allow automated modification of YAML, all index of wavelength involved fields MUST cover every wavelength
         self.pathSDATA = False;
         if pathYAML:
             self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP
-            print('Working in %s' % self.dirGRASP)
+            if not quietStart: print('Working in %s' % self.dirGRASP)
             if os.path.dirname(pathYAML) == self.dirGRASP:
                 self.yamlObj = graspYAML(pathYAML)
             else:

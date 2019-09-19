@@ -55,7 +55,7 @@ def logNormal(mu, sig, r=None):
         r = np.logspace(bot,top,Nr)
     nrmFct = 1/(sig*np.sqrt(2*np.pi))
     dxdr = nrmFct*(r**-1)*np.exp(-((np.log(r)-np.log(mu))**2)/(2*sig**2))
-    return dxdr,r
+    return dxdr,r # random note: rEff = mu*np.exp(-sig**2/2)
 
 def effRadius(r, dvdlnr):
     vol = np.trapz(dvdlnr/r,r)
