@@ -12,7 +12,10 @@ from matplotlib import pyplot as plt
 binPathGRASP = '/Users/wrespino/Synced/Local_Code_MacBook/grasp_open/build/bin/grasp' # currently has lambda checks disabled
 YAMLpath = '/Users/wrespino/Synced/Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_8lambda.yml'
 netCDFpath = '/Users/wrespino/Synced/Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc' # just need for lambda's and dummy ext
-savePath_netCDF = '/Users/wrespino/Synced/Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V1.nc'
+savePath_netCDF = '/Users/wrespino/Synced/Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V2.nc'
+# the following will load from prior pkl file instead of calling GRASP, NONE to actually generate properties
+loadPath_pkl = '/Users/wrespino/Synced/Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V1.pkl' 
+
 lgnrmfld = 'retrieval.constraints.characteristic[2].mode[1].initial_guess.value'
 RRIfld =   'retrieval.constraints.characteristic[3].mode[1].initial_guess.value' # should match setting in YAML file
 IRIfld =   'retrieval.constraints.characteristic[4].mode[1].initial_guess.value'
@@ -44,30 +47,32 @@ optTbl = loadVARSnetCDF(netCDFpath, loaddVarNames)
 wvls = optTbl['lambda']*1e6
 gspRun = []
 Nlambda = len(wvls)
-#Nlambda = 18 # HACK
 lEdg = np.r_[0:Nlambda:maxL]
-for bn in range(Nbin):
-    for lstrt in lEdg:
-        wvlsNow = wvls[lstrt:lstrt+maxL]
-        wvInds = np.r_[lstrt:lstrt+maxL]
-        gspRunNow = rg.graspRun(YAMLpath)    
-        nowPix = rg.pixel(730123.0+bn, 1, 1, 0, 0, 0, 100)
-        for wvl, wvInd in zip(wvlsNow, wvInds): # This will be expanded for wavelength dependent measurement types/geometry
-            meas = np.r_[optTbl['qext'][bn,0,wvInd]]
-            nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv, phi, meas)
-        n = optTbl['refreal'][bn,0,wvInds]
-        n = np.minimum(n, nBnds[1])
-        n = np.maximum(n, nBnds[0])
-        k = -optTbl['refimag'][bn,0,wvInds]
-        k = np.minimum(k, kBnds[1])
-        k = np.maximum(k, kBnds[0])
-        gspRunNow.yamlObj.access(lgnrmfld, szVars[bn])
-        gspRunNow.yamlObj.access(RRIfld, n) 
-        gspRunNow.yamlObj.access(IRIfld, k)
-        gspRunNow.addPix(nowPix)
-        gspRun.append(gspRunNow)
-gDB = rg.graspDB(gspRun, maxCPU)
-rslts = gDB.processData(savePath=savePath_netCDF[0:-2]+'pkl', binPathGRASP=binPathGRASP)
+if loadPath_pkl: # only write previous calculations to netCDF
+    rslts = rg.graspDB().loadResults(loadPath_pkl)
+else: # perform calculations
+    for bn in range(Nbin):
+        for lstrt in lEdg:
+            wvlsNow = wvls[lstrt:lstrt+maxL]
+            wvInds = np.r_[lstrt:lstrt+maxL]
+            gspRunNow = rg.graspRun(YAMLpath)    
+            nowPix = rg.pixel(730123.0+bn, 1, 1, 0, 0, 0, 100)
+            for wvl, wvInd in zip(wvlsNow, wvInds): # This will be expanded for wavelength dependent measurement types/geometry
+                meas = np.r_[optTbl['qext'][bn,0,wvInd]]
+                nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv, phi, meas)
+            n = optTbl['refreal'][bn,0,wvInds]
+            n = np.minimum(n, nBnds[1])
+            n = np.maximum(n, nBnds[0])
+            k = -optTbl['refimag'][bn,0,wvInds]
+            k = np.minimum(k, kBnds[1])
+            k = np.maximum(k, kBnds[0])
+            gspRunNow.yamlObj.access(lgnrmfld, szVars[bn])
+            gspRunNow.yamlObj.access(RRIfld, n) 
+            gspRunNow.yamlObj.access(IRIfld, k)
+            gspRunNow.addPix(nowPix)
+            gspRun.append(gspRunNow)
+    gDB = rg.graspDB(gspRun, maxCPU)
+    rslts = gDB.processData(savePath=savePath_netCDF[0:-2]+'pkl', binPathGRASP=binPathGRASP)
 
 root_grp = Dataset(savePath_netCDF, 'w', format='NETCDF4')
 #root_grp = Dataset('/Users/wrespino/Desktop/netCDF_TEST.nc', 'w', format='NETCDF4')
@@ -94,12 +99,18 @@ for varNm in PMvarNms:
     PMvars[varNm] = root_grp.createVariable(varNm, 'f8', ('sizeBin', 'lambda', 'angle'))
     PMvars[varNm].units = 'sr-1'
     PMvars[varNm].long_name = varNm + ' phase matrix element' 
-bext = root_grp.createVariable('bext', 'f8', ('sizeBin', 'lambda'))
-bext.units = 'm-1'
-bext.long_name = 'extinction coefficient'
-bsca = root_grp.createVariable('bsca', 'f8', ('sizeBin', 'lambda'))
-bsca.units = 'm-1'
-bsca.long_name = 'scattering coefficient'
+bext_vol = root_grp.createVariable('bext_vol', 'f8', ('sizeBin', 'lambda'))
+bext_vol.units = 'm2·m-3 '
+bext_vol.long_name = 'volume extinction efficiency'
+bext_vol.description = "The extinction cross section per unit of particle volume.\
+ This is also the extinction coefficient per unit of volume concentration.\
+ bext_vol x ρ = βext where ρ is the particle density and βext is the mass extinction efficiency."
+bsca_vol = root_grp.createVariable('bsca_vol', 'f8', ('sizeBin', 'lambda'))
+bsca_vol.units = 'm2·m-3'
+bsca_vol.long_name = 'volume scattering efficiency'
+bsca_vol.description = "The scattering cross section per unit of particle volume.\
+ This is also the scattering coefficient per unit of volume concentration.\
+ bsca_vol x ρ = βsca where ρ is the particle density and βsca is the mass scattering efficiency."
 refreal = root_grp.createVariable('refreal', 'f8', ('sizeBin', 'lambda'))
 refreal.units = 'none'
 refreal.long_name = 'real refractive index'
@@ -112,9 +123,6 @@ rv.long_name = 'lognormal volume median radius'
 sigma = root_grp.createVariable('sigma', 'f8', ('sizeBin'))
 sigma.units = 'none'
 sigma.long_name = 'lognormal sigma'
-vol = root_grp.createVariable('vol', 'f8', ('sizeBin'))
-vol.units = 'm3/m3'
-vol.long_name = 'volume concentration'
 sph = root_grp.createVariable('sph', 'f8', ('sizeBin'))
 sph.units = 'none'
 sph.long_name = 'fraction of spherical particles'
@@ -129,11 +137,10 @@ for i,rslt in enumerate(rslts):
     if lEdgInd == 0:
         rv[binInd] = rslt['rv'][0]
         sigma[binInd] = rslt['sigma'][0]
-        vol[binInd] = rslt['vol'][0]
         sph[binInd] = np.atleast_1d(rslt['sph'])[0]
     lInd = np.r_[lEdg[lEdgInd]:(lEdg[lEdgInd]+maxL)]
-    bext[binInd, lInd] = rslt['aod'] 
-    bsca[binInd, lInd] = rslt['ssa']*rslt['aod']
+    bext_vol[binInd, lInd] = rslt['aod']/rslt['vol'][0]
+    bsca_vol[binInd, lInd] = rslt['ssa']*rslt['aod']/rslt['vol'][0]
     refreal[binInd, lInd] = rslt['n']  # HINT: WE DID NOT HAVE MODE SPECIFIC REF IND IN YAML
     reafimag[binInd, lInd] = rslt['k']
     for varNm in PMvarNms:
@@ -152,21 +159,21 @@ root_grp.close()
 
 
 # SANITY CHECK PLOT
-loaddVarNames = ['lambda', 'bext', 'bsca']
+loaddVarNames = ['lambda', 'bext_vol', 'bsca_vol']
 optTblNew = loadVARSnetCDF(savePath_netCDF, loaddVarNames)
 fitInd = np.r_[2,4,5,6,7,8,9,11,13]
 fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(7, 3.5))
-Vars = ['ext', 'sca']
+Vars = ['ext_vol', 'sca_vol']
 for i, vnm in enumerate(Vars):
-    vnmq = 'q'+vnm
+    vnmq = 'q'+vnm[:-4]
     vnmb = 'b'+vnm
-    ax[i].plot(optTbl['lambda']*1e6, optTbl['q'+vnm][:,0,:].T, '--')
+    ax[i].plot(optTbl['lambda']*1e6, optTbl['q'+vnm[:-4]][:,0,:].T, '--')
     ax[i].set_prop_cycle(None)
-    Scl = optTblNew['b'+vnm][:,8]/optTbl['q'+vnm][:,0,8]
+    Scl = optTblNew['b'+vnm][:,8]/optTbl['q'+vnm[:-4]][:,0,8]
     ax[i].plot(optTblNew['lambda'], optTblNew['b'+vnm].T/Scl)
     ax[i].set_xlim([0.3, 3.0])
     ax[i].set_xlabel('wavelength')   
-    ax[i].set_ylabel('$q_{' + vnm + '}$')
+    ax[i].set_ylabel('$q_{' + vnm[:-4] + '}$')
 ax[0].legend(['Mode %d' % int(x+1) for x in range(optTblNew['b'+vnm].shape[0])])
 ax[0].set_prop_cycle(None)
 ax[0].plot(optTblNew['lambda'][fitInd], np.atleast_2d(optTbl['qext'][:,0,fitInd]).T, 'x')

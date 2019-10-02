@@ -669,8 +669,9 @@ class graspYAML(object):
             self.YAMLpath = baseYAMLpath
         self.dl = None
         
-    def adjustLambda(self, Nlambda): # HINT: assumes all index of wavelength involved cover every wavelength
-        lambdaTypes = ['surface_water_CxMnk_iso_noPol', 
+    def adjustLambda(self, Nlambda):
+        lambdaTypes = ['surface_water_CxMnk_iso_noPol',
+               'surface_water_cox_munk_iso',
                'surface_land_brdf_ross_li', 
                'surface_land_polarized_maignan_breon', 
                'real_part_of_refractive_index_spectral_dependent',

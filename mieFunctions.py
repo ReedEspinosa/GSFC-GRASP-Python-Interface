@@ -19,11 +19,13 @@ import matplotlib.pyplot as plt
 #S33 = 0.5 (S2^* S1 + S2 S1^*)
 #S34 = 0.5 (S1 S2^* - S2 S1^*)
 
-m = 1.35528135+6.287e-7j # complex
+#m = 1.35528135+6.287e-7j # complex
+m = complex(rslt[0]['n'], rslt[0]['k'])
 wav = 865 # nm
 #dp = [903,1000] # diamter of size bin, nm
 #ndp = [1e6,1e1] # number in size bin
 
+intrpRadii = np.logspace(np.log10(minR),np.log10(maxR),500)
 dp = intrpRadii*2000
 ndp = dvdlnr(intrpRadii)/(intrpRadii**4)
 
@@ -31,7 +33,9 @@ ndp = dvdlnr(intrpRadii)/(intrpRadii**4)
 theta,sl,sr,su = ps.SF_SD(m, wav, dp, ndp)
 S11=0.5*(sl+sr)
 S12=-0.5*(sl-sr) # minus makes positive S12 polarized in scattering plane
-plt.figure()
-plt.plot(theta, -S12/S11)
+#plt.figure()
+#plt.plot(theta, -S12/S11)
+
+P11 = 2*S11/np.trapz(S11*np.sin(theta), theta)
 
 #should make PSD class with r,dNdr and type (dndr,dvdr,etc.)

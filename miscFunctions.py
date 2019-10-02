@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import PyMieScatt as ps
 #from scipy import integrate
 
 def angstrmIntrp(lmbdIn, tau, lmbdTrgt):
@@ -48,7 +49,7 @@ def logNormal(mu, sig, r=None):
     Returns tupple with two arrays (dX/dr, r) 
     """
     if r is None:
-        Nr = 1e4 # number of radii
+        Nr = int(1e4) # number of radii
         Nfct = 5 # r spans this many geometric std factors above and below mu
         bot = np.log10(mu) - Nfct*sig/np.log(10)
         top = np.log10(mu) + Nfct*sig/np.log(10)
@@ -62,6 +63,33 @@ def effRadius(r, dvdlnr):
     area = np.trapz(dvdlnr/r**2,r)
     return vol/area
         
+def phaseMat(r, dvdlnr, n, k, wav=0.550):
+    """
+    # https://pymiescatt.readthedocs.io
+    #SR = |S1|^2   # we lose information here so there is no way to recover S33 or S34...
+    #SL = |S2|^2   # there is a function that finds these last two elements but only for monodisperse PSD
+    #SU = 0.5(SR+SL)
+    #S11 = 0.5 (|S2|^2 + |S1|^2)
+    #S12 = 0.5 (|S2|^2 - |S1|^2)  [S12/S11=1 -> unpolarized light is scattered into 100% polarized light oriented perpendicular to scattering plane]
+    phaseMat: (array, array, float, float, float*) -> (array, array, array)
+    Parameters:
+        r: array of radii in μm
+        dvdlnr: array of PSD values at r in dv/dlnr
+        n: real refractive index
+        k: imaginary refracrtive index
+        wav: wavelength in μm
+    Returns tupple with three arrays: (scattering_angle, normalized_P11, -P12/P11) 
+    """
+    m = complex(n, k)   
+    dp = r*2
+    ndp = dvdlnr/(r**3) # this should be r^4 but we seem to match with r^3... we _think_ PyMieScatt really wants dn/dr*r, contrary to docs
+    theta,sl,sr,su = ps.SF_SD(m, wav, dp, ndp)
+    S11=0.5*(sl+sr)
+    S12=-0.5*(sl-sr) # minus makes positive S12 polarized in scattering plane
+    p11 = 2*S11/np.trapz(S11*np.sin(theta), theta)
+    return theta*180/np.pi, p11, -S12/S11
+    
+    #should make PSD class with r,dNdr and type (dndr,dvdr,etc.)
         
         
         

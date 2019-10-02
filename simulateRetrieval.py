@@ -50,6 +50,7 @@ class simulation(object):
     def analyzeSim(self, wvlnthInd=0, modeCut=0.5): # modeCut is fine/coarse seperation radius in um; NOTE: only applies if fwd & inv models have differnt number of modes
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc', 'height']
+        varsAodAvg = ['n', 'k'] # modal variables for which we will append a aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
         rmsErr = dict()
         meanBias = dict()
         assert (not self.rsltBck is None) and self.rsltFwd, 'You must call loadSim() or runSim() before you can calculate statistics!'
@@ -63,10 +64,15 @@ class simulation(object):
             elif av=='rEffMode':
                 true = self.ReffMode(self.rsltFwd,modeCut)
                 rtrvd = np.array([self.ReffMode(rs,modeCut) for rs in self.rsltBck])
-            if rtrvd.ndim>1: # we will seperate fine and coarse modes here
-                for i,rs in enumerate(self.rsltBck): # HINT: could replace 'vol' below with 'aodMode' for sudo-aod-weighted version (fraction within a single mode would still be atributed based on PSD)
+            if rtrvd.ndim>1 and not av=='rEffMode': # we will seperate fine and coarse modes here
+                for i,rs in enumerate(self.rsltBck):
                     rtrvd[i]= self.volWghtedAvg(rtrvd[i], rs['rv'], rs['sigma'], rs['vol'], modeCut)                
                 true = self.volWghtedAvg(true, self.rsltFwd['rv'], self.rsltFwd['sigma'], self.rsltFwd['vol'], modeCut)
+                if av in varsAodAvg:
+                    avgVal = [np.sum(rs[av][:,wvlnthInd]*rs['aodMode'][:,wvlnthInd])/np.sum(rs['aodMode'][:,wvlnthInd]) for rs in self.rsltBck]
+                    rtrvd = np.vstack([avgVal, rtrvd.T]).T
+                    avgVal = np.sum(self.rsltFwd[av][:,wvlnthInd]*self.rsltFwd['aodMode'][:,wvlnthInd])/np.sum(self.rsltFwd['aodMode'][:,wvlnthInd])
+                    true = np.r_[avgVal, true]
             rmsErr[av] = np.sqrt(np.mean((true-rtrvd)**2, axis=0))
             meanBias[av] = np.mean(true-rtrvd, axis=0)
         return rmsErr, meanBias
