@@ -11,7 +11,7 @@ if discover:
     syncPath = '/discover/nobackup/wrespino/synced/'
     sys.path.append("/discover/nobackup/wrespino/MADCAP_scripts")
 else:
-    syncPath = '/Users/wrespino/Synced/Remote_Sensing_Projects/'
+    syncPath = '/Users/wrespino/Synced/'
     sys.path.append("/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis")
 from MADCAP_functions import loadVARSnetCDF
 
@@ -19,17 +19,19 @@ from MADCAP_functions import loadVARSnetCDF
 
 netCDFpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc' # just need for lambda's and dummy ext
 savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V3.nc'
-loadPath_pkl = None 
+#loadPath_pkl = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V3.pkl'
+loadPath_pkl = None
+
 maxL = 9 # max number of wavelengths in a single GRASP run
 Nangles = 181 # determined by GRASP kernels
 
 # if loadPath_pkl is None grasp results is generated (not loaded) and the following are required:
-binPathGRASP = '/discover/nobackup/wrespino/grasp_open/build/bin/grasp' if discover else 'grasp' # currently has lambda checks disabled
+binPathGRASP = '/discover/nobackup/wrespino/grasp_open/build/bin/grasp' if discover else '/usr/local/bin/grasp' # currently has lambda checks disabled
 YAMLpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_9lambda.yml'
 lgnrmfld = 'retrieval.constraints.characteristic[2].mode[1].initial_guess.value'
 RRIfld =   'retrieval.constraints.characteristic[3].mode[1].initial_guess.value' # should match setting in YAML file
 IRIfld =   'retrieval.constraints.characteristic[4].mode[1].initial_guess.value'
-maxCPU = 28
+maxCPU = 28 if discover else 3
 #                   rv      sigma [currently: MADCAP DUST-LUT V3 (fitting total ext, not just spectral dependnece)]
 szVars = np.array([[0.7145, 0.3281],
                    [1.2436, 0.2500],
@@ -59,8 +61,8 @@ if loadPath_pkl: # only write previous calculations to netCDF
 else: # perform calculations
     for bn in range(Nbin):
         for lstrt in lEdg:
-            wvlsNow = wvls[lstrt:min(lstrt+maxL,Nlambda-1)]
-            wvInds = np.r_[lstrt:min(lstrt+maxL,Nlambda-1)]
+            wvlsNow = wvls[lstrt:min(lstrt+maxL,Nlambda)]
+            wvInds = np.r_[lstrt:min(lstrt+maxL,Nlambda)]
             gspRunNow = rg.graspRun(YAMLpath)    
             nowPix = rg.pixel(730123.0+bn, 1, 1, 0, 0, 0, 100)
             for wvl, wvInd in zip(wvlsNow, wvInds): # This will be expanded for wavelength dependent measurement types/geometry
@@ -144,7 +146,7 @@ for i,rslt in enumerate(rslts):
         rv[binInd] = rslt['rv'][0]
         sigma[binInd] = rslt['sigma'][0]
         sph[binInd] = np.atleast_1d(rslt['sph'])[0]
-    lInd = np.r_[lEdg[lEdgInd]:(lEdg[lEdgInd]+maxL)]
+    lInd = np.r_[lEdg[lEdgInd]:min(lEdg[lEdgInd]+maxL,Nlambda)]
     bext_vol[binInd, lInd] = rslt['aod']/rslt['vol'][0]
     bsca_vol[binInd, lInd] = rslt['ssa']*rslt['aod']/rslt['vol'][0]
     refreal[binInd, lInd] = rslt['n']  # HINT: WE DID NOT HAVE MODE SPECIFIC REF IND IN YAML
