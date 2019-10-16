@@ -1,39 +1,44 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
- 
+
+discover = True 
+
 import numpy as np
 import runGRASP as rg
 from netCDF4 import Dataset
 import sys
-sys.path.append("/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis")
+if discover:
+    syncPath = '/discover/nobackup/wrespino/synced/'
+    sys.path.append("/discover/nobackup/wrespino/MADCAP_scripts")
+else:
+    syncPath = '/Users/wrespino/Synced/Remote_Sensing_Projects/'
+    sys.path.append("/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis")
 from MADCAP_functions import loadVARSnetCDF
-from matplotlib import pyplot as plt
 
-binPathGRASP = '/Users/wrespino/Synced/Local_Code_MacBook/grasp_open/build/bin/grasp' # currently has lambda checks disabled
-YAMLpath = '/Users/wrespino/Synced/Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_8lambda.yml'
-netCDFpath = '/Users/wrespino/Synced/Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc' # just need for lambda's and dummy ext
-savePath_netCDF = '/Users/wrespino/Synced/Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V2.nc'
-# the following will load from prior pkl file instead of calling GRASP, NONE to actually generate properties
-loadPath_pkl = '/Users/wrespino/Synced/Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V1.pkl' 
 
+
+netCDFpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc' # just need for lambda's and dummy ext
+savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V3.nc'
+loadPath_pkl = None 
+maxL = 9 # max number of wavelengths in a single GRASP run
+Nangles = 181 # determined by GRASP kernels
+
+# if loadPath_pkl is None grasp results is generated (not loaded) and the following are required:
+binPathGRASP = '/discover/nobackup/wrespino/grasp_open/build/bin/grasp' if discover else 'grasp' # currently has lambda checks disabled
+YAMLpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_9lambda.yml'
 lgnrmfld = 'retrieval.constraints.characteristic[2].mode[1].initial_guess.value'
 RRIfld =   'retrieval.constraints.characteristic[3].mode[1].initial_guess.value' # should match setting in YAML file
 IRIfld =   'retrieval.constraints.characteristic[4].mode[1].initial_guess.value'
-
-maxCPU = 3
-unbound = False # each bin has its own YAML (YAMLpath[:-4:]+'_mode%d' % (bn+1)+'.yml')
-maxL = 8 # max number of wavelengths in a single GRASP run
-Nbin = 5 # number of bins, should be YAML file for each (YAMLpath[:-4:]+'_mode%d' % (bn+1)+'.yml')
-Nangles = 181 # determined by GRASP kernels
-
-#                   rv      sigma
-szVars = np.array([[0.8125, 0.4236],
-                   [1.4257, 0.2730],
-                   [2.0688, 0.3232],
-                   [3.0000, 0.5841],
-                   [6.0249, 0.7479]])
-nBnds = [1.301, 1.699]
+maxCPU = 28
+#                   rv      sigma [currently: MADCAP DUST-LUT V3 (fitting total ext, not just spectral dependnece)]
+szVars = np.array([[0.7145, 0.3281],
+                   [1.2436, 0.2500],
+                   [2.2969, 0.3439],
+                   [5.3621, 0.7064],
+                   [9.9686, 0.7271]])
+nBnds = [1.301, 1.699] # taken from netCDF but forced to these bounds
 kBnds = [1e-8, 0.499]
+
 
 # DUMMY VALUES
 msTyp = [12] 
@@ -48,13 +53,14 @@ wvls = optTbl['lambda']*1e6
 gspRun = []
 Nlambda = len(wvls)
 lEdg = np.r_[0:Nlambda:maxL]
+Nbin = szVars.shape[0]
 if loadPath_pkl: # only write previous calculations to netCDF
     rslts = rg.graspDB().loadResults(loadPath_pkl)
 else: # perform calculations
     for bn in range(Nbin):
         for lstrt in lEdg:
-            wvlsNow = wvls[lstrt:lstrt+maxL]
-            wvInds = np.r_[lstrt:lstrt+maxL]
+            wvlsNow = wvls[lstrt:min(lstrt+maxL,Nlambda-1)]
+            wvInds = np.r_[lstrt:min(lstrt+maxL,Nlambda-1)]
             gspRunNow = rg.graspRun(YAMLpath)    
             nowPix = rg.pixel(730123.0+bn, 1, 1, 0, 0, 0, 100)
             for wvl, wvInd in zip(wvlsNow, wvInds): # This will be expanded for wavelength dependent measurement types/geometry
@@ -130,7 +136,7 @@ sph.long_name = 'fraction of spherical particles'
 # data
 sizeBin[:] = np.r_[0:Nbin]
 wavelength[:] = wvls[0:Nlambda]
-angle[:] = np.r_[0:Nangles]
+angle[:] = np.linspace(0, 180, Nangles)
 for i,rslt in enumerate(rslts):
     binInd = i//len(lEdg)
     lEdgInd = i%len(lEdg)
@@ -146,19 +152,12 @@ for i,rslt in enumerate(rslts):
     for varNm in PMvarNms:
         for i,l in enumerate(lInd):
             PMvars[varNm][binInd, l, :] = rslt[varNm][:,0,i]
-#            if varNm == 'p11' and binInd==4:
-#                if l%4 == 0:
-#                    if l>0:
-#                        plt.yscale('log')
-#                        plt.legend(lgTxt)
-#                    plt.figure()
-#                    lgTxt = []
-#                plt.plot(np.r_[0:Nangles], rslt[varNm][:,0,i])
-#                lgTxt.append(str(rslt['lambda'][i]))
 root_grp.close()
 
 
 # SANITY CHECK PLOT
+if discover: sys.exit()
+from matplotlib import pyplot as plt
 loaddVarNames = ['lambda', 'bext_vol', 'bsca_vol']
 optTblNew = loadVARSnetCDF(savePath_netCDF, loaddVarNames)
 fitInd = np.r_[2,4,5,6,7,8,9,11,13]
@@ -170,6 +169,7 @@ for i, vnm in enumerate(Vars):
     ax[i].plot(optTbl['lambda']*1e6, optTbl['q'+vnm[:-4]][:,0,:].T, '--')
     ax[i].set_prop_cycle(None)
     Scl = optTblNew['b'+vnm][:,8]/optTbl['q'+vnm[:-4]][:,0,8]
+    print(Scl)
     ax[i].plot(optTblNew['lambda'], optTblNew['b'+vnm].T/Scl)
     ax[i].set_xlim([0.3, 3.0])
     ax[i].set_xlabel('wavelength')   

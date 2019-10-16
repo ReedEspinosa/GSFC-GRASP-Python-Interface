@@ -83,7 +83,7 @@ def phaseMat(r, dvdlnr, n, k, wav=0.550):
     m = complex(n, k)   
     dp = r*2
     ndp = dvdlnr/(r**3) # this should be r^4 but we seem to match with r^3... we _think_ PyMieScatt really wants dn/dr*r, contrary to docs
-    theta,sl,sr,su = ps.SF_SD(m, wav, dp, ndp)
+    theta,sl,sr,su = ps.SF_SD(m, wav, dp, ndp, angularResolution=1)
     S11=0.5*(sl+sr)
     S12=-0.5*(sl-sr) # minus makes positive S12 polarized in scattering plane
     p11 = 2*S11/np.trapz(S11*np.sin(theta), theta)
