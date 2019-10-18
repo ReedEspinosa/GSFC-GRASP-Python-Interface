@@ -18,9 +18,9 @@ from MADCAP_functions import loadVARSnetCDF
 
 
 netCDFpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc' # just need for lambda's and dummy ext
-savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V3.nc'
-#loadPath_pkl = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V3.pkl'
-loadPath_pkl = None
+savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4.nc'
+loadPath_pkl = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4.pkl'
+#loadPath_pkl = None
 
 maxL = 9 # max number of wavelengths in a single GRASP run
 Nangles = 181 # determined by GRASP kernels
@@ -33,11 +33,11 @@ RRIfld =   'retrieval.constraints.characteristic[3].mode[1].initial_guess.value'
 IRIfld =   'retrieval.constraints.characteristic[4].mode[1].initial_guess.value'
 maxCPU = 28 if discover else 3
 #                   rv      sigma [currently: MADCAP DUST-LUT V3 (fitting total ext, not just spectral dependnece)]
-szVars = np.array([[0.7145, 0.3281],
+szVars = np.array([[0.6576, 0.2828],
                    [1.2436, 0.2500],
-                   [2.2969, 0.3439],
-                   [5.3621, 0.7064],
-                   [9.9686, 0.7271]])
+                   [2.2969, 0.3440],
+                   [5.3645, 0.7070],
+                   [9.9649, 0.7263]])
 nBnds = [1.301, 1.699] # taken from netCDF but forced to these bounds
 kBnds = [1e-8, 0.499]
 
@@ -122,9 +122,9 @@ bsca_vol.description = "The scattering cross section per unit of particle volume
 refreal = root_grp.createVariable('refreal', 'f8', ('sizeBin', 'lambda'))
 refreal.units = 'none'
 refreal.long_name = 'real refractive index'
-reafimag = root_grp.createVariable('reafimag', 'f8', ('sizeBin', 'lambda'))
-reafimag.units = 'none'
-reafimag.long_name = 'imaginary refractive index'
+refimag = root_grp.createVariable('refimag', 'f8', ('sizeBin', 'lambda'))
+refimag.units = 'none'
+refimag.long_name = 'imaginary refractive index'
 rv = root_grp.createVariable('rv', 'f8', ('sizeBin'))
 rv.units = 'um'
 rv.long_name = 'lognormal volume median radius'
@@ -134,6 +134,9 @@ sigma.long_name = 'lognormal sigma'
 sph = root_grp.createVariable('sph', 'f8', ('sizeBin'))
 sph.units = 'none'
 sph.long_name = 'fraction of spherical particles'
+rEff = root_grp.createVariable('rEff', 'f8', ('sizeBin'))
+rEff.units = 'um'
+rEff.long_name = 'effective radius'
 
 # data
 sizeBin[:] = np.r_[0:Nbin]
@@ -146,11 +149,12 @@ for i,rslt in enumerate(rslts):
         rv[binInd] = rslt['rv'][0]
         sigma[binInd] = rslt['sigma'][0]
         sph[binInd] = np.atleast_1d(rslt['sph'])[0]
+        rEff[binInd] = np.atleast_1d(rslt['rEffCalc'])[0]
     lInd = np.r_[lEdg[lEdgInd]:min(lEdg[lEdgInd]+maxL,Nlambda)]
     bext_vol[binInd, lInd] = rslt['aod']/rslt['vol'][0]
     bsca_vol[binInd, lInd] = rslt['ssa']*rslt['aod']/rslt['vol'][0]
     refreal[binInd, lInd] = rslt['n']  # HINT: WE DID NOT HAVE MODE SPECIFIC REF IND IN YAML
-    reafimag[binInd, lInd] = rslt['k']
+    refimag[binInd, lInd] = rslt['k']
     for varNm in PMvarNms:
         for i,l in enumerate(lInd):
             PMvars[varNm][binInd, l, :] = rslt[varNm][:,0,i]
