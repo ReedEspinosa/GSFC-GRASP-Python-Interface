@@ -706,7 +706,11 @@ class graspYAML(object):
         self.writeYAML()
     
     def access(self, fldPath, newVal=None, write2disk=True, verbose=True): # will also return fldPath if newVal=None
-        if isinstance(newVal,np.ndarray): newVal = newVal.tolist() # yaml module doesn't handle numby array gracefully 
+        if isinstance(newVal, np.ndarray):  # yaml module doesn't handle numby array gracefully 
+            newVal = newVal.tolist()
+        elif isinstance(newVal, list): # check for regular list with numpy values
+            for i,val in enumerate(newVal):
+                if type(val).__module__ == np.__name__: newVal[i] = val.item()
         self.loadYAML()
         fldPath = self.exapndFldPath(fldPath)
         prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal)
