@@ -353,7 +353,7 @@ class graspRun(object):
         if not self.pathSDATA:
             self.writeSDATA()
         if self.releaseYAML: self.yamlObj.adjustLambda(np.max([px.nwl for px in self.pixels]))
-        if krnlPathGRASP: self.access('path_to_internal_files', krnlPathGRASP)
+        if krnlPathGRASP: self.yamlObj.access('path_to_internal_files', krnlPathGRASP)
         self.pObj = Popen([binPathGRASP, self.yamlObj.YAMLpath], stdout=PIPE)
         if not parallel:
             print('Running GRASP...')
