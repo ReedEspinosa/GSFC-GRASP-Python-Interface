@@ -476,7 +476,7 @@ class graspRun(object):
         if not results or not 'lambda' in results[0]:
             warnings.warn('Limited or no aerosol data found, returning incomplete dictionary...')
             return results
-        wavelengths = results[0]['lambda']
+        wavelengths = np.atleast_1d(results[0]['lambda'])
         if 'aodMode' in results[0]:
             Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]
             nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
