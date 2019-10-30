@@ -41,7 +41,7 @@ maxCPU = 28 if discover else 3
 #                   [5.3645, 0.7070],
 #                   [9.9649, 0.7263]])
 #                   rv      sigma [currently: MADCAP DrySU-LUT V1]
-szVars = np.array([[0.1334013118801549, 0.5709795355796814]])
+szVars = np.array([[0.18482, 0.5709795355796814]])
 nBnds = [1.301, 1.699] # taken from netCDF but forced to these bounds
 kBnds = [1e-8, 0.499]
 
