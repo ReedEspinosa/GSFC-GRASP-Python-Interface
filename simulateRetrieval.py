@@ -32,6 +32,7 @@ class simulation(object):
                 edgInd = np.r_[0, np.cumsum(self.nbvm[l,:])]
                 msDct['measurements'] = copy.copy(msDct['measurements']) # we are about to write to this
                 msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd, edgInd)
+                msDct['measurements'][np.abs(msDct['measurements'])<1e-10] = 1e-10 # TODO clean this up, can change sign, not flexible, etc.
             self.nowPix.dtNm = copy.copy(self.nowPix.dtNm+1) # otherwise GRASP will whine
             gObjBck.addPix(self.nowPix)
         gDB = rg.graspDB(gObjBck, maxCPU)
