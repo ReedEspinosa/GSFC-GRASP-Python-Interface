@@ -628,7 +628,7 @@ class pixel(object):
         self.nwl = 0
         self.measVals = []
          
-    def addMeas(self, wl, msTyp, nbvm, sza, thtv, phi, msrmnts): # this is called once for each wavelength of data (see frmtMsg below)
+    def addMeas(self, wl, msTyp, nbvm, sza, thtv, phi, msrmnts, errModel=None): # this is called once for each wavelength of data (see frmtMsg below)
         frmtMsg = '\n\
             For more than one measurement type or viewing geometry pass msTyp, nbvm, thtv, phi and msrments as vectors: \n\
             len(msrments)=len(thtv)=len(phi)=sum(nbvm); len(msTyp)=len(nbvm) \n\
@@ -642,8 +642,12 @@ class pixel(object):
         msrmnts = np.atleast_1d(msrmnts)
         assert thtv.shape[0]==phi.shape[0] and msTyp.shape[0]==nbvm.shape[0] and nbvm.sum()==thtv.shape[0], 'Each measurement must conform to the following format:' + frmtMsg
         assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!' + frmtMsg
-        newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts)
-        self.measVals.append(newMeas)
+        newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts, errorModel=errModel)
+        insertInd = np.nonzero([z['wl']>newMeas['wl'] for z in self.measVals])[0]
+        if len(insertInd)==0: # this is the longest wavelength so far, including the case w/ no measurements so far
+            self.measVals.append(newMeas)
+        else:
+            self.measVals.insert(insertInd[0], newMeas)
         self.nwl += 1
          
     def genString(self):

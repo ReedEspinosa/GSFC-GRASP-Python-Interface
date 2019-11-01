@@ -62,8 +62,7 @@ meas = np.r_[np.repeat(0.1, nbvm[0]), np.repeat(0.01, nbvm[1]), np.repeat(0.01, 
 phi = np.repeat(relPhi, len(thtv)) # currently we assume all observations fall within a plane
 nowPix = rg.pixel(730123.0, 1, 1, 0, 0, 0, 100)
 for wvl in wvls: # This will be expanded for wavelength dependent measurement types/geometry
-    nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv, phi, meas)
-    nowPix.measVals[-1]['errorModel'] = functools.partial(addError, 41) # this must link to an error model in addError() below
+    nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv, phi, meas, functools.partial(addError, 41)) # this must link to an error model in addError() above 
 
 # RUN SIMULATION
 simA = rs.simulation(nowPix) # defines new instance for this architecture
