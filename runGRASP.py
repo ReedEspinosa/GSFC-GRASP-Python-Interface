@@ -357,7 +357,8 @@ class graspRun(object):
         self.pObj = Popen([binPathGRASP, self.yamlObj.YAMLpath], stdout=PIPE)
         if not parallel:
             print('Running GRASP...')
-            self.pObj.wait()
+#            self.pObj.wait()
+            self.pObj.communicate() # This seems to keep things from hanging if there is a lot of output...
             self.pObj.stdout.close()
             self.invRslt = self.readOutput()          
         return self.pObj # returns Popen object, (PopenObj.poll() is not None) == True when complete

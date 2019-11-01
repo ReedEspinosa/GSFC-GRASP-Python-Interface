@@ -12,7 +12,7 @@ class simulation(object):
         assert not (nowPix and picklePath), 'Either nowPix or picklePath should be provided, but not both.'
         if picklePath: self.loadSim(picklePath)
         if nowPix is None: return
-        assert np.all(np.diff([[mt for mt in mv['meas_type']] for mv in nowPix.measVals])>0), 'nowPix.measVals[l][\'meas_type\'] must be in ascending order at each l'
+        assert np.all([np.all(np.diff(mv['meas_type'])>0) for mv in nowPix.measVals]), 'nowPix.measVals[l][\'meas_type\'] must be in ascending order at each l'
         self.nowPix = nowPix
         self.nbvm = np.array([mv['nbvm'] for mv in nowPix.measVals])
         self.rsltBck = None
