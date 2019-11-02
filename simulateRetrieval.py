@@ -52,6 +52,9 @@ class simulation(object):
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc', 'height']
         varsAodAvg = ['n', 'k'] # modal variables for which we will append a aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
+        varsSpctrl = [z for z in varsSpctrl if z in self.rsltFwd] # check that the variable is used in current configuration
+        varsMorph = [z for z in varsMorph if z in self.rsltFwd]
+        varsAodAvg = [z for z in varsAodAvg if z in self.rsltFwd]
         rmsErr = dict()
         meanBias = dict()
         assert (not self.rsltBck is None) and self.rsltFwd, 'You must call loadSim() or runSim() before you can calculate statistics!'
