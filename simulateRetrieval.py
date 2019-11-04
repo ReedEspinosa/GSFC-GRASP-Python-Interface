@@ -77,7 +77,16 @@ class simulation(object):
                     rtrvd = np.vstack([avgVal, rtrvd.T]).T
                     avgVal = np.sum(self.rsltFwd[av][:,wvlnthInd]*self.rsltFwd['aodMode'][:,wvlnthInd])/np.sum(self.rsltFwd['aodMode'][:,wvlnthInd])
                     true = np.r_[avgVal, true]
-            rmsErr[av] = np.sqrt(np.mean((true-rtrvd)**2, axis=0))
+#            stdDevCut = 99
+#            if rtrvd.ndim==1:
+#                rtrvdCln = rtrvd[abs(rtrvd - np.mean(rtrvd)) < stdDevCut * np.std(rtrvd)]
+#                rmsErr[av] = np.sqrt(np.mean((true-rtrvdCln)**2, axis=0))
+#            else:
+#                rmsErr[av] = np.empty(rtrvd.shape[1])
+#                for m in range(rtrvd.shape[1]):
+#                    rtrvdCln = rtrvd[:,m][abs(rtrvd[:,m] - np.mean(rtrvd[:,m])) < stdDevCut * np.std(rtrvd[:,m])]                        
+#                    rmsErr[av][m] = np.sqrt(np.mean((true[m]-rtrvdCln)**2, axis=0))
+            rmsErr[av] = np.sqrt(np.median((true-rtrvd)**2, axis=0))
             meanBias[av] = np.mean(true-rtrvd, axis=0)
         return rmsErr, meanBias
     
