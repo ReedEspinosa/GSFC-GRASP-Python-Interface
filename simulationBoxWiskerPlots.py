@@ -11,16 +11,18 @@ import copy
 import pylab
 from simulateRetrieval import simulation
 #simB.analyzeSim()
-instruments = ['img01','img02','lidar09+img02','lidar0900+img0200'] #1
+#instruments = ['img01','img02','lidar09+img02','lidar0900+img0200'] #1
+instruments = ['img01','img02', 'lidar09+img02'] #1
 #conCases = ['marine', 'pollution','smoke','marine+pollution','marine+smoke','Smoke+pollution'] #6
 #conCases = ['variablefinenonsph','variablefinenonsph','variablefinenonsph','variablefinenonsph'] #6
 conCases = ['variable'] #6
 SZAs = [0, 30, 60] # 3
 Phis = [0] # 1 -> N=18 Nodes
-N = 18
+N = 15
 tauVals = [0.04, 0.08, 0.12, 0.18, 0.35] # NEED TO MAKE THIS CHANGE FILE NAME
+#tauVals = [0.18] # NEED TO MAKE THIS CHANGE FILE NAME
 gridPlots = False
-lInd = 0
+lInd = 1
 
 totVars = ['aod', 'ssa', 'rEffCalc']
 #modVars = ['aodMode', 'n', 'k', 'ssaMode', 'rEffMode', 'height']
@@ -46,7 +48,7 @@ for mv in modVars:
 gvNames = ['$'+mv.replace('Mode','').replace('rEffCalc','r_{eff}').replace('ssa', 'SSA').replace('aod','AOD')+'$' for mv in gvNames]
 sizeMat = [1,1,1, len(tauVals), len(conCases), len(SZAs), len(Phis)]
 Nvars = np.hstack([x for x in trgt.values()]).shape[0]
-Ntau = len(tauVals)
+Ntau = len(instruments)
 tauLeg = []
 for tauInd, instrument in enumerate(instruments):
     harvest = np.zeros([Nvars, N])
@@ -58,11 +60,12 @@ for tauInd, instrument in enumerate(instruments):
         farmers.append('%s($θ_s=%d,φ=%d$)' % paramTple[1:4])
         farmers[-1] = farmers[-1].replace('pollution','POLL').replace('smoke','BB').replace('marine','MRN')
         simB = simulation(picklePath=savePath)
-        rmse = simB.analyzeSim(lInd)[0]
+        rmse = simB.analyzeSim(lInd, modeCut=None)[0] # HINT: this will break in cases with differnt number of fwd and back modes
         i=0
         print('---')
         print(farmers[-1])
-        print('AOD=%4.2f' % simB.rsltFwd['aod'][lInd])
+        print(savePath)
+        print('AODf=%4.2f, AODc=%4.2f' % (simB.rsltFwd['aodMode'][0,lInd], simB.rsltFwd['aodMode'][1,lInd]))
         print(instrument)
         print('Spectral variables for λ = %4.2f μm'% simB.rsltFwd['lambda'][lInd])
         print('---')
@@ -110,20 +113,29 @@ for tauInd, instrument in enumerate(instruments):
      
     plt.rcParams.update({'font.size': 14})
     if tauInd==0: 
-        figB, axB = plt.subplots(figsize=(6,6))
+        figB, axB = plt.subplots(figsize=(4.8,6))
         axB.plot([1,1], [0,5*(Nvars+1)], ':', color=0.65*np.ones(3))
-    pos = Ntau*np.r_[0:harvest.shape[0]]+0.8*tauInd
-    hnd = axB.boxplot(harvest.T, vert=0, patch_artist=True, positions=pos, sym='.')
-    [hnd['boxes'][i].set_facecolor(cm(tauInd/Ntau)) for i in range(len(hnd['boxes']))]
+    pos = Ntau*np.r_[0:harvest.shape[0]]+0.7*tauInd
+    indGood = [not 'AOD_{coarse}' in gn for gn in gvNames]
+    hnd = axB.boxplot(harvest[indGood,:].T, vert=0, patch_artist=True, positions=pos[indGood], sym='.')
+    if tauInd == 0:
+        [hnd['boxes'][i].set_facecolor([0,0,1]) for i in range(len(hnd['boxes']))]
+        [hf.set_markeredgecolor([0,0,1]) for hf in hnd['fliers']]
+    elif tauInd == 1:
+        [hnd['boxes'][i].set_facecolor([1,0,0]) for i in range(len(hnd['boxes']))]
+        [hf.set_markeredgecolor([1,0,0]) for hf in hnd['fliers']]
+    else:
+        [hnd['boxes'][i].set_facecolor(cm(tauInd/Ntau)) for i in range(len(hnd['boxes']))]
+        [hf.set_markeredgecolor(cm(tauInd/Ntau)) for hf in hnd['fliers']]
     tauLeg.append(hnd['boxes'][0])
 axB.set_xscale('log')
-axB.set_xlim([0.05,15])
-axB.set_ylim([-0.7, Ntau*(len(gvNames)-0.1)])
+axB.set_xlim([0.1,34.5])
+axB.set_ylim([-0.8, Ntau**3.4/5*(len(gvNames))-1.7])
 plt.sca(axB)
-plt.yticks(Ntau*(np.r_[1:(harvest.shape[0]+1)]-0.5), gvNames)
+plt.yticks(Ntau*(np.r_[1:(harvest.shape[0]+1)]-0.7), gvNames)
 #lgHnd = axB.legend(tauLeg[::-1], ['τ = %4.2f' % τ for τ in tauVals[::-1]], loc='center left')
-lgHnd = axB.legend(tauLeg, ['%s' % τ for τ in instruments], loc='center left')
-lgHnd.draggable()
+#lgHnd = axB.legend(tauLeg, ['%s' % τ for τ in instruments], loc='center left')
+#lgHnd.draggable()
 axB.yaxis.set_tick_params(length=0)
 figB.tight_layout()
 

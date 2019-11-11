@@ -49,7 +49,7 @@ class simulation(object):
         self.rsltFwd = loadData[-1]
 
     def analyzeSim(self, wvlnthInd=0, modeCut=0.5): # modeCut is fine/coarse seperation radius in um; NOTE: only applies if fwd & inv models have differnt number of modes
-        varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode']
+        varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc', 'height']
         varsAodAvg = ['n', 'k'] # modal variables for which we will append a aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
         varsSpctrl = [z for z in varsSpctrl if z in self.rsltFwd] # check that the variable is used in current configuration
@@ -69,10 +69,13 @@ class simulation(object):
                 true = self.ReffMode(self.rsltFwd,modeCut)
                 rtrvd = np.array([self.ReffMode(rs,modeCut) for rs in self.rsltBck])
             if rtrvd.ndim>1 and not av=='rEffMode': # we will seperate fine and coarse modes here
-                for i,rs in enumerate(self.rsltBck):
-                    rtrvd[i]= self.volWghtedAvg(rtrvd[i], rs['rv'], rs['sigma'], rs['vol'], modeCut)                
-                true = self.volWghtedAvg(true, self.rsltFwd['rv'], self.rsltFwd['sigma'], self.rsltFwd['vol'], modeCut)
-                if av in varsAodAvg:
+                if modeCut:
+                    for i,rs in enumerate(self.rsltBck): 
+                        rtrvd[i]= self.volWghtedAvg(rtrvd[i], rs['rv'], rs['sigma'], rs['vol'], modeCut)                
+                    true = self.volWghtedAvg(true, self.rsltFwd['rv'], self.rsltFwd['sigma'], self.rsltFwd['vol'], modeCut)
+                else:
+                    assert len(self.rsltBck[0]['rv'])==len(self.rsltFwd['rv']), 'If modeCut==None, foward and inverted data must have the same number of modes.'
+                if av in varsAodAvg: # we also want to calculate the total, mode AOD weighted value of the variable
                     avgVal = [np.sum(rs[av][:,wvlnthInd]*rs['aodMode'][:,wvlnthInd])/np.sum(rs['aodMode'][:,wvlnthInd]) for rs in self.rsltBck]
                     rtrvd = np.vstack([avgVal, rtrvd.T]).T
                     avgVal = np.sum(self.rsltFwd[av][:,wvlnthInd]*self.rsltFwd['aodMode'][:,wvlnthInd])/np.sum(self.rsltFwd['aodMode'][:,wvlnthInd])
@@ -92,8 +95,8 @@ class simulation(object):
     
     def volWghtedAvg(self, val, rv, sigma, vol, modeCut):
         N = 1e3
-        lower = [modeCut/100, modeCut]
-        upper = [modeCut, modeCut*100]
+        lower = [modeCut/50, modeCut]
+        upper = [modeCut, modeCut*50]
         crsWght = []
         for upr, lwr, in zip(upper,lower):
             r = np.logspace(np.log10(lwr),np.log10(upr),N)
@@ -105,6 +108,9 @@ class simulation(object):
             return np.sum(crsWght*val,axis=1)/np.sum(crsWght,axis=1)
 
     def ReffMode(self, rs, modeCut):
+        if not modeCut: 
+            dndr = rs['rv']/np.exp(3*rs['sigma']**2)
+            return dndr*np.exp(5/2*rs['sigma']**2) # eq. 60 from Grainger's "Useful Formulae for Aerosol Size Distributions"
         Vfc = self.volWghtedAvg(None, rs['rv'], rs['sigma'], rs['vol'], modeCut)
         Amode = rs['vol']/rs['rv']*np.exp(rs['sigma']**2/2) # convert N to rv and then ratio 1st and 4th rows of Table 1 of Grainger's "Useful Formulae for Aerosol Size Distributions"
         Afc = self.volWghtedAvg(None, rs['rv'], rs['sigma'], Amode, modeCut)

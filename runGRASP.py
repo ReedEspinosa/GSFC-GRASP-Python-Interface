@@ -392,6 +392,7 @@ class graspRun(object):
         except AttributeError: # the user did not create AUX_dict
             for aero, surf, fit, pm in zip(rsltAeroDict, rsltSurfDict, rsltFitDict, rsltPMDict):
                 rsltDict.append({**aero, **surf, **fit, **pm})
+        self.calcAsymParam(rsltDict)
         return rsltDict
     
     def parseOutDateTime(self, contents):
@@ -539,6 +540,16 @@ class graspRun(object):
                     results[pixInd][fld][:,isd,l] = PMdata[:,j+skipFlds]
             i+=1
         return results
+    
+    def calcAsymParam(self, results):
+        for rslt in results: # Calculate the total asymmetry parameter
+            if np.all([fld in rslt for fld in ['p11','angle','aod','ssa','aodMode','ssaMode']]):                
+                rslt['g'] = np.empty(rslt['p11'].shape[-1])
+                for i in range(rslt['p11'].shape[-1]):
+                    angRad = rslt['angle'][:,0,i]/180*np.pi # HINT: we assume they are same at every mode
+                    wghtP11 = rslt['p11'][...,i]*rslt['ssaMode'][...,i]*rslt['aodMode'][...,i]
+                    totNormP11 = wghtP11.sum(axis=1)/(rslt['ssa'][i]*rslt['aod'][i])
+                    rslt['g'][i] = np.trapz(totNormP11*np.cos(angRad)*np.sin(angRad),angRad)/2  
                 
     def parseOutFit(self, contents, wavelengths):
         results = self.parseOutDateTime(contents)
