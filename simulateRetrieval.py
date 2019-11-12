@@ -18,7 +18,7 @@ class simulation(object):
         self.rsltBck = None
         self.rsltFwd = None
 
-    def runSim(self, fwdModelYAMLpath, bckYAMLpath, Nsims=100, maxCPU=4, binPathGRASP=None, savePath=None, intrnlFileGRASP=None, releaseYAML=True):
+    def runSim(self, fwdModelYAMLpath, bckYAMLpath, Nsims=100, maxCPU=4, binPathGRASP=None, savePath=None, lightSave=False, intrnlFileGRASP=None, releaseYAML=True):
         assert not self.nowPix is None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.' 
         # RUN THE FOWARD MODEL
         gObjFwd = rg.graspRun(fwdModelYAMLpath)
@@ -39,6 +39,9 @@ class simulation(object):
         self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP)
         # SAVE RESULTS
         if savePath:
+            if lightSave:
+                for pmStr in ['p11','p12','p22','p33','p34','p44']:
+                    [rb.pop(pmStr, None) for rb in self.rsltBck]
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rsltBck.tolist()+[self.rsltFwd], f, pickle.HIGHEST_PROTOCOL)
 

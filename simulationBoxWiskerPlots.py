@@ -12,7 +12,7 @@ import pylab
 from simulateRetrieval import simulation
 #simB.analyzeSim()
 #instruments = ['img01','img02','lidar09+img02','lidar0900+img0200'] #1
-instruments = ['img01','img02', 'lidar09+img02'] #1
+instruments = ['img02', 'lidar09+img02'] #1
 #conCases = ['marine', 'pollution','smoke','marine+pollution','marine+smoke','Smoke+pollution'] #6
 #conCases = ['variablefinenonsph','variablefinenonsph','variablefinenonsph','variablefinenonsph'] #6
 conCases = ['variable'] #6
@@ -36,7 +36,7 @@ trgtRel = {'aod':0.05, 'rEffCalc':0.20, 'aodMode':0.05} # this part must be same
 # rEffCalc and it should be 20%
 # ssa total 0.03
 
-saveStart = '/Users/wrespino/synced/Working/SIM5/SIM5_'
+saveStart = '/Users/wrespino/synced/Working/SIM6/SIM6_'
 
 cm = pylab.get_cmap('viridis')
 

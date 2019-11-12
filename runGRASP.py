@@ -435,10 +435,12 @@ class graspRun(object):
         if len(results)==0:
             return []
         ptrnPSD = re.compile('^[ ]*(Radius \(um\),)?[ ]*Size Distribution dV\/dlnr \(normalized')
+        ptrnProfile = re.compile('^[ ]*Aerosol vertical profile \[1\/m\] for Particle component [0-9]+')
         ptrnLN = re.compile('^[ ]*Parameters of lognormal SD')
         ptrnVol = re.compile('^[ ]*Aerosol volume concentration')
         ptrnSPH = re.compile('^[ ]*% of spherical particles')
         ptrnHGNT = re.compile('^[ ]*Aerosol profile mean height')
+        ptrnHGNTSTD = re.compile('^[ ]*Aerosol profile standard deviation')
         ptrnAOD = re.compile('^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
         ptrnAODmode = re.compile('^[ ]*Wavelength \(um\),[ ]+AOD_Particle_mode')
         ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
@@ -465,9 +467,11 @@ class graspRun(object):
                     results[k]['rEff'] = Reff     
             self.parseMultiParamFld(contents, i, results, ptrnAOD, 'aod', 'lambda')
             self.parseMultiParamFld(contents, i, results, ptrnPSD, 'dVdlnr', 'r')
+            self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
             self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
             self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
             self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')   
+            self.parseMultiParamFld(contents, i, results, ptrnHGNTSTD, 'heightStd')   
             self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode')
             self.parseMultiParamFld(contents, i, results, ptrnSSA, 'ssa')
             self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')            
@@ -485,12 +489,20 @@ class graspRun(object):
             for rs in results: # seperate aerosol modes 
                 rs['r'] = rs['r'].reshape(nsd,-1)
                 rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
+                if 'βext' in rs:
+                    rs['range'] = rs['range'].reshape(nsd,-1)
+                    rs['βext'] = rs['βext'].reshape(nsd,-1)
                 rs['aodMode'] = rs['aodMode'].reshape(nsd,-1)
                 rs['ssaMode'] = rs['ssaMode'].reshape(nsd,-1)
         if ('r' in results[0]) and np.all(results[0]['r'][0]==results[0]['r']): # check if all r value are same at all lambda, may remove this condition later but makes logic much more complicated
             for rs in results:
                 dvdlnr = (rs['dVdlnr']*np.atleast_2d(rs['vol']).T).sum(axis=0)
                 rs['rEffCalc'] = (mf.effRadius(rs['r'][0], dvdlnr))
+        if 'βext' in results[0]:
+            for rs in results:
+                βprfl = rs['βext'].sum(axis=0)
+                rng = rs['range'][0]
+                rs['height'] = np.trapz(βprfl*rng,rng)/np.trapz(βprfl,rng) # mean height
         return results, wavelengths
     
     def parseOutSurface(self, contents):
@@ -590,7 +602,7 @@ class graspRun(object):
             i+=1        
         return results
     
-    def parseMultiParamFld(self, contents, i, results, ptrn, fdlName, fldName0=False):
+    def parseMultiParamFld(self, contents, i, results, ptrn, fdlName, fldName0=False, colOffset=0):
         if not ptrn.match(contents[i]) is None: # RRI by aersol size mode
             singNumeric = re.compile('^[ ]*[0-9]+[ ]*$')
             numericLn = re.compile('^[ ]*[0-9]+')
@@ -600,10 +612,10 @@ class graspRun(object):
             for dataRow in contents[i+1:lastLine]:
                 if not singNumeric.match(dataRow):
                     dArr = np.array(dataRow.split(), dtype='float64')
-                    for k in range(len(results)):
+                    for k in range(len(results)): # this is looping over pixels
                         if fldName0:
-                            results[k][fldName0] = np.append(results[k][fldName0], dArr[0]) if fldName0 in results[k] else dArr[0]
-                        results[k][fdlName] = np.append(results[k][fdlName], dArr[k+1]) if fdlName in results[k] else dArr[k+1]
+                            results[k][fldName0] = np.append(results[k][fldName0], dArr[0+colOffset]) if fldName0 in results[k] else dArr[0+colOffset]
+                        results[k][fdlName] = np.append(results[k][fdlName], dArr[k+1+colOffset]) if fdlName in results[k] else dArr[k+1+colOffset]
                 else:
                     Nparams += 1
             if Nparams > 1:
