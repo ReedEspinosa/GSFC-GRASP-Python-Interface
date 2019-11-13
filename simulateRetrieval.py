@@ -92,6 +92,8 @@ class simulation(object):
 #                for m in range(rtrvd.shape[1]):
 #                    rtrvdCln = rtrvd[:,m][abs(rtrvd[:,m] - np.mean(rtrvd[:,m])) < stdDevCut * np.std(rtrvd[:,m])]                        
 #                    rmsErr[av][m] = np.sqrt(np.mean((true[m]-rtrvdCln)**2, axis=0))
+            if av in ['n','k','sph'] and true.ndim==1 and rtrvd.ndim==1 and true.shape[0]!=rtrvd.shape[0]: # HACK (kinda): if we only retrieve one mode but simulate more we won't report anything
+                true = np.mean(true)
             rmsErr[av] = np.sqrt(np.median((true-rtrvd)**2, axis=0))
             meanBias[av] = np.mean(true-rtrvd, axis=0)
         return rmsErr, meanBias

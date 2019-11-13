@@ -11,8 +11,9 @@ import copy
 import pylab
 from simulateRetrieval import simulation
 #simB.analyzeSim()
-#instruments = ['img01','img02','lidar09+img02','lidar0900+img0200'] #1
-instruments = ['img02', 'lidar09+img02'] #1
+#instruments = ['img01visnir','img02visnir','lidar09+img02visnir','lidar05+img02visnir'] #1
+instruments = ['img01','img02','lidar09+img02','lidar05+img02'] #1
+#instruments = [img01','img02', 'lidar09+img02'] #1
 #conCases = ['marine', 'pollution','smoke','marine+pollution','marine+smoke','Smoke+pollution'] #6
 #conCases = ['variablefinenonsph','variablefinenonsph','variablefinenonsph','variablefinenonsph'] #6
 conCases = ['variable'] #6
@@ -22,13 +23,15 @@ N = 15
 tauVals = [0.04, 0.08, 0.12, 0.18, 0.35] # NEED TO MAKE THIS CHANGE FILE NAME
 #tauVals = [0.18] # NEED TO MAKE THIS CHANGE FILE NAME
 gridPlots = False
-lInd = 1
+l = 0
+tag = 'Figure'
 
-totVars = ['aod', 'ssa', 'rEffCalc']
-#modVars = ['aodMode', 'n', 'k', 'ssaMode', 'rEffMode', 'height']
-modVars = ['n', 'aodMode', 'ssaMode']  # reff should be profile
-trgt = {'aod':[0.02], 'ssa':[0.02], 'rEffCalc':[0.0], 'aodMode':[0.02,0.02], 'ssaMode':[0.02,0.02], 'n':[0.02,0.02,0.02]}
-trgtRel = {'aod':0.05, 'rEffCalc':0.20, 'aodMode':0.05} # this part must be same for every mode but absolute component above can change
+totVars = ['aod', 'ssa', 'rEffCalc','g','height', 'n']
+modVars = ['aodMode', 'ssaMode']  # reff should be profile
+#modVars = ['n', 'aodMode', 'ssaMode']  # reff should be profile
+#trgt = {'aod':[0.01], 'ssa':[0.01], 'g':[0.02], 'height':[250], 'rEffCalc':[0.0], 'aodMode':[0.01,0.01], 'ssaMode':[0.01,0.01], 'n':[0.02,0.02,0.02]}
+trgt = {'aod':[0.02], 'ssa':[0.02], 'g':[0.02], 'height':[1000], 'rEffCalc':[0.0], 'aodMode':[0.02,0.02], 'ssaMode':[0.02,0.02], 'n':[0.02]}
+trgtRel = {'aod':0.03, 'rEffCalc':0.10, 'aodMode':0.03} # this part must be same for every mode but absolute component above can change
 #trgt = {'aod':0.025, 'ssa':0.04, 'aodMode':[0.02,0.02], 'n':[0.025,0.025,0.025], 'ssaMode':[0.05,0.05], 'rEffCalc':0.05}
 #aod fine Mode: 0.02+/-0.05AOD (same for total AOD)
 # n: 0.025 (total)
@@ -36,7 +39,7 @@ trgtRel = {'aod':0.05, 'rEffCalc':0.20, 'aodMode':0.05} # this part must be same
 # rEffCalc and it should be 20%
 # ssa total 0.03
 
-saveStart = '/Users/wrespino/synced/Working/SIM6/SIM6_'
+saveStart = '/Users/wrespino/synced/Working/SIM8/SIM_oneRI_'
 
 cm = pylab.get_cmap('viridis')
 
@@ -60,7 +63,11 @@ for tauInd, instrument in enumerate(instruments):
         farmers.append('%s($θ_s=%d,φ=%d$)' % paramTple[1:4])
         farmers[-1] = farmers[-1].replace('pollution','POLL').replace('smoke','BB').replace('marine','MRN')
         simB = simulation(picklePath=savePath)
-        rmse = simB.analyzeSim(lInd, modeCut=None)[0] # HINT: this will break in cases with differnt number of fwd and back modes
+        lInd = l+1 if 'lidar' in instrument and l>0 else l
+        try:
+            rmse = simB.analyzeSim(lInd, modeCut=None)[0] # HINT: this will break in cases with differnt number of fwd and back modes
+        except ValueError:
+            rmse = simB.analyzeSim(lInd, modeCut=0.5)[0] 
         i=0
         print('---')
         print(farmers[-1])
@@ -116,7 +123,7 @@ for tauInd, instrument in enumerate(instruments):
         figB, axB = plt.subplots(figsize=(4.8,6))
         axB.plot([1,1], [0,5*(Nvars+1)], ':', color=0.65*np.ones(3))
     pos = Ntau*np.r_[0:harvest.shape[0]]+0.7*tauInd
-    indGood = [not 'AOD_{coarse}' in gn for gn in gvNames]
+    indGood = [not 'InsertSkipFieldHere' in gn for gn in gvNames]
     hnd = axB.boxplot(harvest[indGood,:].T, vert=0, patch_artist=True, positions=pos[indGood], sym='.')
     if tauInd == 0:
         [hnd['boxes'][i].set_facecolor([0,0,1]) for i in range(len(hnd['boxes']))]
@@ -125,12 +132,12 @@ for tauInd, instrument in enumerate(instruments):
         [hnd['boxes'][i].set_facecolor([1,0,0]) for i in range(len(hnd['boxes']))]
         [hf.set_markeredgecolor([1,0,0]) for hf in hnd['fliers']]
     else:
-        [hnd['boxes'][i].set_facecolor(cm(tauInd/Ntau)) for i in range(len(hnd['boxes']))]
-        [hf.set_markeredgecolor(cm(tauInd/Ntau)) for hf in hnd['fliers']]
+        [hnd['boxes'][i].set_facecolor(cm((tauInd-2)/(Ntau-2))) for i in range(len(hnd['boxes']))]
+        [hf.set_markeredgecolor(cm((tauInd-2)/(Ntau-2))) for hf in hnd['fliers']]
     tauLeg.append(hnd['boxes'][0])
 axB.set_xscale('log')
 axB.set_xlim([0.1,34.5])
-axB.set_ylim([-0.8, Ntau**3.4/5*(len(gvNames))-1.7])
+axB.set_ylim([-0.8, Ntau*harvest.shape[0]])
 plt.sca(axB)
 plt.yticks(Ntau*(np.r_[1:(harvest.shape[0]+1)]-0.7), gvNames)
 #lgHnd = axB.legend(tauLeg[::-1], ['τ = %4.2f' % τ for τ in tauVals[::-1]], loc='center left')
@@ -139,104 +146,9 @@ plt.yticks(Ntau*(np.r_[1:(harvest.shape[0]+1)]-0.7), gvNames)
 axB.yaxis.set_tick_params(length=0)
 figB.tight_layout()
 
-a = [2,2,1,1,0,0,1,0,0,0]
-S = lambda a,σ: 5*np.sum(a*(1+σ**2)**(np.log2(4/5)))/np.sum(a)
-print(np.mean([S(a,σ) for σ in harvest.T]))
-        
-#savePath = '/Users/wrespino/Desktop/testCase_polar07_case-Marine+Smoke_sza0_phi0_V1.pkl'
-#savePath = '/Users/wrespino/Desktop/testCase_polar0700_case-Smoke_sza30_phi0_V1.pkl'
-#from simulateRetrieval import simulation
-#simB = simulation(picklePath=savePath)
-##printVars = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'rv', 'sigma', 'sph', 'rEffCalc', 'height']
-##for pr in printVars:
-##    print('%s:' % pr)
-##    print(simB.rsltFwd[pr])
-##    print(simB.rsltBck[0][pr])
-#print(simB.analyzeSim())
+figSavePath = '/Users/wrespino/Documents/'+tag+'_case-%s.png' % paramTple[1]
+figB.savefig(figSavePath, dpi=600, facecolor='w', edgecolor='w', orientation='portrait', pad_inches=0.1)
 
-
-#simB.rsltFwd['rv'] = np.r_[0.051,4.3649778246747895,0.001,4.3649778246747895]
-#simB.rsltFwd['sigma'] = np.r_[0.1,-1,0.2,-1]
-#simB.rsltBck[0]['rv'] = np.r_[0.051,3]
-#simB.rsltBck[1]['rv'] = np.r_[0.051,3]
-#simB.rsltBck[2]['rv'] = np.r_[0.051,3]
-#simB.rsltBck[0]['sigma'] = np.r_[0.1,0.5]
-#simB.rsltBck[1]['sigma'] = np.r_[0.1,0.5]
-#simB.rsltBck[2]['sigma'] = np.r_[0.1,0.5]
-
-#mu = 1.9
-#sig = 0.9
-#v = 7
-#dxdr,r = mf.logNormal(mu, sig)
-#dvdr = v*dxdr
-#dadr = dvdr*3/r
-#a = np.trapz(dadr, r)
-#x = 3*v/mu*np.exp(sig**2/2)
-#print(a/x)
-#
-#print(mu*np.exp(-sig**2/2))
-#print(mf.effRadius(r, dvdr*r))
-
-
-#import os
-#from pathlib import Path
-#
-#print(os.path.join(Path(__file__).parent.parent.parent, 'GRASP_scripts'))
-#print(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-
-
-#yamlRoot = '/Users/wrespino/Synced/Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_9lambda.yml'
-#yamlTargt = '/Users/wrespino/Desktop/test.yaml'
-#z = rg.graspYAML(yamlRoot, yamlTargt)
-#z .adjustLambda(10) # need to test with >9
-
-#charN = np.nonzero([val['type'] in fldPath for val in dl['retrieval']['constraints'].values()])[0]
-#if charN.size>0:
-#    fPvct = fldPath.split('.')
-#    mode = fPvct[1] if len(fPvct) > 1 else 1
-#    fld = fPvct[2] if len(fPvct) > 2 else 'value'
-#    fldPath = 'retrieval.constraints.characteristic[%d].mode[%s].initial_guess.%s' % (charN[0], mode, fld)
-#print(fldPath)
-#root_grp = Dataset('/Users/wrespino/Desktop/netCDF_TEST.nc', 'w', format='NETCDF4')
-#root_grp.description = 'TEST'
-#
-## dimensions
-#root_grp.createDimension('wavelength', 4)
-#
-#
-## variables
-#x = dict()
-#x['test'] = root_grp.createVariable('wavelength', 'f4', ('wavelength'))
-#
-## data
-#x['test'] = np.r_[9,2,3,4]
-## ADD RV AND SIGMAS!
-#root_grp.close()
-
-
-# SIMULATION TESTER
-#pklFile = '/Users/wrespino/Synced/Working/testDISCOVER_PolMISR_6aMARINE_Sep7_V1.pkl'
-#
-#simA = rs.simulation()
-#simA.loadSim(pklFile)
-#rmsErr, meanBias = simA.analyzeSim()
-
-
-
-# NOISE SIMULATOR
-#N = int(1e5)
-#q = 0.7
-#u = 0.03
-#i = 1.7
-#dp = 0.005
-#p = np.sqrt(q**2+u**2)/i
-#dpRnd = np.random.normal(size=N)*dp
-#dq = dpRnd*q*i*np.sqrt((q**2+u**2)/(q**4+u**4))
-#du = dpRnd*u*i*np.sqrt((q**2+u**2)/(q**4+u**4))
-##eq = q+np.random.normal(size=N)*dq
-##eu = u+np.random.normal(size=N)*du
-#eq = q+dq
-#eu = u+du
-#pm = np.sqrt(eq**2+eu**2)/i
-#print(np.std(pm))
-#plt.hist(pm,100)
+#a = [2,2,1,1,0,0,1,0,0,0]
+#S = lambda a,σ: 5*np.sum(a*(1+σ**2)**(np.log2(4/5)))/np.sum(a)
+#print(np.mean([S(a,σ) for σ in harvest.T]))
