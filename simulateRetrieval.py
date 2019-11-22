@@ -59,7 +59,7 @@ class simulation(object):
         varsMorph = [z for z in varsMorph if z in self.rsltFwd]
         varsAodAvg = [z for z in varsAodAvg if z in self.rsltFwd]
         rmsErr = dict()
-        meanBias = dict()
+        bias = dict()
         assert (not self.rsltBck is None) and self.rsltFwd, 'You must call loadSim() or runSim() before you can calculate statistics!'
         for av in varsSpctrl+varsMorph+['rEffMode']:
             if av in varsSpctrl:
@@ -95,8 +95,8 @@ class simulation(object):
             if av in ['n','k','sph'] and true.ndim==1 and rtrvd.ndim==1 and true.shape[0]!=rtrvd.shape[0]: # HACK (kinda): if we only retrieve one mode but simulate more we won't report anything
                 true = np.mean(true)
             rmsErr[av] = np.sqrt(np.median((true-rtrvd)**2, axis=0))
-            meanBias[av] = np.mean(true-rtrvd, axis=0)
-        return rmsErr, meanBias
+            bias[av] = rtrvd-true if rtrvd.ndim > 1 else np.atleast_2d(rtrvd-true).T
+        return rmsErr, bias
     
     def volWghtedAvg(self, val, rv, sigma, vol, modeCut):
         N = 1e3

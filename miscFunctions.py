@@ -3,6 +3,11 @@
 
 import numpy as np
 import PyMieScatt as ps
+try:
+    import matplotlib.pyplot as plt
+    pltLoad = True
+except ImportError:
+    pltLoad = False
 #from scipy import integrate
 
 def angstrmIntrp(lmbdIn, tau, lmbdTrgt):
@@ -88,9 +93,35 @@ def phaseMat(r, dvdlnr, n, k, wav=0.550):
     S12=-0.5*(sl-sr) # minus makes positive S12 polarized in scattering plane
     p11 = 2*S11/np.trapz(S11*np.sin(theta), theta)
     return theta*180/np.pi, p11, -S12/S11
-    
-    #should make PSD class with r,dNdr and type (dndr,dvdr,etc.)
         
+def gridPlot(xlabel, ylabel, values):
+    assert pltLoad, 'Matplotlib could not be loaded!'
+    plt.rcParams.update({'font.size': 10})
+    fig, ax = plt.subplots(figsize=(15,6), frameon=False)
+    ax.imshow(np.sqrt(values), 'seismic', vmin=0, vmax=2)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    # We want to show all ticks...
+    ax.set_xticks(np.arange(len(xlabel)))
+    ax.set_yticks(np.arange(len(ylabel)))
+    # ... and label them with the respective list entries
+    ax.set_xticklabels(xlabel)
+    ax.set_yticklabels(ylabel)
+    ax.xaxis.set_tick_params(length=0)
+    ax.yaxis.set_tick_params(length=0)
+    # Rotate the tick labels and set their alignment.
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+             rotation_mode="anchor")
+    # Loop over data dimensions and create text annotations.
+    for i in range(len(ylabel)):
+        for j in range(len(xlabel)):
+            valStr = '%3.1f' % values[i, j]
+            clr = 'w' if np.abs(values[i, j]-1)>0.5 else 'k'
+    #        clr = np.min([np.abs(harvest[i, j]-1)**3, 1])*np.ones(3)
+            ax.text(j, i, valStr,
+                           ha="center", va="center", color=clr, fontsize=9)
+    fig.tight_layout()   
         
-        
-        
+#TODO: should make PSD class with r,dNdr and type (dndr,dvdr,etc.)      
