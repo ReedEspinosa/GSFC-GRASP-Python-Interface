@@ -694,7 +694,7 @@ class pixel(object):
         return " ".join((baseStr, measStrAll, settingStr, '\n'))
     
 class graspYAML(object):
-    def __init__(self, baseYAMLpath=None, workingYAMLpath=None):
+    def __init__(self, baseYAMLpath=None, workingYAMLpath=None): # if workingYAMLpath not provided changes will be written directly to source file, baseYAMLpath
         assert not (workingYAMLpath and not baseYAMLpath), 'baseYAMLpath must be provided to create a new YAML file at workingYAMLpath!'
         if workingYAMLpath: 
             copyfile(baseYAMLpath, workingYAMLpath)
@@ -702,15 +702,26 @@ class graspYAML(object):
         else:
             self.YAMLpath = baseYAMLpath
         self.dl = None
-        
-    def adjustLambda(self, Nlambda):
-        lambdaTypes = ['surface_water_CxMnk_iso_noPol',
+        self.lambdaTypes = ['surface_water_CxMnk_iso_noPol',
                'surface_water_cox_munk_iso',
                'surface_land_brdf_ross_li', 
                'surface_land_polarized_maignan_breon', 
                'real_part_of_refractive_index_spectral_dependent',
-               'imaginary_part_of_refractive_index_spectral_dependent']
-        for lt in lambdaTypes: # loop over constraint types
+               'imaginary_part_of_refractive_index_spectral_dependent']      
+    
+    def scrambleInitialGuess(self, skipTypes=[]):
+        self.loadYAML()
+        for char in self.dl['retrieval']['constraints'].values():
+            if (not char['type'] in skipTypes) and char['retrieved']:
+                for mode in np.array(list(char.values()))[['mode' in k for k in char.keys()]]: # only loop over keys containing "mode"
+                    lowBnd = np.array(mode['initial_guess']['min'], dtype=float)
+                    rngBnd = np.array(mode['initial_guess']['max'], dtype=float) - lowBnd
+                    newGuess = (np.random.random()*rngBnd+lowBnd).tolist() # guess is spectrally flat relative to rng
+                    mode['initial_guess']['value'] = newGuess
+        self.writeYAML()        
+        
+    def adjustLambda(self, Nlambda):
+        for lt in self.lambdaTypes: # loop over constraint types
             m = 1;
             while self.access('%s.%d' % (lt,m)): # loop over each mode
                 for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
@@ -739,7 +750,7 @@ class graspYAML(object):
                 m+=1
         self.writeYAML()
     
-    def access(self, fldPath, newVal=None, write2disk=True, verbose=True): # will also return fldPath if newVal=None
+    def access(self, fldPath, newVal=None, write2disk=True, verbose=True): # will also return fldPath value if newVal=None
         if isinstance(newVal, np.ndarray):  # yaml module doesn't handle numby array gracefully 
             newVal = newVal.tolist()
         elif isinstance(newVal, list): # check for regular list with numpy values
