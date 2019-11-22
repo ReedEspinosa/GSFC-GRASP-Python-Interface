@@ -46,7 +46,7 @@ class graspDB(object):
         else:
             assert not graspRunObjs, 'graspRunObj must be either a list or graspRun object!'
         
-    def processData(self, maxCPUs=None, binPathGRASP=None, savePath=False, krnlPathGRASP=None, nodesSLURM=0):
+    def processData(self, maxCPUs=None, binPathGRASP=None, savePath=False, krnlPathGRASP=None, nodesSLURM=0, rndGuess=False):
         if not maxCPUs:
             maxCPUs = self.maxCPU if self.maxCPU else 2
         usedDirs = []
@@ -63,6 +63,7 @@ class graspDB(object):
             while i < Nobjs:
                 if sum([pObj.poll() is None for pObj in pObjs]) < maxCPUs:
                     print('Starting a new thread for graspRun index %d/%d' % (i+1,Nobjs))
+                    if rndGuess: self.grObjs[i].yamlObj.scrambleInitialGuess()
                     pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP, krnlPathGRASP))
                     i+=1
                 time.sleep(0.1)
@@ -81,7 +82,7 @@ class graspDB(object):
             # edit slurmTest2.sh to call runGRASP_N.sh with --array=1-N
             # set approriate flags so that grObj.readOutput() can be called without error  
             # failedRuns = [bool with true for grObjs that failed to run with exit code 0]
-            assert False, 'SLURM IS NOT YET SUPPORTED'
+            assert False, 'DIRECT USE OF SLURM IS NOT YET SUPPORTED'
         self.rslts = []
 #        [self.rslts.extend(grObj.readOutput()) for grObj in self.grObjs[~failedRuns]]
         [self.rslts.extend(self.grObjs[i].readOutput()) for i in np.nonzero(~failedRuns)[0]]
@@ -694,7 +695,10 @@ class pixel(object):
         return " ".join((baseStr, measStrAll, settingStr, '\n'))
     
 class graspYAML(object):
-    def __init__(self, baseYAMLpath=None, workingYAMLpath=None): # if workingYAMLpath not provided changes will be written directly to source file, baseYAMLpath
+    """Store and modify the contents of a YAML settings file."""
+
+    def __init__(self, baseYAMLpath=None, workingYAMLpath=None): 
+        """Create new instance from YAML settings baseYAMLpath; updates written to workingYAMLpath if probided, otherwise baseYAMLpath."""
         assert not (workingYAMLpath and not baseYAMLpath), 'baseYAMLpath must be provided to create a new YAML file at workingYAMLpath!'
         if workingYAMLpath: 
             copyfile(baseYAMLpath, workingYAMLpath)
@@ -709,7 +713,8 @@ class graspYAML(object):
                'real_part_of_refractive_index_spectral_dependent',
                'imaginary_part_of_refractive_index_spectral_dependent']      
     
-    def scrambleInitialGuess(self, skipTypes=[]):
+    def scrambleInitialGuess(self, skipTypes=['aerosol_concentration']):
+        """Set a random initial guess for all types (excluding skipTypes), uniformly choosen from the range between min and max."""
         self.loadYAML()
         for char in self.dl['retrieval']['constraints'].values():
             if (not char['type'] in skipTypes) and char['retrieved']:
@@ -721,6 +726,7 @@ class graspYAML(object):
         self.writeYAML()        
         
     def adjustLambda(self, Nlambda):
+        """Change YAML settings to match a specific number of wavelenths, cutting and adding from the longest wavelength."""
         for lt in self.lambdaTypes: # loop over constraint types
             m = 1;
             while self.access('%s.%d' % (lt,m)): # loop over each mode
