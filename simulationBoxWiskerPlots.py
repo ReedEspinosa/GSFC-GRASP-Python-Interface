@@ -7,6 +7,7 @@ Created on Fri Aug 30 17:21:42 2019
 """
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.stats as st
 import copy
 import pylab
 from simulateRetrieval import simulation
@@ -17,8 +18,8 @@ import miscFunctions as mf
 instruments = ['polar07'] #1
 #conCases = ['marine', 'pollution','smoke','marine+pollution','marine+smoke','Smoke+pollution'] #6
 #conCases = ['variablefinenonsph','variablefinenonsph','variablefinenonsph','variablefinenonsph'] #6
-conCases = ['case02a','case02b','case02c','case03','case07']
-#conCases = []
+#conCases = ['case02a','case02b','case02c','case03','case07']
+conCases = []
 for caseLet in ['a','b','c','d','e','f']:
 #    conCases.append('case06'+caseLet)
     conCases.append('case06'+caseLet+'monomode')
@@ -27,7 +28,7 @@ for caseLet in ['a','b','c','d','e','f']:
 #        conCases.append('case06'+caseLet+'monomode'+'nonsph') #21 total
 #conCases = ['variable']
 SZAs = [0, 30, 60] # 3
-#SZAs = [0]
+SZAs = [0]
 Phis = [0] # 1 -> N=18 Nodes
 #tauVals = [0.3, 1.0, 3.0] #
 tauVal = 1.0
@@ -76,7 +77,8 @@ Nvars = np.hstack([x for x in trgt.values()]).shape[0]
 Ntau = len(lVals)
 tauLeg = []
 totBias = dict([]) # only valid for last of whatever we itterate through on the next line
-figC, axC = plt.subplots(figsize=(4.8,6))
+figC, axC = plt.subplots(figsize=(10,6))
+axC.set_prop_cycle('color', plt.cm.Dark2(np.linspace(0,1,6)))
 for tauInd, lInd in enumerate(lVals):
     harvest = np.zeros([Nvars, N])
     farmers = []    
@@ -120,7 +122,12 @@ for tauInd, lInd in enumerate(lVals):
                 else:
                     harvest[i,n] = tg/np.atleast_1d(rmse[vr])[t]
                 i+=1
-                axC.hist(bias['aod'][np.abs(bias['aod'])<0.2],20, color=cm(n/N))
+                # PLOT 3: print PDF of AOD as a function of case
+        aodDiffRng = 0.08
+        kern = st.gaussian_kde(bias['aod'][np.abs(bias['aod'])<aodDiffRng])
+        xAxisVals = np.linspace(-aodDiffRng, aodDiffRng, 500)                
+        axC.plot(xAxisVals, kern.pdf(xAxisVals), '-.')
+    axC.legend([cc[0:7] for cc in conCases])
     if gridPlots: mf.gridPlot(farmers, gvNames, harvest)    
     plt.rcParams.update({'font.size': 14})
     if tauInd==0: 
@@ -149,10 +156,10 @@ plt.yticks(Ntau*(np.r_[0:(harvest.shape[0])]+0.1*Ntau), gvNames)
 #lgHnd.draggable()
 axB.yaxis.set_tick_params(length=0)
 figB.tight_layout()
-
 figSavePath = '/Users/wrespino/Documents/'+tag+'_case-%s.png' % paramTple[1]
 figB.savefig(figSavePath, dpi=600, facecolor='w', edgecolor='w', orientation='portrait', pad_inches=0.1)
 
+# PLOT 4: print PDF as a fuction of variable type
 trgt = {'aod':0.03, 'ssa':0.03, 'g':0.02, 'aodMode':0.03, 'n':0.025} # look at total and fine/coarse aod=0.2
 figD, axD = plt.subplots(2,3,figsize=(12,7))
 for i,vr in enumerate(totBiasVars):

@@ -4,6 +4,7 @@
 import numpy as np
 import copy
 import pickle
+import os
 import runGRASP as rg
 import miscFunctions as ms
 
@@ -36,9 +37,12 @@ class simulation(object):
             self.nowPix.dtNm = copy.copy(self.nowPix.dtNm+1) # otherwise GRASP will whine
             gObjBck.addPix(self.nowPix)
         gDB = rg.graspDB(gObjBck, maxCPU)
-        self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndIntialGuess)
+        self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
         # SAVE RESULTS
         if savePath:
+            if not os.path.exists(os.path.dirname(savePath)):
+                print('savePath (%s) did not exist, creating it...')
+                os.makedirs(os.path.dirname(savePath))
             if lightSave:
                 for pmStr in ['p11','p12','p22','p33','p34','p44']:
                     [rb.pop(pmStr, None) for rb in self.rsltBck]
