@@ -7,13 +7,14 @@ Created on Sun Nov 24 17:11:26 2019
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
 from simulateRetrieval import simulation
-#Working/SIM13_lidarTest/SIM42_lidar05+polar07_case-variable_sza15_phi0_tFct0.20_V2.pkl
-#simRsltFile = '/Users/wrespino/Synced/Working/SIM8_pre613Seminar/SIM_lidar05+img02_case-variable_sza30_phi0_tFct0.35_V2.pkl'
-simRsltFile = '/Users/wrespino/Synced/Working/SIM13_lidarTest/SIM43_lidar05_case-case06fmonomode_sza30_phi0_tFct1.00_V2.pkl'
-#simRsltFile = '/Users/wrespino/Synced/Working/SIM13_lidarTest/SIM25_lidar05+polar07_case-case06amonomode_sza30_phi0_tFct1.00_V2.pkl'
-lInd = 0
+from miscFunctions import matplotlibX11
+matplotlibX11()
+import matplotlib.pyplot as plt
+
+simRsltFile = '/discover/nobackup/wrespino/synced/Working/SIM13_lidarTest/SIM29_lidar05+polar07_case-case06amonomode_sza30_phi0_tFct1.00_V2.pkl'
+lInd = 3
+
 modeInd = 0
 
 βfun = lambda i,l,d: d['aodMode'][i,l]*d['βext'][i,:]/np.mean(d['βext'][i,:])
@@ -55,5 +56,8 @@ else:
 #plt.figure()
 #plt.plot(simA.rsltFwd['fit_VExt'][:,lInd]/simA.rsltFwd['fit_VBS'][:,lInd], simA.rsltFwd['RangeLidar'][:,lInd]/1e3, 'k')
 
-
-
+# For X11 on Discover
+#plt.ioff()
+#plt.draw()
+#plt.show(block=False)
+#plt.show(block=False)

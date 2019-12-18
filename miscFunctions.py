@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
 import numpy as np
 import PyMieScatt as ps
 try:
@@ -9,6 +10,14 @@ try:
 except ImportError:
     pltLoad = False
 #from scipy import integrate
+
+def checkDiscover(): # right now this just checks for a remote connection...
+    return "SSH_CONNECTION" in os.environ
+
+def matplotlibX11():
+    if checkDiscover():
+        import matplotlib
+        matplotlib.use('TkAgg')
 
 def angstrmIntrp(lmbdIn, tau, lmbdTrgt):
     tau = tau[lmbdIn.argsort()]
