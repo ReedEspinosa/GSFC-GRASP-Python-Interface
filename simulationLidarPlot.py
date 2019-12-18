@@ -7,11 +7,13 @@ Created on Sun Nov 24 17:11:26 2019
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
 from simulateRetrieval import simulation
+from miscFunctions import matplotlibX11
+matplotlibX11()
+import matplotlib.pyplot as plt
 
-simRsltFile = '/Users/wrespino/Synced/Working/SIM8/SIM_lidar05+img02_case-variable_sza0_phi0_tFct0.35_V2.pkl'
-lInd = 1
+simRsltFile = '/discover/nobackup/wrespino/synced/Working/SIM13_lidarTest/SIM29_lidar05+polar07_case-case06amonomode_sza30_phi0_tFct1.00_V2.pkl'
+lInd = 3
 modeInd = 0
 
 simA = simulation(picklePath=simRsltFile)
@@ -43,3 +45,8 @@ if hsrl:
     axA[2].set_xlabel('Backscatter ($Mm^{-1}Sr^{-1}$)')
 else:
     axA[1].set_xlabel('Attenuated Backscatter ($Mm^{-1}Sr^{-1}$)')
+
+plt.ioff()
+plt.draw()
+plt.show(block=False)
+plt.show(block=False)
