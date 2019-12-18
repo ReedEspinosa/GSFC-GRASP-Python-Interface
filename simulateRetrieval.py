@@ -55,8 +55,8 @@ class simulation(object):
         self.rsltBck = loadData[:-1]
         self.rsltFwd = loadData[-1]
 
-    def analyzeSim(self, wvlnthInd=0, modeCut=0.5): # modeCut is fine/coarse seperation radius in um; NOTE: only applies if fwd & inv models have differnt number of modes
-        varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g']
+    def analyzeSim(self, wvlnthInd=0, modeCut=0.5, swapFwdModes = False): # modeCut is fine/coarse seperation radius in um; NOTE: only applies if fwd & inv models have differnt number of modes
+        varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc', 'height']
         varsAodAvg = ['n', 'k'] # modal variables for which we will append a aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
         varsSpctrl = [z for z in varsSpctrl if z in self.rsltFwd] # check that the variable is used in current configuration
@@ -69,9 +69,13 @@ class simulation(object):
             if av in varsSpctrl:
                 rtrvd = np.array([rs[av][...,wvlnthInd] for rs in self.rsltBck]) # wavelength is always the last dimension
                 true = self.rsltFwd[av][...,wvlnthInd]
+                if true.ndim==1 and true.shape[0]==2 and swapFwdModes:
+                    true = true[::-1]
             elif av in varsMorph:
                 rtrvd = np.array([rs[av] for rs in self.rsltBck])
                 true = self.rsltFwd[av]
+                if true.ndim==1 and true.shape[0]==2 and swapFwdModes:
+                    true = true[::-1]
             elif av=='rEffMode':
                 true = self.ReffMode(self.rsltFwd,modeCut)
                 rtrvd = np.array([self.ReffMode(rs,modeCut) for rs in self.rsltBck])
@@ -87,18 +91,18 @@ class simulation(object):
                     rtrvd = np.vstack([avgVal, rtrvd.T]).T
                     avgVal = np.sum(self.rsltFwd[av][:,wvlnthInd]*self.rsltFwd['aodMode'][:,wvlnthInd])/np.sum(self.rsltFwd['aodMode'][:,wvlnthInd])
                     true = np.r_[avgVal, true]
-#            stdDevCut = 99
-#            if rtrvd.ndim==1:
-#                rtrvdCln = rtrvd[abs(rtrvd - np.mean(rtrvd)) < stdDevCut * np.std(rtrvd)]
-#                rmsErr[av] = np.sqrt(np.mean((true-rtrvdCln)**2, axis=0))
-#            else:
-#                rmsErr[av] = np.empty(rtrvd.shape[1])
-#                for m in range(rtrvd.shape[1]):
-#                    rtrvdCln = rtrvd[:,m][abs(rtrvd[:,m] - np.mean(rtrvd[:,m])) < stdDevCut * np.std(rtrvd[:,m])]                        
-#                    rmsErr[av][m] = np.sqrt(np.mean((true[m]-rtrvdCln)**2, axis=0))
             if av in ['n','k','sph'] and true.ndim==1 and rtrvd.ndim==1 and true.shape[0]!=rtrvd.shape[0]: # HACK (kinda): if we only retrieve one mode but simulate more we won't report anything
                 true = np.mean(true)
-            rmsErr[av] = np.sqrt(np.median((true-rtrvd)**2, axis=0))
+            stdDevCut = 2
+            if rtrvd.ndim==1:
+                rtrvdCln = rtrvd[abs(rtrvd - np.mean(rtrvd)) < stdDevCut * np.std(rtrvd)]
+                rmsErr[av] = np.sqrt(np.mean((true-rtrvdCln)**2, axis=0))
+            else:
+                rmsErr[av] = np.empty(rtrvd.shape[1])
+                for m in range(rtrvd.shape[1]):
+                    rtrvdCln = rtrvd[:,m][abs(rtrvd[:,m] - np.mean(rtrvd[:,m])) < stdDevCut * np.std(rtrvd[:,m])]                        
+                    rmsErr[av][m] = np.sqrt(np.mean((true[m]-rtrvdCln)**2, axis=0))
+#            rmsErr[av] = np.sqrt(np.median((true-rtrvd)**2, axis=0))
             bias[av] = rtrvd-true if rtrvd.ndim > 1 else np.atleast_2d(rtrvd-true).T
         return rmsErr, bias
     

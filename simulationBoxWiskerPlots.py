@@ -5,17 +5,23 @@ Created on Fri Aug 30 17:21:42 2019
 
 @author: wrespino
 """
+import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats as st
 import copy
 import pylab
+import itertools
 from simulateRetrieval import simulation
 import miscFunctions as mf
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases'))
+import ACCP_functions as af
 
 #simB.analyzeSim()
-#instruments = ['img01visnir','img02visnir','lidar09+img02visnir','lidar05+img02visnir'] #1
-instruments = ['polar07'] #1
+#instruments = ['lidar05'] #1
+#instruments = ['lidar09+polar07'] #1
+instruments = ['PolOnly_lidar05+polar07', 'lidar09+polar07','lidar05+polar07', 'lidar05'] #1
 #conCases = ['marine', 'pollution','smoke','marine+pollution','marine+smoke','Smoke+pollution'] #6
 #conCases = ['variablefinenonsph','variablefinenonsph','variablefinenonsph','variablefinenonsph'] #6
 #conCases = ['case02a','case02b','case02c','case03','case07']
@@ -26,32 +32,32 @@ for caseLet in ['a','b','c','d','e','f']:
 #    if caseLet in ['e','f']:
 #        conCases.append('case06'+caseLet+'nonsph')
 #        conCases.append('case06'+caseLet+'monomode'+'nonsph') #21 total
-#conCases = ['variable']
-SZAs = [0, 30, 60] # 3
-SZAs = [0]
+#conCases = ['case06amonomode', 'case06bmonomode']
+#SZAs = [0.1, 15, 30, 45, 60] # 3
+SZAs = [0.1, 30, 60] # 3
 Phis = [0] # 1 -> N=18 Nodes
-#tauVals = [0.3, 1.0, 3.0] #
-tauVal = 1.0
+tauVals = [1.0] #
+#tauVals = [0.03, 0.05, 0.08, 0.1, 0.12, 0.16, 0.2, 0.25, 0.3, 0.35]
 #tauVals = [0.04, 0.08, 0.12, 0.18, 0.35] # NEED TO MAKE THIS CHANGE FILE NAME
-N = len(SZAs)*len(conCases)*len(Phis)*len(instruments)
-#tauVals = [0.18] # NEED TO MAKE THIS CHANGE FILE NAME
+#N = len(SZAs)*len(conCases)*len(Phis)*len(instruments)
+N = len(SZAs)*len(conCases)*len(Phis)*len(tauVals)
 gridPlots = False
 #l = 3
 #lVals = [0,3,5,10]
-lVals = [3]
+wavInd = 3
 
 tag = 'Figure'
 
-totBiasVars = ['aod', 'ssa', 'g','aodMode','n','rEffCalc'] # if it is a multi dim array we take first index (aodmode and n)
+totBiasVars = ['aod', 'ssa', 'g','aodMode','n','rEffCalc'] # only used in Plot 4, if it is a multi dim array we take first index (aodmode and n)
 #totVars = ['aod', 'ssa', 'rEffCalc','g','height']
-totVars = ['aod', 'ssa', 'g']
-#modVars = ['aodMode', 'ssaMode']  # reff should be profile
+totVars = ['aod', 'ssa', 'g', 'LidarRatio']
 modVars = ['n', 'aodMode', 'ssaMode']  # reff should be profile
+
 #trgt = {'aod':[0.02], 'ssa':[0.03], 'g':[0.02], 'height':[500], 'rEffCalc':[0.0], 'aodMode':[0.02,0.02], 'ssaMode':[0.03,0.03], 'n':[0.025,0.025,0.025]} # look at total and fine/coarse 
-trgt = {'aod':[0.02], 'ssa':[0.03], 'g':[0.02], 'aodMode':[0.02,0.02], 'ssaMode':[0.03,0.03], 'n':[0.025,0.025,0.025]} # look at total and fine/coarse 
+trgt = {'aod':[0.02], 'ssa':[0.03], 'g':[0.02], 'aodMode':[0.02,0.02], 'ssaMode':[0.03,0.03], 'n':[0.025,0.025,0.025], 'LidarRatio':[0.0]} # look at total and fine/coarse 
 #trgt = {'aod':[0.02], 'ssa':[0.03], 'g':[0.02], 'height':[1000], 'rEffCalc':[0.0], 'aodMode':[0.02,0.02], 'ssaMode':[0.03,0.03], 'n':[0.025]} # only look at one mode (code below will work even if RMSE is calculated for fine/coarse too as long as n is listed under totVars)
 #trgtRel = {'aod':0.05, 'rEffCalc':0.20, 'aodMode':0.05} # this part must be same for every mode but absolute component above can change
-trgtRel = {'aod':0.05, 'aodMode':0.05} # this part must be same for every mode but absolute component above can change
+trgtRel = {'aod':0.05, 'aodMode':0.05, 'LidarRatio':[0.25]} # this part must be same for every mode but absolute component above can change
 #trgt = {'aod':0.025, 'ssa':0.04, 'aodMode':[0.02,0.02], 'n':[0.025,0.025,0.025], 'ssaMode':[0.05,0.05], 'rEffCalc':0.05}
 #aod fine Mode: 0.02+/-0.05AOD (same for total AOD)
 # n: 0.025 (total)
@@ -59,47 +65,52 @@ trgtRel = {'aod':0.05, 'aodMode':0.05} # this part must be same for every mode b
 # rEffCalc and it should be 20%
 # ssa total 0.03
 
-saveStart = '/Users/wrespino/synced/Working/SIM9_conCasesV22_Pol07/SIM_'
+swapModes = True
+printRslt = True
+
+saveStart = '/Users/wrespino/Synced/Working/SIM13_lidarTest/SIM43_'
 #saveStart = '/Users/wrespino/synced/Working/SIM8/SIM_'
 
 cm = pylab.get_cmap('viridis')
 
-# def getGVlabels(totVars, modVars, trgt)
+# def getGVlabels(totVars, modVars)
 gvNames = copy.copy(totVars)
 for mv in modVars:
-    for i,nm in enumerate(['', '_{fine}','_{coarse}']):
-        if i>0 or np.size(trgt[mv]) > 2: # HINT: this assumes two modes!
+    for i,nm in enumerate(['', '_{fine}','_{coarse}']): # HINT: this will need to change for >2 modes
+        if i>0 or mv in ['n','k']: # n and k are formated differently, the first value is total, then fine and coarse
             gvNames.append(mv+nm)
 gvNames = ['$'+mv.replace('Mode','').replace('rEffCalc','r_{eff}').replace('ssa', 'SSA').replace('aod','AOD')+'$' for mv in gvNames]
 
-sizeMat = [1,1,1, len(instruments), len(conCases), len(SZAs), len(Phis)]
-Nvars = np.hstack([x for x in trgt.values()]).shape[0]
-Ntau = len(lVals)
-tauLeg = []
+Nvars = len(gvNames)
+barLeg = []
 totBias = dict([]) # only valid for last of whatever we itterate through on the next line
-figC, axC = plt.subplots(figsize=(10,6))
-axC.set_prop_cycle('color', plt.cm.Dark2(np.linspace(0,1,6)))
-for tauInd, lInd in enumerate(lVals):
+Nbar = len(instruments)
+for barInd, barVal in enumerate(instruments):
+    lInd = 0 if barVal == 'lidar05' else wavInd
+    figC, axC = plt.subplots(figsize=(10,6))
+    axC.set_prop_cycle('color', plt.cm.Dark2(np.linspace(0,1,6)))
     harvest = np.zeros([Nvars, N])
-    farmers = []    
+    runNames = []    
     for n in range(N):
-        ind = [n//np.prod(sizeMat[i:i+3])%sizeMat[i+3] for i in range(4)]
-        paramTple = (instruments[ind[0]], conCases[ind[1]], SZAs[ind[2]], Phis[ind[3]], tauVal)
-        savePath = saveStart + '%s_case-%s_sza%d_phi%d_tFct%4.2f_V2.pkl' % paramTple #SIM3_polar07_case-Smoke+pollution_sza30_phi0_tFct0.04_V2.pkl
-        farmers.append('%s($θ_s=%d,φ=%d$)' % paramTple[1:4])
-        farmers[-1] = farmers[-1].replace('pollution','POLL').replace('smoke','BB').replace('marine','MRN')
+        paramTple = list(itertools.product(*[[barVal],conCases,SZAs,Phis,tauVals]))[n]
+        if barVal == 'PolOnly_lidar05+polar07': 
+            savePath = '/Users/wrespino/Synced/Working/SIM13_lidarTest/SIM42_%s_case-%s_sza%d_phi%d_tFct%4.2f_V2.pkl' % paramTple #SIM3_polar07_case-Smoke+pollution_sza30_phi0_tFct0.04_V2.pkl            
+        else:
+            savePath = saveStart + '%s_case-%s_sza%d_phi%d_tFct%4.2f_V2.pkl' % paramTple #SIM3_polar07_case-Smoke+pollution_sza30_phi0_tFct0.04_V2.pkl
+        runNames.append('%s($θ_s=%d,φ=%d$)' % paramTple[1:4])
+        runNames[-1] = runNames[-1].replace('pollution','POLL').replace('smoke','BB').replace('marine','MRN')
         simB = simulation(picklePath=savePath)
         Nsims = len(simB.rsltBck)
 #        lInd = l+1 if 'lidar' in instruments[ind[0]] and l>0 else l
         print('---')
-        print(farmers[-1])
+        print(runNames[-1])
         print(savePath)
         print('AODf=%4.2f, AODc=%4.2f, Nsim=%d' % (simB.rsltFwd['aodMode'][0,lInd], simB.rsltFwd['aodMode'][1,lInd], Nsims))
-        print(instruments[ind[0]])
+        print(paramTple[0])
         print('Spectral variables for λ = %4.2f μm'% simB.rsltFwd['lambda'][lInd])
         try:
 #            assert False
-            rmse, bias = simB.analyzeSim(lInd, modeCut=None) # HINT: this will break in cases with differnt number of fwd and back modes
+            rmse, bias = simB.analyzeSim(lInd, modeCut=None, swapFwdModes=swapModes) # HINT: this will break in cases with differnt number of fwd and back modes
         except (ValueError, AssertionError):
             rmse, bias = simB.analyzeSim(lInd, modeCut=0.5) # HINT: this is much slower than the above
         print('---')
@@ -107,52 +118,65 @@ for tauInd, lInd in enumerate(lVals):
             if n == 0: # allocate the array
                 totBias[vr] = np.ones([N*Nsims, bias[vr].shape[1]])
             totBias[vr][n*Nsims:(n+1)*Nsims,:] = bias[vr]
-        
-        i=0
-        for vr in totVars+modVars:
-            for t,tg in enumerate(trgt[vr]):
-                if vr in trgtRel.keys():
-                    if np.isscalar(simB.rsltFwd[vr]):
-                        true = simB.rsltFwd[vr]
-                    elif simB.rsltFwd[vr].ndim==1:
-                        true = simB.rsltFwd[vr][lInd]
-                    else:
-                        true = simB.rsltFwd[vr][t,lInd]
-                    harvest[i,n] = (tg+trgtRel[vr]*true)/np.atleast_1d(rmse[vr])[t]
+        harvest[:,n], harvestQ, rmseVal = af.normalizeError(simB.rsltFwd, rmse, lInd, totVars+modVars, bias)
+        if printRslt:
+            print("Q and σ (col,pbl) --- SSA, g, Lidar, AODF, AOD, n:")
+            for err in [np.array(harvestQ), np.array(rmseVal)]:
+                print('%5f' % err['$SSA$'==np.array(gvNames)], end =",")
+                print('%5f' % err['$SSA_{fine}$'==np.array(gvNames)], end =",")
+                print('%5f' % err['$g$'==np.array(gvNames)], end =",")
+#                print('---', end =",")
+                print('%5f' % err['$LidarRatio$'==np.array(gvNames)], end =",")
+                print('---', end =",")
+                if 'case06a' in paramTple[1] or 'case06b' in paramTple[1]:
+                    print('%5f' % err['$AOD_{coarse}$'==np.array(gvNames)], end =",")
+                elif 'case06c' in paramTple[1] or 'case06d' in paramTple[1]:
+                    print('%5f' % err['$AOD$'==np.array(gvNames)], end =",")                
                 else:
-                    harvest[i,n] = tg/np.atleast_1d(rmse[vr])[t]
-                i+=1
-                # PLOT 3: print PDF of AOD as a function of case
+                    print('---', end =",")
+                if 'case06c' in paramTple[1] or 'case06d' in paramTple[1]:
+                    print('%5f' % err['$AOD_{fine}$'==np.array(gvNames)], end =",")
+                else:
+                    print('---', end =",")
+                print('---', end =",") # NONSPH would go in these two
+                print('---', end =",")
+                print('%5f' % err['$AOD$'==np.array(gvNames)], end =",")
+                print('%5f' % err['$AOD_{fine}$'==np.array(gvNames)], end =",")
+                print('%5f' % err['$n$'==np.array(gvNames)], end =",")
+                print('%5f' % err['$n_{fine}$'==np.array(gvNames)])
+
+        # PLOT 3: print PDF of AOD as a function of case
         aodDiffRng = 0.08
         kern = st.gaussian_kde(bias['aod'][np.abs(bias['aod'])<aodDiffRng])
         xAxisVals = np.linspace(-aodDiffRng, aodDiffRng, 500)                
         axC.plot(xAxisVals, kern.pdf(xAxisVals), '-.')
     axC.legend([cc[0:7] for cc in conCases])
-    if gridPlots: mf.gridPlot(farmers, gvNames, harvest)    
+    axC.set_title(barVal)
+    if gridPlots: mf.gridPlot(runNames, gvNames, harvest)    
     plt.rcParams.update({'font.size': 14})
-    if tauInd==0: 
+    if barInd==0: 
         figB, axB = plt.subplots(figsize=(4.8,6))
         axB.plot([1,1], [0,5*(Nvars+1)], ':', color=0.65*np.ones(3))
-    pos = Ntau*np.r_[0:harvest.shape[0]]+0.7*tauInd
-    indGood = [not 'InsertSkipFieldHere' in gn for gn in gvNames]
-    hnd = axB.boxplot(harvest[indGood,:].T, vert=0, patch_artist=True, positions=pos[indGood], sym='.')
-    if tauInd == 10:
+    pos = Nbar*np.r_[0:harvest.shape[0]]+0.7*barInd
+    indGood = np.nonzero([not 'coarse' in gn for gn in gvNames])[0][::-1]
+    hnd = axB.boxplot(harvest[indGood,:].T, vert=0, patch_artist=True, positions=pos[0:len(indGood)], sym='.')
+    if barInd == 10:
         [hnd['boxes'][i].set_facecolor([0,0,1]) for i in range(len(hnd['boxes']))]
         [hf.set_markeredgecolor([0,0,1]) for hf in hnd['fliers']]
-    elif tauInd == 11:
+    elif barInd == 11:
         [hnd['boxes'][i].set_facecolor([1,0,0]) for i in range(len(hnd['boxes']))]
         [hf.set_markeredgecolor([1,0,0]) for hf in hnd['fliers']]
     else:
-        [hnd['boxes'][i].set_facecolor(cm((tauInd)/(Ntau))) for i in range(len(hnd['boxes']))]
-        [hf.set_markeredgecolor(cm((tauInd)/(Ntau))) for hf in hnd['fliers']]
-    tauLeg.append(hnd['boxes'][0])
-    
+        [hnd['boxes'][i].set_facecolor(cm((barInd)/(Nbar))) for i in range(len(hnd['boxes']))]
+        [hf.set_markeredgecolor(cm((barInd)/(Nbar))) for hf in hnd['fliers']]
+    barLeg.append(hnd['boxes'][0])
 axB.set_xscale('log')
-axB.set_xlim([0.05,50])
-axB.set_ylim([-0.8, Ntau*harvest.shape[0]])
+axB.set_xlim([0.05,15])
+axB.set_ylim([-0.8, Nbar*len(indGood)])
 plt.sca(axB)
-plt.yticks(Ntau*(np.r_[0:(harvest.shape[0])]+0.1*Ntau), gvNames)
-#lgHnd = axB.legend(tauLeg[::-1], ['τ = %4.2f' % τ for τ in tauVals[::-1]], loc='center left')
+plt.yticks(Nbar*(np.r_[0:len(indGood)]+0.1*Nbar), [mv.replace('fine','PBL')for mv in np.array(gvNames)[indGood]])
+#lgHnd = axB.legend(barLeg[::-1], ['%s' % τ for τ in instruments[::-1]], loc='center left')
+#lgHnd = axB.legend(barLeg[::-1], ['Pol. Only', 'Pol+Lid09', 'Pol+Lid09', 'Lid05 Only'] , loc='center left')
 #lgHnd.draggable()
 axB.yaxis.set_tick_params(length=0)
 figB.tight_layout()
@@ -173,7 +197,11 @@ for i,vr in enumerate(totBiasVars):
         curAx.plot([trgt[vr], trgt[vr]], [curAx.get_ylim()[0], curAx.get_ylim()[1]],'--k')
         print('%s - %d%%' % (vr, 100*np.sum(np.abs(dataCln) < trgt[vr])/len(dataCln)))
     curAx.set_yticks([], []) 
-figD.tight_layout()    
+figD.tight_layout()
+
+
+
+
         
 #a = [2,2,1,1,0,0,1,0,0,0]
 #S = lambda a,σ: 5*np.sum(a*(1+σ**2)**(np.log2(4/5)))/np.sum(a)
