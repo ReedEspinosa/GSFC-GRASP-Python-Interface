@@ -5,6 +5,7 @@ import numpy as np
 import copy
 import pickle
 import os
+from datetime import date
 import runGRASP as rg
 import miscFunctions as ms
 
@@ -14,28 +15,46 @@ class simulation(object):
         if picklePath: self.loadSim(picklePath)
         if nowPix is None: return
         assert np.all([np.all(np.diff(mv['meas_type'])>0) for mv in nowPix.measVals]), 'nowPix.measVals[l][\'meas_type\'] must be in ascending order at each l'
-        self.nowPix = nowPix
+        self.nowPix = copy.deepcopy(nowPix) # we will change this, bad form not to make our own copy
         self.nbvm = np.array([mv['nbvm'] for mv in nowPix.measVals])
         self.rsltBck = None
         self.rsltFwd = None
 
-    def runSim(self, fwdModelYAMLpath, bckYAMLpath, Nsims=100, maxCPU=4, binPathGRASP=None, savePath=None, lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False):
+    def runSim(self, fwdData, bckYAMLpath, Nsims=1, maxCPU=4, binPathGRASP=None, savePath=None, lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False):
         assert not self.nowPix is None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.' 
-        # RUN THE FOWARD MODEL
-        gObjFwd = rg.graspRun(fwdModelYAMLpath)
-        gObjFwd.addPix(self.nowPix)
-        gObjFwd.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=intrnlFileGRASP)
-        self.rsltFwd = gObjFwd.readOutput()[0]
+        # ADAPT fwdData/RUN THE FOWARD MODEL
+        if type(fwdData) == str and fwdData[-3:] == 'yml':
+            gObjFwd = rg.graspRun(fwdData)
+            gObjFwd.addPix(self.nowPix)
+            gObjFwd.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=intrnlFileGRASP)
+            self.rsltFwd = np.array([gObjFwd.readOutput()[0]])
+            loopInd = np.zeros(Nsims, int)
+        elif type(fwdData) == list:
+            self.rsltFwd = fwdData
+            assert Nsims <= 1, 'Running multiple noise perturbations on more than one foward simulation is not supported.' 
+            Nsims = 0 # Nsims really has no meaning here so we will use this as a flag
+            loopInd = range(len(self.rsltFwd))
+        else:
+            assert False, 'Unrecognized data type, fwdModelYAMLpath should be path to YAML file or a DICT!'
         # ADD NOISE AND PERFORM RETRIEVALS
         gObjBck = rg.graspRun(bckYAMLpath, releaseYAML=releaseYAML, quietStart=True) # quietStart=True -> we won't see path of temp, pre-gDB graspRun
-        for i in range(Nsims):
+        for i in loopInd:
             for l, msDct in enumerate(self.nowPix.measVals):
                 edgInd = np.r_[0, np.cumsum(self.nbvm[l])]
-                msDct['measurements'] = copy.copy(msDct['measurements']) # we are about to write to this
-                msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd, edgInd)
-                msDct['measurements'][np.abs(msDct['measurements'])<1e-10] = 1e-10 # TODO clean this up, can change sign, not flexible, etc.
-            self.nowPix.dtNm = copy.copy(self.nowPix.dtNm+1) # otherwise GRASP will whine
-            gObjBck.addPix(self.nowPix)
+                msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd[i], edgInd)
+                if Nsims == 0:
+                    msDct['sza'] = self.rsltFwd[i]['sza'][0,l]
+                    msDct['thtv'] = self.rsltFwd[i]['vis'][:,l]
+                    msDct['phi'] = self.rsltFwd[i]['fis'][:,l]
+                    msDct = self.nowPix.formatMeas(msDct) # this will tile the above msTyp times
+            if Nsims == 0:
+                self.nowPix.dtNm = date.toordinal(self.rsltFwd[i]['datetime'])
+                self.nowPix.lat = self.rsltFwd[i]['latitude']
+                self.nowPix.lon = self.rsltFwd[i]['longitude']
+                if 'land_prct' in self.rsltFwd[i]: self.nowPix.land_prct = self.rsltFwd[i]['land_prct']
+            else:
+                self.nowPix.dtNm = self.nowPix.dtNm+1 # increment day otherwise GRASP will whine
+            gObjBck.addPix(self.nowPix) # addPix performs a deepcopy on nowPix, won't be impact by next iteration through loopInd
         gDB = rg.graspDB(gObjBck, maxCPU)
         self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
         # SAVE RESULTS
@@ -46,15 +65,20 @@ class simulation(object):
             if lightSave:
                 for pmStr in ['p11','p12','p22','p33','p34','p44']:
                     [rb.pop(pmStr, None) for rb in self.rsltBck]
+                    if len(self.rsltFwd) > 1: [rf.pop(pmStr, None) for rf in self.rsltFwd]
             with open(savePath, 'wb') as f:
-                pickle.dump(self.rsltBck.tolist()+[self.rsltFwd], f, pickle.HIGHEST_PROTOCOL)
+                pickle.dump(list(self.rsltBck), f, pickle.HIGHEST_PROTOCOL)
+                pickle.dump(list(self.rsltFwd), f, pickle.HIGHEST_PROTOCOL)
 
     def loadSim(self, picklePath):
-        gDB = rg.graspDB()
-        loadData = gDB.loadResults(picklePath)
-        self.rsltBck = loadData[:-1]
-        self.rsltFwd = loadData[-1]
-
+        with open(picklePath, 'rb') as f:
+            self.rsltBck = np.array(pickle.load(f))
+            try:
+                self.rsltFwd = np.array(pickle.load(f))
+            except EOFError: # this was an older file (created before Jan 2020)
+                self.rsltFwd = [self.rsltBck[-1]]
+                del(self.rsltBck[-1])
+ 
     def analyzeSim(self, wvlnthInd=0, modeCut=0.5, swapFwdModes = False): # modeCut is fine/coarse seperation radius in um; NOTE: only applies if fwd & inv models have differnt number of modes
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc', 'height']
@@ -62,6 +86,8 @@ class simulation(object):
         varsSpctrl = [z for z in varsSpctrl if z in self.rsltFwd] # check that the variable is used in current configuration
         varsMorph = [z for z in varsMorph if z in self.rsltFwd]
         varsAodAvg = [z for z in varsAodAvg if z in self.rsltFwd]
+#        TODO: this whole method needs to be rewritten to allow rsltFwd to be a vector
+#           it might make sense to break the following code into two methods for len(rsltFwd) > 1 and len(rsltFwd) == 1 (current code basicly)
         rmsErr = dict()
         bias = dict()
         assert (not self.rsltBck is None) and self.rsltFwd, 'You must call loadSim() or runSim() before you can calculate statistics!'

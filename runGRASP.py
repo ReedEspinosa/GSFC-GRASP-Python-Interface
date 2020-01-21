@@ -653,27 +653,38 @@ class pixel(object):
         self.measVals = []
          
     def addMeas(self, wl, msTyp, nbvm, sza, thtv, phi, msrmnts, errModel=None): # this is called once for each wavelength of data (see frmtMsg below)
-        frmtMsg = '\n\
-            For more than one measurement type or viewing geometry pass msTyp, nbvm, thtv, phi and msrments as vectors: \n\
-            len(msrments)=len(thtv)=len(phi)=sum(nbvm); len(msTyp)=len(nbvm) \n\
-            msrments=[meas[msTyp[0],thtv[0],phi[0]], meas[msTyp[0],thtv[1],phi[1]],...,meas[msTyp[0],thtv[nbvm[0]],phi[nbvm[0]]],meas[msTyp[1],thtv[nbvm[0]+1],phi[nbvm[0]+1]],...]'
-        msTyp = np.atleast_1d(msTyp)
-        nbvm = np.atleast_1d(nbvm)
-        thtv = np.atleast_1d(thtv)
-        phi = np.atleast_1d(phi) + 180*(np.array(thtv)<0) # GRASP doesn't like thtv < 0
-        if np.any(phi<0): warnings.warn('GRASP RT performance is hindered when phi<0, values in the range 0<phi<360 are preferred.')
-        thtv = np.abs(thtv) 
-        msrmnts = np.atleast_1d(msrmnts)
-        assert thtv.shape[0]==phi.shape[0] and msTyp.shape[0]==nbvm.shape[0] and nbvm.sum()==thtv.shape[0], 'Each measurement must conform to the following format:' + frmtMsg
-        assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!' + frmtMsg
+        """Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)"""
+        assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!'
         newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts, errorModel=errModel)
-        insertInd = np.nonzero([z['wl']>newMeas['wl'] for z in self.measVals])[0]
+        newMeas = self.formatMeas(self, newMeas)
+        insertInd = np.nonzero([z['wl']>newMeas['wl'] for z in self.measVals])[0] # we want to insert in order
         if len(insertInd)==0: # this is the longest wavelength so far, including the case w/ no measurements so far
             self.measVals.append(newMeas)
         else:
             self.measVals.insert(insertInd[0], newMeas)
         self.nwl += 1
-         
+        
+    def formatMeas(self, newMeas):
+        frmtMsg = '\n\
+            For more than one measurement type or viewing geometry pass msTyp, nbvm, thtv, phi and msrments as vectors: \n\
+            len(msrments)=len(thtv)=len(phi)=sum(nbvm); len(msTyp)=len(nbvm) \n\
+            msrments=[meas[msTyp[0],thtv[0],phi[0]], meas[msTyp[0],thtv[1],phi[1]],...,meas[msTyp[0],thtv[nbvm[0]],phi[nbvm[0]]],meas[msTyp[1],thtv[nbvm[0]+1],phi[nbvm[0]+1]],...]'
+        newMeas['meas_type'] = np.atleast_1d(newMeas['meas_type'])
+        newMeas['nbvm'] = np.atleast_1d(newMeas['nbvm'])
+        newMeas['thetav'] = np.atleast_1d(newMeas['thetav'])
+        newMeas['phi'] = np.atleast_1d(newMeas['phi'])
+        newMeas['measurements'] = np.atleast_1d(newMeas['measurements'])
+        newMeas['measurements'][np.abs(newMeas['measurements'])<1e-10] = 1e-10 # TODO: clean this up, can change sign, not flexible, etc.
+        if len(newMeas['thetav']) == len(newMeas['measurements'])/len(newMeas['msTyp']): # viewing zenith not provided for each measurement type
+            newMeas['thetav'] = np.tile(newMeas['thetav'],len(newMeas['msTyp']))
+        if len(newMeas['phi']) == len(newMeas['measurements'])/len(newMeas['msTyp']): # viewing zenith not provided for each measurement type
+            newMeas['phi'] = np.tile(newMeas['phi'],len(newMeas['msTyp']))
+        newMeas['phi'] = newMeas['phi'] + 180*(np.array(newMeas['thetav'])<0) # GRASP doesn't like thetav < 0
+        newMeas['thetav'] = np.abs(newMeas['thetav'])
+        if np.any(newMeas['phi']<0): warnings.warn('GRASP RT performance is hindered when phi<0, values in the range 0<phi<360 are preferred.')
+        assert newMeas['thetav'].shape[0]==newMeas['phi'].shape[0] and newMeas['meas_type'].shape[0]==newMeas['nbvm'].shape[0] and newMeas['nbvm'].sum()==newMeas['thetav'].shape[0], 'Each measurement must conform to the following format:' + frmtMsg
+        return newMeas
+        
     def genString(self):
         baseStrFrmt = '%2d %2d 1 0 0 %10.5f %10.5f %7.2f %6.2f %d' # everything up to meas fields
         baseStr = baseStrFrmt % (self.ix, self.iy, self.lon, self.lat, self.masl, self.land_prct, self.nwl)
