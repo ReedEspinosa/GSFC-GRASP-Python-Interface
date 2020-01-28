@@ -5,7 +5,7 @@ import numpy as np
 import copy
 import pickle
 import os
-from datetime import date
+import datetime as dt
 import runGRASP as rg
 import miscFunctions as ms
 
@@ -21,6 +21,16 @@ class simulation(object):
         self.rsltFwd = None
 
     def runSim(self, fwdData, bckYAMLpath, Nsims=1, maxCPU=4, binPathGRASP=None, savePath=None, lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False):
+        """ <> runs the simulation for given set of simulated and inversion conditions <>
+        fwdData -> yml file path for GRASP fwd model OR "results style" list of dicts
+        bckYAMLpath -> yml file path for GRASP inversion
+        Nsims -> number of noise pertbations applied to fwd model, must be 1 if fwdData is a list of results dicts
+        maxCPU -> the retrieval load will be spread accross maxCPU processes
+        binPathGRASP -> path to GRASP binary, if None default from graspRun is used
+        savePath -> path to save pickle w/ simulated retrieval results, lightSave -> remove PM data
+        intrnlFileGRASP -> alternative path to GRASP kernels, overwrites value in YAML files
+        releaseYAML=True -> auto adjust back yaml Nλ to match insturment
+        rndIntialGuess=True -> overwrite initial guesses in bckYAMLpath w/ uniformly distributed random values between min & max """
         assert not self.nowPix is None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.' 
         # ADAPT fwdData/RUN THE FOWARD MODEL
         if type(fwdData) == str and fwdData[-3:] == 'yml':
@@ -48,12 +58,12 @@ class simulation(object):
                     msDct['phi'] = self.rsltFwd[i]['fis'][:,l]
                     msDct = self.nowPix.formatMeas(msDct) # this will tile the above msTyp times
             if Nsims == 0:
-                self.nowPix.dtNm = date.toordinal(self.rsltFwd[i]['datetime'])
+                self.nowPix.dtObj = self.rsltFwd[i]['datetime'] # ΤΟDO: this produces an integer & only keeps the date part... Should we just ditch this ordinal crap?
                 self.nowPix.lat = self.rsltFwd[i]['latitude']
                 self.nowPix.lon = self.rsltFwd[i]['longitude']
                 if 'land_prct' in self.rsltFwd[i]: self.nowPix.land_prct = self.rsltFwd[i]['land_prct']
             else:
-                self.nowPix.dtNm = self.nowPix.dtNm+1 # increment day otherwise GRASP will whine
+                self.nowPix.dtObj = self.nowPix.dtObj + dt.timedelta(hours=1) # increment hour otherwise GRASP will whine
             gObjBck.addPix(self.nowPix) # addPix performs a deepcopy on nowPix, won't be impact by next iteration through loopInd
         gDB = rg.graspDB(gObjBck, maxCPU)
         self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)

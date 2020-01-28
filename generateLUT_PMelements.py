@@ -6,6 +6,7 @@ discover = False
 import numpy as np
 import runGRASP as rg
 from netCDF4 import Dataset
+import datetime as dt
 import sys
 if discover:
     syncPath = '/discover/nobackup/wrespino/synced/'
@@ -67,8 +68,9 @@ else: # perform calculations
         for lstrt in lEdg:
             wvlsNow = wvls[lstrt:min(lstrt+maxL,Nlambda)]
             wvInds = np.r_[lstrt:min(lstrt+maxL,Nlambda)]
-            gspRunNow = rg.graspRun(YAMLpath)    
-            nowPix = rg.pixel(730123.0+bn, 1, 1, 0, 0, 0, 100)
+            gspRunNow = rg.graspRun(YAMLpath)
+            dtObj = dt.datetime.now + dt.timedelta(hours=bn)
+            nowPix = rg.pixel(dtObj, 1, 1, 0, 0, 0, 100)
             for wvl, wvInd in zip(wvlsNow, wvInds): # This will be expanded for wavelength dependent measurement types/geometry
                 meas = np.r_[optTbl['qext'][bn,0,wvInd]]
                 nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv, phi, meas)

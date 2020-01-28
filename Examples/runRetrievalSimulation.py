@@ -4,6 +4,7 @@
 import numpy as np
 import os
 import sys
+import datetime as dt
 sys.path.append(os.path.join(".."))
 import runGRASP as rg
 import simulateRetrieval as rs
@@ -60,7 +61,7 @@ thtv = np.tile([-70.5, -60.0, -45.6, -26.1, 0, 26.1, 45.6, 60.0, 70.5], len(msTy
 wvls = [0.36, 0.55, 0.87, 1.23, 1.65] # Nλ=5
 meas = np.r_[np.repeat(0.1, nbvm[0]), np.repeat(0.01, nbvm[1]), np.repeat(0.01, nbvm[2])] 
 phi = np.repeat(relPhi, len(thtv)) # currently we assume all observations fall within a plane
-nowPix = rg.pixel(730123.0, 1, 1, 0, 0, 0, 100)
+nowPix = rg.pixel(dt.datetime.now(), 1, 1, 0, 0, 0, 100)
 for wvl in wvls: # This will be expanded for wavelength dependent measurement types/geometry
     nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv, phi, meas, functools.partial(addError, 41)) # this must link to an error model in addError() above 
 

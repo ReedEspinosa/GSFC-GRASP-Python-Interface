@@ -338,10 +338,10 @@ class graspRun(object):
         assert self.yamlObj.YAMLpath, 'You must initialize graspRun with a YAML file to write SDATA'
         self.pathSDATA = os.path.join(self.dirGRASP, self.yamlObj.access('sdata_fn'));
         assert (self.pathSDATA), 'Failed to read SDATA filename from '+self.yamlObj.YAMLpath
-        unqTimes = np.unique([pix.dtNm for pix in self.pixels])
+        unqTimes = np.unique([pix.dtObj for pix in self.pixels])
         SDATAstr = self.genSDATAHead(unqTimes)
         for unqTime in unqTimes:
-            pixInd = np.nonzero(unqTime == [pix.dtNm for pix in self.pixels])[0]
+            pixInd = np.nonzero(unqTime == np.array([pix.dtObj for pix in self.pixels]))[0]
             SDATAstr += self.genCellHead(pixInd)
             for ind in pixInd:
                 SDATAstr += self.pixels[ind].genString()
@@ -632,17 +632,17 @@ class graspRun(object):
         
     def genCellHead(self, pixInd):
         nStr = '\n  %d   ' % len(pixInd)
-        dtObjDay = dt.fromordinal(np.int(np.floor(self.pixels[pixInd[0]].dtNm)))
-        dtObjTime = timedelta(seconds=np.remainder(self.pixels[pixInd[0]].dtNm, 1)*86400)
-        dtObj = dtObjDay + dtObjTime
-        dtStr = dtObj.strftime('%Y-%m-%dT%H:%M:%SZ')
+        dtStr = self.pixels[pixInd[0]].dtObj.strftime('%Y-%m-%dT%H:%M:%SZ')
         endstr = ' %10.2f   0   0\n' % self.orbHght
         return nStr+dtStr+endstr
         
    
 class pixel(object):
-    def __init__(self, dtNm, ix, iy, lon, lat, masl, land_prct):
-        self.dtNm = dtNm
+    def __init__(self, dtObj, ix, iy, lon, lat, masl, land_prct):
+        """ dtObj - a datetime object corresponding to measurement time
+            masl - surface altitude in meters 
+            land_prct - % of land, in the range [0(sea)...100(land)] (matches format GRASP takes) """
+        self.dtObj = dtObj
         self.ix = ix
         self.iy = iy
         self.lon = lon
@@ -656,7 +656,7 @@ class pixel(object):
         """Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)"""
         assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!'
         newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts, errorModel=errModel)
-        newMeas = self.formatMeas(self, newMeas)
+        newMeas = self.formatMeas(newMeas)
         insertInd = np.nonzero([z['wl']>newMeas['wl'] for z in self.measVals])[0] # we want to insert in order
         if len(insertInd)==0: # this is the longest wavelength so far, including the case w/ no measurements so far
             self.measVals.append(newMeas)
@@ -675,10 +675,10 @@ class pixel(object):
         newMeas['phi'] = np.atleast_1d(newMeas['phi'])
         newMeas['measurements'] = np.atleast_1d(newMeas['measurements'])
         newMeas['measurements'][np.abs(newMeas['measurements'])<1e-10] = 1e-10 # TODO: clean this up, can change sign, not flexible, etc.
-        if len(newMeas['thetav']) == len(newMeas['measurements'])/len(newMeas['msTyp']): # viewing zenith not provided for each measurement type
-            newMeas['thetav'] = np.tile(newMeas['thetav'],len(newMeas['msTyp']))
-        if len(newMeas['phi']) == len(newMeas['measurements'])/len(newMeas['msTyp']): # viewing zenith not provided for each measurement type
-            newMeas['phi'] = np.tile(newMeas['phi'],len(newMeas['msTyp']))
+        if len(newMeas['thetav']) == len(newMeas['measurements'])/newMeas['nip']: # viewing zenith not provided for each measurement type
+            newMeas['thetav'] = np.tile(newMeas['thetav'],newMeas['nip'])
+        if len(newMeas['phi']) == len(newMeas['measurements'])/newMeas['nip']: # viewing zenith not provided for each measurement type
+            newMeas['phi'] = np.tile(newMeas['phi'],newMeas['nip'])
         newMeas['phi'] = newMeas['phi'] + 180*(np.array(newMeas['thetav'])<0) # GRASP doesn't like thetav < 0
         newMeas['thetav'] = np.abs(newMeas['thetav'])
         if np.any(newMeas['phi']<0): warnings.warn('GRASP RT performance is hindered when phi<0, values in the range 0<phi<360 are preferred.')
@@ -706,9 +706,9 @@ class pixel(object):
         return " ".join((baseStr, measStrAll, settingStr, '\n'))
     
 class graspYAML(object):
-    """Store and modify the contents of a YAML settings file."""
+    """Load, modify and/or store the contents of a YAML settings file."""
 
-    def __init__(self, baseYAMLpath=None, workingYAMLpath=None): 
+    def __init__(self, baseYAMLpath=None, workingYAMLpath=None):
         """Create new instance from YAML settings baseYAMLpath; updates written to workingYAMLpath if probided, otherwise baseYAMLpath."""
         assert not (workingYAMLpath and not baseYAMLpath), 'baseYAMLpath must be provided to create a new YAML file at workingYAMLpath!'
         if workingYAMLpath: 
