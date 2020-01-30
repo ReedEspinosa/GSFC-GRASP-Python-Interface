@@ -20,8 +20,9 @@ import ACCP_functions as af
 
 #simB.analyzeSim()
 #instruments = ['lidar05'] #1
-#instruments = ['lidar09+polar07'] #1
-instruments = ['PolOnly_lidar05+polar07', 'lidar09+polar07','lidar05+polar07', 'lidar05'] #1
+instruments = ['lidar09+polar07', 'lidar05+polar07'] #1
+instruments = ['lidar05+polar07'] #1
+#instruments = ['PolOnly_lidar05+polar07', 'lidar09+polar07','lidar05+polar07', 'lidar05'] #1
 #conCases = ['marine', 'pollution','smoke','marine+pollution','marine+smoke','Smoke+pollution'] #6
 #conCases = ['variablefinenonsph','variablefinenonsph','variablefinenonsph','variablefinenonsph'] #6
 #conCases = ['case02a','case02b','case02c','case03','case07']
@@ -35,6 +36,7 @@ for caseLet in ['a','b','c','d','e','f']:
 #conCases = ['case06amonomode', 'case06bmonomode']
 #SZAs = [0.1, 15, 30, 45, 60] # 3
 SZAs = [0.1, 30, 60] # 3
+SZAs = [30] # 3
 Phis = [0] # 1 -> N=18 Nodes
 tauVals = [1.0] #
 #tauVals = [0.03, 0.05, 0.08, 0.1, 0.12, 0.16, 0.2, 0.25, 0.3, 0.35]
@@ -44,7 +46,7 @@ N = len(SZAs)*len(conCases)*len(Phis)*len(tauVals)
 gridPlots = False
 #l = 3
 #lVals = [0,3,5,10]
-wavInd = 3
+wavInd = 4
 
 tag = 'Figure'
 
@@ -68,8 +70,8 @@ trgtRel = {'aod':0.05, 'aodMode':0.05, 'LidarRatio':[0.25]} # this part must be 
 swapModes = True
 printRslt = True
 
+#simRsltFile = '/Users/wrespino/Synced/Working/SIM13_lidarTest/SIM43_lidar05+polar07_case-case06cmonomode_sza30_phi0_tFct1.00_V2.pkl'
 saveStart = '/Users/wrespino/Synced/Working/SIM13_lidarTest/SIM43_'
-#saveStart = '/Users/wrespino/synced/Working/SIM8/SIM_'
 
 cm = pylab.get_cmap('viridis')
 
@@ -100,6 +102,7 @@ for barInd, barVal in enumerate(instruments):
         runNames.append('%s($θ_s=%d,φ=%d$)' % paramTple[1:4])
         runNames[-1] = runNames[-1].replace('pollution','POLL').replace('smoke','BB').replace('marine','MRN')
         simB = simulation(picklePath=savePath)
+        if not type(simB.rsltFwd) is dict: simB.rsltFwd = simB.rsltFwd[0] # HACK [VERY BAD] -- remove when we fix this to work with lists 
         Nsims = len(simB.rsltBck)
 #        lInd = l+1 if 'lidar' in instruments[ind[0]] and l>0 else l
         print('---')
@@ -147,7 +150,7 @@ for barInd, barVal in enumerate(instruments):
 
         # PLOT 3: print PDF of AOD as a function of case
         aodDiffRng = 0.08
-        kern = st.gaussian_kde(bias['aod'][np.abs(bias['aod'])<aodDiffRng])
+        kern = st.gaussian_kde(bias['ssa'][np.abs(bias['ssa'])<aodDiffRng])
         xAxisVals = np.linspace(-aodDiffRng, aodDiffRng, 500)                
         axC.plot(xAxisVals, kern.pdf(xAxisVals), '-.')
     axC.legend([cc[0:7] for cc in conCases])

@@ -13,12 +13,14 @@ from miscFunctions import matplotlibX11
 matplotlibX11()
 import matplotlib.pyplot as plt
 
-simRsltFile = '/Users/wrespino/synced/Working/SIM14_lidarPolACCP/SIM100_lidar05+polar07_case-case06a_sza0_phi0_tFct1.00_V2.pkl'
+simRsltFile = '/Users/wrespino/synced/Working/SIM14_lidarPolACCP/SIM43V2_2mode_lidar05+polar07_case-variable_sza30_phi0_tFct0.12_V2.pkl'
+#simRsltFile = '/Users/wrespino/Synced/Working/SIM13_lidarTest/SIM43_lidar05+polar07_case-case06cmonomode_sza30_phi0_tFct1.00_V2.pkl'
 lIndL = 3 # LIDAR λ to plot
-lIndP = 2 # polarimeter λ to plot
+lIndP = 4 # polarimeter λ to plot
 
 simA = simulation(picklePath=simRsltFile)
 if not type(simA.rsltFwd) is dict: simA.rsltFwd = simA.rsltFwd[0] # HACK [VERY BAD] -- remove when we fix this to work with lists 
+
 alphVal = 1/np.sqrt(len(simA.rsltBck))
 color1 = np.array([
         [1, 0, 0],
@@ -40,13 +42,15 @@ measTypesP = ['I', 'QoI', 'UoI'] if nrmPol else ['I', 'Q', 'U']
 assert not np.isnan(simA.rsltBck[0]['fit_'+measTypesP[0]][0,lIndP]), 'Nans found in Polarimeter data at this wavelength! Is the value of lIndP valid?'
 figP, axP = plt.subplots(1,len(measTypesP),figsize=(12,6))
 # Plot LIDAR and Polar measurements and fits
+NfwdModes = simA.rsltFwd['aodMode'].shape[0]
+NbckModes = simA.rsltBck[0]['aodMode'].shape[0]
 for rb in simA.rsltBck:
 #    [np.sum(rb[profExtNm][i,:]*rb['range'][i,:]) for i in range(rb['range'].shape[0])]
 #    botPrf = 0 if np.sum(rb[profExtNm][0,:]*rb['range'][0,:])>np.sum(rb[profExtNm][1,:]*rb['range'][1,:]) else 1
 #    axA[0].plot(βfun(botPrf%2,lInd,rb), rb['range'][botPrf%2,:]/1e3, color=color1, alpha=alphVal)
 #    axA[0].plot(βfun((botPrf+1)%2,lInd,rb), rb['range'][(botPrf+1)%2,:]/1e3, color=color2, alpha=alphVal)
-    axL[0].plot(βfun(0,lIndL,rb), rb['range'][0,:]/1e3, color=color1[0], alpha=alphVal)
-    axL[0].plot(βfun(1,lIndL,rb), rb['range'][1,:]/1e3, color=color1[1], alpha=alphVal)
+    for i in range(NbckModes):
+        axL[0].plot(βfun(i,lIndL,rb), rb['range'][i,:]/1e3, color=color1[i], alpha=alphVal)
     for i,mt in enumerate(measTypesL): # Lidar retrieval meas & fit
         axL[i+1].plot(1e6*rb['meas_'+mt][:,lIndL], rb[rngVar][:,lIndL]/1e3, color=color1[0], alpha=alphVal)
         axL[i+1].plot(1e6*rb['fit_'+mt][:,lIndL], rb[rngVar][:,lIndL]/1e3, color=color1[1], alpha=alphVal)
@@ -55,9 +59,9 @@ for rb in simA.rsltBck:
         axP[i].plot(θfun(lIndP,rb), rb['fit_'+mt][:,lIndP], color=color1[1], alpha=alphVal)
 mdHnd = []
 lgTxt = []
-NfwdModes = simA.rsltFwd['aodMode'].shape[0]
 for i in range(NfwdModes):
     mdHnd.append(axL[0].plot(βfun(i,lIndL,simA.rsltFwd), simA.rsltFwd['range'][i,:]/1e3, 'o-', color=color1[i]/2))
+#    mdHnd.append(axL[0].plot(βfun(i,lIndL,simA.rsltFwd), simA.rsltFwd['range'][i,:]/1e3, 'o-', color=color1[1::-1][i]/2))
     lgTxt.append('Mode %d' % i)
 for i,mt in enumerate(measTypesL): # Lidar fwd fit
     axL[i+1].plot(1e6*simA.rsltFwd['fit_'+mt][:,lIndL], simA.rsltFwd[rngVar][:,lIndL]/1e3, 'ko-')
@@ -76,6 +80,7 @@ for i,mt in enumerate(measTypesP): # Polarimeter fwd fit
 axL[0].legend(list(map(list, zip(*mdHnd)))[0], lgTxt)
 axL[0].set_ylabel('Altitude (km)')
 axL[0].set_xlabel('Modal Extinction (A.U.)')
+axL[0].set_xlim([0,0.7])
 if hsrl:
     axL[1].set_xlabel('Extinction ($Mm^{-1}$)')
     axL[2].set_xlabel('Backscatter ($Mm^{-1}Sr^{-1}$)')

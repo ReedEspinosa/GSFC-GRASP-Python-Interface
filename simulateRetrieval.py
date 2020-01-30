@@ -87,7 +87,7 @@ class simulation(object):
                 self.rsltFwd = np.array(pickle.load(f))
             except EOFError: # this was an older file (created before Jan 2020)
                 self.rsltFwd = [self.rsltBck[-1]]
-                del(self.rsltBck[-1])
+                self.rsltBck = self.rsltBck[:-1]
  
     def analyzeSim(self, wvlnthInd=0, modeCut=0.5, swapFwdModes = False): # modeCut is fine/coarse seperation radius in um; NOTE: only applies if fwd & inv models have differnt number of modes
         if not type(self.rsltFwd) is dict: self.rsltFwd = self.rsltFwd[0] # HACK [VERY BAD] -- remove when we fix this to work with lists 
@@ -119,7 +119,7 @@ class simulation(object):
             if rtrvd.ndim>1 and not av=='rEffMode': # we will seperate fine and coarse modes here
                 if modeCut:
                     for i,rs in enumerate(self.rsltBck): 
-                        rtrvd[i]= self.volWghtedAvg(rtrvd[i], rs['rv'], rs['sigma'], rs['vol'], modeCut)                
+                        rtrvd[i]= self.volWghtedAvg(rtrvd[i], rs['rv'], rs['sigma'], rs['vol'], modeCut)
                     true = self.volWghtedAvg(true, self.rsltFwd['rv'], self.rsltFwd['sigma'], self.rsltFwd['vol'], modeCut)
                 else:
                     assert len(self.rsltBck[0]['rv'])==len(self.rsltFwd['rv']), 'If modeCut==None, foward and inverted data must have the same number of modes.'
