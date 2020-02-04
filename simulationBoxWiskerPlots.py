@@ -19,30 +19,31 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../MA
 import ACCP_functions as af
 
 #simB.analyzeSim()
-#instruments = ['lidar05'] #1
-instruments = ['lidar09+polar07', 'lidar05+polar07'] #1
-instruments = ['lidar05+polar07'] #1
+instruments = ['lidar09+polar07'] #1
+#instruments = ['lidar05+polar07', 'lidar09+polar07'] #1
+#instruments = ['lidar05+polar07'] #1
 #instruments = ['PolOnly_lidar05+polar07', 'lidar09+polar07','lidar05+polar07', 'lidar05'] #1
 #conCases = ['marine', 'pollution','smoke','marine+pollution','marine+smoke','Smoke+pollution'] #6
 #conCases = ['variablefinenonsph','variablefinenonsph','variablefinenonsph','variablefinenonsph'] #6
 #conCases = ['case02a','case02b','case02c','case03','case07']
-conCases = []
-for caseLet in ['a','b','c','d','e','f']:
-#    conCases.append('case06'+caseLet)
-    conCases.append('case06'+caseLet+'monomode')
+conCases = ['variable']
+#for caseLet in ['a','b','c','d','e','f']:
+##    conCases.append('case06'+caseLet)
+#    conCases.append('case06'+caseLet+'monomode')
 #    if caseLet in ['e','f']:
 #        conCases.append('case06'+caseLet+'nonsph')
 #        conCases.append('case06'+caseLet+'monomode'+'nonsph') #21 total
 #conCases = ['case06amonomode', 'case06bmonomode']
 #SZAs = [0.1, 15, 30, 45, 60] # 3
-SZAs = [0.1, 30, 60] # 3
-SZAs = [30] # 3
+SZAs = [0.1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60] # 3
 Phis = [0] # 1 -> N=18 Nodes
-tauVals = [1.0] #
+#tauVals = [1.0] #
 #tauVals = [0.03, 0.05, 0.08, 0.1, 0.12, 0.16, 0.2, 0.25, 0.3, 0.35]
-#tauVals = [0.04, 0.08, 0.12, 0.18, 0.35] # NEED TO MAKE THIS CHANGE FILE NAME
+tauVals = [0.04, 0.08, 0.12, 0.18, 0.35] # NEED TO MAKE THIS CHANGE FILE NAME
 #N = len(SZAs)*len(conCases)*len(Phis)*len(instruments)
 N = len(SZAs)*len(conCases)*len(Phis)*len(tauVals)
+N=36
+
 gridPlots = False
 #l = 3
 #lVals = [0,3,5,10]
@@ -56,7 +57,7 @@ totVars = ['aod', 'ssa', 'g', 'LidarRatio']
 modVars = ['n', 'aodMode', 'ssaMode']  # reff should be profile
 
 #trgt = {'aod':[0.02], 'ssa':[0.03], 'g':[0.02], 'height':[500], 'rEffCalc':[0.0], 'aodMode':[0.02,0.02], 'ssaMode':[0.03,0.03], 'n':[0.025,0.025,0.025]} # look at total and fine/coarse 
-trgt = {'aod':[0.02], 'ssa':[0.03], 'g':[0.02], 'aodMode':[0.02,0.02], 'ssaMode':[0.03,0.03], 'n':[0.025,0.025,0.025], 'LidarRatio':[0.0]} # look at total and fine/coarse 
+trgt = {'aod':[0.02], 'ssa':[0.04], 'g':[0.02], 'aodMode':[0.02,0.02], 'ssaMode':[0.04,0.04], 'n':[0.025,0.025,0.025], 'LidarRatio':[0.0]} # look at total and fine/coarse 
 #trgt = {'aod':[0.02], 'ssa':[0.03], 'g':[0.02], 'height':[1000], 'rEffCalc':[0.0], 'aodMode':[0.02,0.02], 'ssaMode':[0.03,0.03], 'n':[0.025]} # only look at one mode (code below will work even if RMSE is calculated for fine/coarse too as long as n is listed under totVars)
 #trgtRel = {'aod':0.05, 'rEffCalc':0.20, 'aodMode':0.05} # this part must be same for every mode but absolute component above can change
 trgtRel = {'aod':0.05, 'aodMode':0.05, 'LidarRatio':[0.25]} # this part must be same for every mode but absolute component above can change
@@ -67,11 +68,11 @@ trgtRel = {'aod':0.05, 'aodMode':0.05, 'LidarRatio':[0.25]} # this part must be 
 # rEffCalc and it should be 20%
 # ssa total 0.03
 
-swapModes = True
+swapModes = False
 printRslt = True
 
 #simRsltFile = '/Users/wrespino/Synced/Working/SIM13_lidarTest/SIM43_lidar05+polar07_case-case06cmonomode_sza30_phi0_tFct1.00_V2.pkl'
-saveStart = '/Users/wrespino/Synced/Working/SIM13_lidarTest/SIM43_'
+saveStart = '/Users/wrespino/Synced/Working/SIM14_lidarPolACCP/SIM43V2_2mode_'
 
 cm = pylab.get_cmap('viridis')
 
@@ -99,10 +100,16 @@ for barInd, barVal in enumerate(instruments):
             savePath = '/Users/wrespino/Synced/Working/SIM13_lidarTest/SIM42_%s_case-%s_sza%d_phi%d_tFct%4.2f_V2.pkl' % paramTple #SIM3_polar07_case-Smoke+pollution_sza30_phi0_tFct0.04_V2.pkl            
         else:
             savePath = saveStart + '%s_case-%s_sza%d_phi%d_tFct%4.2f_V2.pkl' % paramTple #SIM3_polar07_case-Smoke+pollution_sza30_phi0_tFct0.04_V2.pkl
+        
         runNames.append('%s($θ_s=%d,φ=%d$)' % paramTple[1:4])
         runNames[-1] = runNames[-1].replace('pollution','POLL').replace('smoke','BB').replace('marine','MRN')
+#        if os.path.exists(savePath): # HACK -- worst of all time
         simB = simulation(picklePath=savePath)
+#        else:
+#            print('=>'+str(n))
         if not type(simB.rsltFwd) is dict: simB.rsltFwd = simB.rsltFwd[0] # HACK [VERY BAD] -- remove when we fix this to work with lists 
+        print("***** ", end=" ")
+        print(simB.rsltFwd['aod'][4])
         Nsims = len(simB.rsltBck)
 #        lInd = l+1 if 'lidar' in instruments[ind[0]] and l>0 else l
         print('---')
@@ -131,10 +138,12 @@ for barInd, barVal in enumerate(instruments):
 #                print('---', end =",")
                 print('%5f' % err['$LidarRatio$'==np.array(gvNames)], end =",")
                 print('---', end =",")
-                if 'case06a' in paramTple[1] or 'case06b' in paramTple[1]:
+                if 'case06a' in paramTple[1] or 'case06b' in paramTple[1]: # HACK -- all this should be improved...
                     print('%5f' % err['$AOD_{coarse}$'==np.array(gvNames)], end =",")
                 elif 'case06c' in paramTple[1] or 'case06d' in paramTple[1]:
                     print('%5f' % err['$AOD$'==np.array(gvNames)], end =",")                
+                elif 'variable' in paramTple[1] and not 'swap' in paramTple[1]:
+                    print('%5f' % err['$AOD_{fine}$'==np.array(gvNames)], end =",")
                 else:
                     print('---', end =",")
                 if 'case06c' in paramTple[1] or 'case06d' in paramTple[1]:
