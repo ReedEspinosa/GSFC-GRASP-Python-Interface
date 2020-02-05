@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# THIS SCIRPT IS OUTDATED: The best place to obtain a retrieval simulation usage example is currently runRetrievalSimulation.py  in the MADCAP_scripts repo.
+
 import numpy as np
 import os
 import sys
