@@ -89,8 +89,13 @@ class simulation(object):
                 self.rsltFwd = [self.rsltBck[-1]]
                 self.rsltBck = self.rsltBck[:-1]
  
-    def analyzeSim(self, wvlnthInd=0, modeCut=0.5, swapFwdModes = False): # modeCut is fine/coarse seperation radius in um; NOTE: only applies if fwd & inv models have differnt number of modes
+    def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None, swapFwdModes=False): # modeCut is fine/coarse seperation radius in um; NOTE: only applies if fwd & inv models have differnt number of modes
+        """ swapFwdModes only works if there are two modes..."""
         if not type(self.rsltFwd) is dict: self.rsltFwd = self.rsltFwd[0] # HACK [VERY BAD] -- remove when we fix this to work with lists 
+        assert not (modeCut and hghtCut), 'Only modeCut or hghtCut can be provided, not both.'
+        # TODO checks on hghtCut
+        if not (len(self.rsltBck[0]['rv'])==len(self.rsltFwd['rv']) or modeCut or hghtCut): # we need to known how to align the modes...
+            modeCut = 0.5 # default, we split fine and coarse at 0.5 μm        
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc', 'height']
         varsAodAvg = ['n', 'k'] # modal variables for which we will append a aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
@@ -117,11 +122,18 @@ class simulation(object):
                 true = self.ReffMode(self.rsltFwd,modeCut)
                 rtrvd = np.array([self.ReffMode(rs,modeCut) for rs in self.rsltBck])
             if rtrvd.ndim>1 and not av=='rEffMode': # we will seperate fine and coarse modes here
-                if modeCut:
-                    for i,rs in enumerate(self.rsltBck): 
-                        rtrvd[i]= self.volWghtedAvg(rtrvd[i], rs['rv'], rs['sigma'], rs['vol'], modeCut)
-                    true = self.volWghtedAvg(true, self.rsltFwd['rv'], self.rsltFwd['sigma'], self.rsltFwd['vol'], modeCut)
-                else:
+                if modeCut or hghtCut: # use modeCut(hghtCut) to calculated vol weighted contribution to fine(PBL) and coarse(Free Trop.)
+                    rtrvdBimode = np.full([rtrvd.shape[0],2], np.nan)
+                    if modeCut:
+                        for i,rs in enumerate(self.rsltBck): 
+                            rtrvdBimode[i]= self.volWghtedAvg(rtrvd[i], rs['rv'], rs['sigma'], rs['vol'], modeCut)
+                        true = self.volWghtedAvg(true, self.rsltFwd['rv'], self.rsltFwd['sigma'], self.rsltFwd['vol'], modeCut)
+                    else:
+                        for i,rs in enumerate(self.rsltBck): 
+                            rtrvdBimode[i] = self.hghtWghtedAvg(rtrvd[i], rs['range'], rs['βext'], rs['aodMode'], hghtCut)
+                        true = self.hghtWghtedAvg(true, self.rsltFwd['range'], self.rsltFwd['βext'], self.rsltFwd['aodMode'], hghtCut)
+                    rtrvd = rtrvdBimode
+                else: # a one-to-one pairing of foward and back nodes, requires NmodeFwd==NmodeBack
                     assert len(self.rsltBck[0]['rv'])==len(self.rsltFwd['rv']), 'If modeCut==None, foward and inverted data must have the same number of modes.'
                 if av in varsAodAvg: # we also want to calculate the total, mode AOD weighted value of the variable
                     avgVal = [np.sum(rs[av][:,wvlnthInd]*rs['aodMode'][:,wvlnthInd])/np.sum(rs['aodMode'][:,wvlnthInd]) for rs in self.rsltBck]
@@ -156,6 +168,14 @@ class simulation(object):
             return np.sum(crsWght,axis=1)
         else: 
             return np.sum(crsWght*val,axis=1)/np.sum(crsWght,axis=1)
+
+    def hghtWghtedAvg(self, val, vertRange, βext, aodMode, hghtCut): 
+        wghtsPBL = βext.T[vertRange < hghtCut].sum(axis=0)*aodMode
+        wghtsFT = βext.T[vertRange > hghtCut].sum(axis=0)*aodMode
+        if np.any(vertRange==hghtCut): warnings.warn('hghtCut fell exactly on one of the vertical bins, this bin was excluded from the weighting.')
+        valPBL = np.sum(val*wghtsPBL)/np.sum(wghtsPBL)
+        valFT = np.sum(val*wghtsFT)/np.sum(wghtsFT)
+        return [valPBL, valFT]
 
     def ReffMode(self, rs, modeCut):
         if not modeCut: 
