@@ -5,6 +5,7 @@ import numpy as np
 import copy
 import pickle
 import os
+import warnings
 import datetime as dt
 import runGRASP as rg
 import miscFunctions as ms
@@ -94,6 +95,8 @@ class simulation(object):
         if not type(self.rsltFwd) is dict: self.rsltFwd = self.rsltFwd[0] # HACK [VERY BAD] -- remove when we fix this to work with lists 
         assert not (modeCut and hghtCut), 'Only modeCut or hghtCut can be provided, not both.'
         # TODO checks on hghtCut
+        rmsFun = lambda t,r: np.sqrt(np.median((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r)
+        biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output
         if not (len(self.rsltBck[0]['rv'])==len(self.rsltFwd['rv']) or modeCut or hghtCut): # we need to known how to align the modes...
             modeCut = 0.5 # default, we split fine and coarse at 0.5 μm        
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
@@ -108,51 +111,45 @@ class simulation(object):
         bias = dict()
         assert (not self.rsltBck is None) and self.rsltFwd, 'You must call loadSim() or runSim() before you can calculate statistics!'
         for av in varsSpctrl+varsMorph+['rEffMode']:
-            if av in varsSpctrl:
-                rtrvd = np.array([rs[av][...,wvlnthInd] for rs in self.rsltBck]) # wavelength is always the last dimension
-                true = self.rsltFwd[av][...,wvlnthInd]
-                if true.ndim==1 and true.shape[0]==2 and swapFwdModes:
-                    true = true[::-1]
-            elif av in varsMorph:
-                rtrvd = np.array([rs[av] for rs in self.rsltBck])
-                true = self.rsltFwd[av]
-                if true.ndim==1 and true.shape[0]==2 and swapFwdModes:
-                    true = true[::-1]
-            elif av=='rEffMode':
+            if av=='rEffMode':
                 true = self.ReffMode(self.rsltFwd,modeCut)
                 rtrvd = np.array([self.ReffMode(rs,modeCut) for rs in self.rsltBck])
-            if rtrvd.ndim>1 and not av=='rEffMode': # we will seperate fine and coarse modes here
-                if modeCut or hghtCut: # use modeCut(hghtCut) to calculated vol weighted contribution to fine(PBL) and coarse(Free Trop.)
+            else:
+                rtrvd = np.array([rs[av] for rs in self.rsltBck])
+                true = self.rsltFwd[av]
+                if av in varsSpctrl:
+                    rtrvd = rtrvd[...,wvlnthInd]
+                    true = true[...,wvlnthInd]
+                if true.ndim==1 and true.shape[0]==2 and swapFwdModes:
+                    true = true[::-1]
+            if rtrvd.ndim>1 and not av=='rEffMode': # we will seperate fine/coarse or FT/PBL modes here 
+                if modeCut:# use modeCut to calculate vol weighted contribution to fine and coarse
                     rtrvdBimode = np.full([rtrvd.shape[0],2], np.nan)
-                    if modeCut:
-                        for i,rs in enumerate(self.rsltBck): 
-                            rtrvdBimode[i]= self.volWghtedAvg(rtrvd[i], rs['rv'], rs['sigma'], rs['vol'], modeCut)
-                        true = self.volWghtedAvg(true, self.rsltFwd['rv'], self.rsltFwd['sigma'], self.rsltFwd['vol'], modeCut)
-                    else:
-                        for i,rs in enumerate(self.rsltBck): 
-                            rtrvdBimode[i] = self.hghtWghtedAvg(rtrvd[i], rs['range'], rs['βext'], rs['aodMode'], hghtCut)
-                        true = self.hghtWghtedAvg(true, self.rsltFwd['range'], self.rsltFwd['βext'], self.rsltFwd['aodMode'], hghtCut)
-                    rtrvd = rtrvdBimode
-                else: # a one-to-one pairing of foward and back nodes, requires NmodeFwd==NmodeBack
-                    assert len(self.rsltBck[0]['rv'])==len(self.rsltFwd['rv']), 'If modeCut==None, foward and inverted data must have the same number of modes.'
-                if av in varsAodAvg: # we also want to calculate the total, mode AOD weighted value of the variable
+                    for i,rs in enumerate(self.rsltBck): 
+                        rtrvdBimode[i]= self.volWghtedAvg(rtrvd[i], rs['rv'], rs['sigma'], rs['vol'], modeCut)
+                    trueBimode = self.volWghtedAvg(true, self.rsltFwd['rv'], self.rsltFwd['sigma'], self.rsltFwd['vol'], modeCut)
+                if hghtCut: # use hghtCut to calculate vol weighted contribution to PBL and Free Trop.
+                    rtrvdBilayer = np.full([rtrvd.shape[0],2], np.nan)
+                    for i,rs in enumerate(self.rsltBck): 
+                        rtrvdBilayer[i] = self.hghtWghtedAvg(rtrvd[i], rs['range'], rs['βext'], rs['aodMode'], hghtCut)
+                    trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd['range'], self.rsltFwd['βext'], self.rsltFwd['aodMode'], hghtCut)            
+                if av in varsAodAvg: # calculate the total, mode AOD weighted value of the variable (likely just CRI) -> [total, mode1, mode2,...]
                     avgVal = [np.sum(rs[av][:,wvlnthInd]*rs['aodMode'][:,wvlnthInd])/np.sum(rs['aodMode'][:,wvlnthInd]) for rs in self.rsltBck]
                     rtrvd = np.vstack([avgVal, rtrvd.T]).T
                     avgVal = np.sum(self.rsltFwd[av][:,wvlnthInd]*self.rsltFwd['aodMode'][:,wvlnthInd])/np.sum(self.rsltFwd['aodMode'][:,wvlnthInd])
                     true = np.r_[avgVal, true]
             if av in ['n','k','sph'] and true.ndim==1 and rtrvd.ndim==1 and true.shape[0]!=rtrvd.shape[0]: # HACK (kinda): if we only retrieve one mode but simulate more we won't report anything
                 true = np.mean(true)
-#            stdDevCut = 2
-#            if rtrvd.ndim==1:
-#                rtrvdCln = rtrvd[abs(rtrvd - np.mean(rtrvd)) < stdDevCut * np.std(rtrvd)]
-#                rmsErr[av] = np.sqrt(np.mean((true-rtrvdCln)**2, axis=0))
-#            else:
-#                rmsErr[av] = np.empty(rtrvd.shape[1])
-#                for m in range(rtrvd.shape[1]):
-#                    rtrvdCln = rtrvd[:,m][abs(rtrvd[:,m] - np.mean(rtrvd[:,m])) < stdDevCut * np.std(rtrvd[:,m])]                        
-#                    rmsErr[av][m] = np.sqrt(np.mean((true[m]-rtrvdCln)**2, axis=0))
-            rmsErr[av] = np.sqrt(np.median((true-rtrvd)**2, axis=0))
-            bias[av] = rtrvd-true if rtrvd.ndim > 1 else np.atleast_2d(rtrvd-true).T
+            # cacluate RMS and bias to be returned
+            if rtrvd.ndim>1 and not av=='rEffMode' and modeCut: # TODO when is rtrvd.ndim==1? (check is above too)
+                rmsErr[av+'_finecoarse'] = rmsFun(trueBimode, rtrvdBimode)
+                bias[av+'_finecoarse'] = biasFun(trueBimode, rtrvdBimode)
+            if rtrvd.ndim>1 and not av=='rEffMode' and hghtCut:
+                rmsErr[av+'_topbot'] = rmsFun(trueBilayer, rtrvdBilayer) # TODO: should this be "bottop"? 
+                bias[av+'_topbot'] =  biasFun(trueBilayer, rtrvdBilayer)      
+            if len(self.rsltBck[0]['rv'])==len(self.rsltFwd['rv']):          
+                rmsErr[av] = rmsFun(true, rtrvd)
+                bias[av] = biasFun(true, rtrvd)
         return rmsErr, bias
     
     def volWghtedAvg(self, val, rv, sigma, vol, modeCut):
