@@ -87,58 +87,48 @@ class simulation(object):
             try:
                 self.rsltFwd = np.array(pickle.load(f))
             except EOFError: # this was an older file (created before Jan 2020)
-                self.rsltFwd = [self.rsltBck[-1]]
+                self.rsltFwd = [self.rsltBck[-1]] # resltFwd as a array of len==0 (not totaly backward compatible, it used to be straight dict)
                 self.rsltBck = self.rsltBck[:-1]
  
     def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None): 
         """ Returns the RMSE and bias (defined below) from the simulation results
                 wvlngthInd - the index of the wavelength to calculate stats for
-                modeCut - fine/coarse seperation radius in um
-                hghtCut - PBL/FT seperation in meters """
-        if not type(self.rsltFwd) is dict: self.rsltFwd = self.rsltFwd[0] # HACK [VERY BAD] -- remove when we fix this to work with lists 
+                modeCut - fine/coarse seperation radius in um (None -> do not calculate error's modal dependence)
+                hghtCut - PBL/FT seperation in meters (None -> do not calculate error's layer dependence)
+                NOTE: this method generally assumes configuration (e.g. # of modes) is the same across all pixels
+                """
+        assert 'rv' in self.rsltFwd[0] and 'rv' in self.rsltBck[0], 'This function only works with GRASPs lognormal PSD representation.' 
         rmsFun = lambda t,r: np.sqrt(np.median((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r)
         biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output
-        if not (len(self.rsltBck[0]['rv'])==len(self.rsltFwd['rv']) or modeCut or hghtCut): # we need to known how to align the modes...
-            modeCut = 0.5 # default, we split fine and coarse at 0.5 μm        
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc', 'height']
-        varsAodAvg = ['n', 'k'] # modal variables for which we will append a aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
-        varsSpctrl = [z for z in varsSpctrl if z in self.rsltFwd] # check that the variable is used in current configuration
-        varsMorph = [z for z in varsMorph if z in self.rsltFwd]
-        varsAodAvg = [z for z in varsAodAvg if z in self.rsltFwd]
-#        TODO: this whole method needs to be rewritten to allow rsltFwd to be a vector
-#           it might make sense to break the following code into two methods for len(rsltFwd) > 1 and len(rsltFwd) == 1 (current code basicly)
+        varsAodAvg = ['n', 'k'] # modal variables for which we will append aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
+        varsSpctrl = [z for z in varsSpctrl if z in self.rsltFwd[0]] # check that the variable is used in current configuration
+        varsMorph = [z for z in varsMorph if z in self.rsltFwd[0]]
+        varsAodAvg = [z for z in varsAodAvg if z in self.rsltFwd[0]]
         rmsErr = dict()
         bias = dict()
         assert (not self.rsltBck is None) and self.rsltFwd, 'You must call loadSim() or runSim() before you can calculate statistics!'
         for av in varsSpctrl+varsMorph+['rEffMode']:
             if av=='rEffMode':
-                true = self.ReffMode(self.rsltFwd,modeCut)
-                rtrvd = np.array([self.ReffMode(rs,modeCut) for rs in self.rsltBck])
+                rtrvd = np.array([self.ReffMode(rb, modeCut) for rb in self.rsltBck])
+                true = np.array([self.ReffMode(rf, modeCut) for rf in self.rsltFwd])
             else:
-                rtrvd = np.array([rs[av] for rs in self.rsltBck])
-                true = self.rsltFwd[av]
+                rtrvd = np.array([rb[av] for rb in self.rsltBck])
+                true = np.array([rf[av] for rf in self.rsltFwd])
                 if av in varsSpctrl:
                     rtrvd = rtrvd[...,wvlnthInd]
                     true = true[...,wvlnthInd]
             if rtrvd.ndim>1 and not av=='rEffMode': # we will seperate fine/coarse or FT/PBL modes here (rtrvd.ndim==1 for nonmodal vars, e.g. AOD) 
                 if modeCut: # use modeCut to calculate vol weighted contribution to fine and coarse
-                    rtrvdBimode = np.full([rtrvd.shape[0],2], np.nan)
-                    for i,rs in enumerate(self.rsltBck): 
-                        rtrvdBimode[i]= self.volWghtedAvg(rtrvd[i], rs['rv'], rs['sigma'], rs['vol'], modeCut)
-                    trueBimode = self.volWghtedAvg(true, self.rsltFwd['rv'], self.rsltFwd['sigma'], self.rsltFwd['vol'], modeCut)
+                    rtrvdBimode = self.volWghtedAvg(rtrvd, self.rsltBck, modeCut)
+                    trueBimode = self.volWghtedAvg(true, self.rsltFwd, modeCut)
                 if hghtCut: # use hghtCut to calculate vol weighted contribution to PBL and Free Trop.
-                    rtrvdBilayer = np.full([rtrvd.shape[0],2], np.nan)
-                    for i,rs in enumerate(self.rsltBck): 
-                        rtrvdBilayer[i] = self.hghtWghtedAvg(rtrvd[i], rs['range'], rs['βext'], rs['aodMode'][:,wvlnthInd], hghtCut)
-                    trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd['range'], self.rsltFwd['βext'], self.rsltFwd['aodMode'][:,wvlnthInd], hghtCut)            
+                    rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut)
+                    trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd, wvlnthInd, hghtCut)
                 if av in varsAodAvg: # calculate the total, mode AOD weighted value of the variable (likely just CRI) -> [total, mode1, mode2,...]
-                    avgVal = [np.sum(rs[av][:,wvlnthInd]*rs['aodMode'][:,wvlnthInd])/np.sum(rs['aodMode'][:,wvlnthInd]) for rs in self.rsltBck]
-                    rtrvd = np.vstack([avgVal, rtrvd.T]).T
-                    avgVal = np.sum(self.rsltFwd[av][:,wvlnthInd]*self.rsltFwd['aodMode'][:,wvlnthInd])/np.sum(self.rsltFwd['aodMode'][:,wvlnthInd])
-                    true = np.r_[avgVal, true]
-            if av in ['n','k','sph'] and true.ndim==1 and rtrvd.ndim==1 and true.shape[0]!=rtrvd.shape[0]: # HACK (kinda): if we only retrieve one mode but simulate more we won't report anything
-                true = np.mean(true)
+                    rtrvd = np.vstack([self.τWghtedAvg(av, self.rsltBck, wvlnthInd), rtrvd.T]).T
+                    true = np.vstack([self.τWghtedAvg(av, self.rsltFwd, wvlnthInd), true.T]).T                    
             # cacluate RMS and bias to be returned
             if rtrvd.ndim>1 and not av=='rEffMode' and modeCut:
                 rmsErr[av+'_finecoarse'] = rmsFun(trueBimode, rtrvdBimode) # fine is 1st ind, coarse is 2nd
@@ -146,43 +136,57 @@ class simulation(object):
             if rtrvd.ndim>1 and not av=='rEffMode' and hghtCut:
                 rmsErr[av+'_PBLFT'] = rmsFun(trueBilayer, rtrvdBilayer) # PBL is 1st ind, FT (not total column!) is 2nd
                 bias[av+'_PBLFT'] =  biasFun(trueBilayer, rtrvdBilayer)      
-            if len(self.rsltBck[0]['rv'])==len(self.rsltFwd['rv']):          
+            if len(self.rsltBck[0]['rv'])==len(self.rsltFwd[0]['rv']):          
                 rmsErr[av] = rmsFun(true, rtrvd)
                 bias[av] = biasFun(true, rtrvd)
         return rmsErr, bias
     
-    def volWghtedAvg(self, val, rv, sigma, vol, modeCut):
+    def volWghtedAvg(self, val, rslts, modeCut, vol=None):
         N = 1e3
         lower = [modeCut/50, modeCut]
         upper = [modeCut, modeCut*50]
-        crsWght = []
-        for upr, lwr, in zip(upper,lower):
-            r = np.logspace(np.log10(lwr),np.log10(upr),N)
-            crsWght.append([np.trapz(ms.logNormal(mu, σ, r)[0],r) for mu,σ in zip (rv,sigma)])
-        crsWght = np.array(crsWght)*vol
-        if val is None: # we just want volume (or area if vol arugment contains area) concentration of each mode
-            return np.sum(crsWght,axis=1)
-        else: 
-            return np.sum(crsWght*val,axis=1)/np.sum(crsWght,axis=1)
+        Bimode = np.full([len(rslts),2], np.nan)
+        for i,rslt in enumerate(rslts): 
+            crsWght = []
+            for upr, lwr, in zip(upper,lower):
+                r = np.logspace(np.log10(lwr),np.log10(upr),N)
+                crsWght.append([np.trapz(ms.logNormal(mu, σ, r)[0],r) for mu,σ in zip (rslt['rv'],rslt['sigma'])])
+            crsWght = np.array(crsWght)*rslt['vol'] if vol is None else np.array(crsWght)*vol
+            if val is None: # we just want volume (or area if vol arugment contains area) concentration of each mode
+                Bimode[i] = np.sum(crsWght,axis=1)
+            else: 
+                Bimode[i] = np.sum(crsWght*val[i],axis=1)/np.sum(crsWght,axis=1)
+        return Bimode
 
-    def hghtWghtedAvg(self, val, vertRange, βext, aodMode, hghtCut): 
-        wghtsPBL = []
-        wghtsFT = []
-        for β,h,τ in zip(βext, vertRange, aodMode):
-            wghtsPBL.append(β[h < hghtCut].sum()/β.sum()*τ)
-            wghtsFT.append(β[h > hghtCut].sum()/β.sum()*τ)
-        if np.any(vertRange==hghtCut): warnings.warn('hghtCut fell exactly on one of the vertical bins, this bin was excluded from the weighting.')
-        valPBL = np.sum(val*wghtsPBL)/np.sum(wghtsPBL)
-        valFT = np.sum(val*wghtsFT)/np.sum(wghtsFT)
-        return [valPBL, valFT]
+    def hghtWghtedAvg(self, val, rslts, wvlnthInd, hghtCut): 
+        Bilayer = np.full([len(rslts),2], np.nan)
+        for i,rslt in enumerate(rslts): 
+            wghtsPBL = []
+            wghtsFT = []
+            for β,h,τ in zip(rslt['βext'], rslt['range'], rslt['aodMode'][:,wvlnthInd]):
+                wghtsPBL.append(β[h < hghtCut].sum()/β.sum()*τ)
+                wghtsFT.append(β[h > hghtCut].sum()/β.sum()*τ)
+            if np.any(rslt['range']==hghtCut): warnings.warn('hghtCut fell exactly on one of the vertical bins, this bin was excluded from the weighting.')
+            valPBL = np.sum(val*wghtsPBL)/np.sum(wghtsPBL)
+            valFT = np.sum(val*wghtsFT)/np.sum(wghtsFT)
+            Bilayer[i] = [valPBL, valFT]
+        return Bilayer
+
+    def τWghtedAvg(self, av, rslts, wvlnthInd):
+        avgVal = np.full(len(rslts), np.nan)
+        for i,rslt in enumerate(rslts):
+            ttlSum = np.sum(rslt[av][:,wvlnthInd]*rslt['aodMode'][:,wvlnthInd])
+            normDenom = np.sum(rslt['aodMode'][:,wvlnthInd])
+            avgVal[i] = ttlSum/normDenom
+        return avgVal
 
     def ReffMode(self, rs, modeCut):
         if not modeCut: 
             dndr = rs['rv']/np.exp(3*rs['sigma']**2)
             return dndr*np.exp(5/2*rs['sigma']**2) # eq. 60 from Grainger's "Useful Formulae for Aerosol Size Distributions"
-        Vfc = self.volWghtedAvg(None, rs['rv'], rs['sigma'], rs['vol'], modeCut)
+        Vfc = self.volWghtedAvg(None, [rs], modeCut)
         Amode = rs['vol']/rs['rv']*np.exp(rs['sigma']**2/2) # convert N to rv and then ratio 1st and 4th rows of Table 1 of Grainger's "Useful Formulae for Aerosol Size Distributions"
-        Afc = self.volWghtedAvg(None, rs['rv'], rs['sigma'], Amode, modeCut)
+        Afc = self.volWghtedAvg(None, [rs], modeCut, Amode)
         return Vfc/Afc # NOTE: ostensibly this should be Vfc/Afc/3 but we ommited the factor of 3 from Amode
     
     
