@@ -90,11 +90,12 @@ class simulation(object):
                 self.rsltFwd = [self.rsltBck[-1]]
                 self.rsltBck = self.rsltBck[:-1]
  
-    def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None, swapFwdModes=False): # modeCut is fine/coarse seperation radius in um; NOTE: only applies if fwd & inv models have differnt number of modes
-        """ swapFwdModes only works if there are two modes..."""
+    def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None): 
+        """ Returns the RMSE and bias (defined below) from the simulation results
+                wvlngthInd - the index of the wavelength to calculate stats for
+                modeCut - fine/coarse seperation radius in um
+                hghtCut - PBL/FT seperation in meters """
         if not type(self.rsltFwd) is dict: self.rsltFwd = self.rsltFwd[0] # HACK [VERY BAD] -- remove when we fix this to work with lists 
-        assert not (modeCut and hghtCut), 'Only modeCut or hghtCut can be provided, not both.'
-        # TODO checks on hghtCut
         rmsFun = lambda t,r: np.sqrt(np.median((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r)
         biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output
         if not (len(self.rsltBck[0]['rv'])==len(self.rsltFwd['rv']) or modeCut or hghtCut): # we need to known how to align the modes...
@@ -120,10 +121,8 @@ class simulation(object):
                 if av in varsSpctrl:
                     rtrvd = rtrvd[...,wvlnthInd]
                     true = true[...,wvlnthInd]
-                if true.ndim==1 and true.shape[0]==2 and swapFwdModes:
-                    true = true[::-1]
-            if rtrvd.ndim>1 and not av=='rEffMode': # we will seperate fine/coarse or FT/PBL modes here 
-                if modeCut:# use modeCut to calculate vol weighted contribution to fine and coarse
+            if rtrvd.ndim>1 and not av=='rEffMode': # we will seperate fine/coarse or FT/PBL modes here (rtrvd.ndim==1 for nonmodal vars, e.g. AOD) 
+                if modeCut: # use modeCut to calculate vol weighted contribution to fine and coarse
                     rtrvdBimode = np.full([rtrvd.shape[0],2], np.nan)
                     for i,rs in enumerate(self.rsltBck): 
                         rtrvdBimode[i]= self.volWghtedAvg(rtrvd[i], rs['rv'], rs['sigma'], rs['vol'], modeCut)
@@ -131,8 +130,8 @@ class simulation(object):
                 if hghtCut: # use hghtCut to calculate vol weighted contribution to PBL and Free Trop.
                     rtrvdBilayer = np.full([rtrvd.shape[0],2], np.nan)
                     for i,rs in enumerate(self.rsltBck): 
-                        rtrvdBilayer[i] = self.hghtWghtedAvg(rtrvd[i], rs['range'], rs['βext'], rs['aodMode'], hghtCut)
-                    trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd['range'], self.rsltFwd['βext'], self.rsltFwd['aodMode'], hghtCut)            
+                        rtrvdBilayer[i] = self.hghtWghtedAvg(rtrvd[i], rs['range'], rs['βext'], rs['aodMode'][:,wvlnthInd], hghtCut)
+                    trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd['range'], self.rsltFwd['βext'], self.rsltFwd['aodMode'][:,wvlnthInd], hghtCut)            
                 if av in varsAodAvg: # calculate the total, mode AOD weighted value of the variable (likely just CRI) -> [total, mode1, mode2,...]
                     avgVal = [np.sum(rs[av][:,wvlnthInd]*rs['aodMode'][:,wvlnthInd])/np.sum(rs['aodMode'][:,wvlnthInd]) for rs in self.rsltBck]
                     rtrvd = np.vstack([avgVal, rtrvd.T]).T
@@ -141,12 +140,12 @@ class simulation(object):
             if av in ['n','k','sph'] and true.ndim==1 and rtrvd.ndim==1 and true.shape[0]!=rtrvd.shape[0]: # HACK (kinda): if we only retrieve one mode but simulate more we won't report anything
                 true = np.mean(true)
             # cacluate RMS and bias to be returned
-            if rtrvd.ndim>1 and not av=='rEffMode' and modeCut: # TODO when is rtrvd.ndim==1? (check is above too)
-                rmsErr[av+'_finecoarse'] = rmsFun(trueBimode, rtrvdBimode)
+            if rtrvd.ndim>1 and not av=='rEffMode' and modeCut:
+                rmsErr[av+'_finecoarse'] = rmsFun(trueBimode, rtrvdBimode) # fine is 1st ind, coarse is 2nd
                 bias[av+'_finecoarse'] = biasFun(trueBimode, rtrvdBimode)
             if rtrvd.ndim>1 and not av=='rEffMode' and hghtCut:
-                rmsErr[av+'_topbot'] = rmsFun(trueBilayer, rtrvdBilayer) # TODO: should this be "bottop"? 
-                bias[av+'_topbot'] =  biasFun(trueBilayer, rtrvdBilayer)      
+                rmsErr[av+'_PBLFT'] = rmsFun(trueBilayer, rtrvdBilayer) # PBL is 1st ind, FT (not total column!) is 2nd
+                bias[av+'_PBLFT'] =  biasFun(trueBilayer, rtrvdBilayer)      
             if len(self.rsltBck[0]['rv'])==len(self.rsltFwd['rv']):          
                 rmsErr[av] = rmsFun(true, rtrvd)
                 bias[av] = biasFun(true, rtrvd)
@@ -167,8 +166,11 @@ class simulation(object):
             return np.sum(crsWght*val,axis=1)/np.sum(crsWght,axis=1)
 
     def hghtWghtedAvg(self, val, vertRange, βext, aodMode, hghtCut): 
-        wghtsPBL = βext.T[vertRange < hghtCut].sum(axis=0)*aodMode
-        wghtsFT = βext.T[vertRange > hghtCut].sum(axis=0)*aodMode
+        wghtsPBL = []
+        wghtsFT = []
+        for β,h,τ in zip(βext, vertRange, aodMode):
+            wghtsPBL.append(β[h < hghtCut].sum()/β.sum()*τ)
+            wghtsFT.append(β[h > hghtCut].sum()/β.sum()*τ)
         if np.any(vertRange==hghtCut): warnings.warn('hghtCut fell exactly on one of the vertical bins, this bin was excluded from the weighting.')
         valPBL = np.sum(val*wghtsPBL)/np.sum(wghtsPBL)
         valFT = np.sum(val*wghtsFT)/np.sum(wghtsFT)
