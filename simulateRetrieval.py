@@ -97,9 +97,10 @@ class simulation(object):
                 hghtCut - PBL/FT seperation in meters (None -> do not calculate error's layer dependence)
                 NOTE: this method generally assumes configuration (e.g. # of modes) is the same across all pixels
                 """
-        assert type(self.rsltFwd) is list, 'rsltFwd must be a list! Note that it was stored as a dict in older versions of the code.'
-        assert 'rv' in self.rsltFwd[0] and 'rv' in self.rsltBck[0], 'This function only works with GRASPs lognormal PSD representation.' 
-        assert hghtCut is None or ('βext' in self.rsltFwd[0] and 'βext' in self.rsltBck[0]), 'PBL and FT errors can only be calculated LIDAR retrievals! You must set heghtCut=None' 
+        assert type(self.rsltFwd) is list or type(self.rsltFwd) is np.ndarray, 'rsltFwd must be a list! Note that it was stored as a dict in older versions of the code.'
+        lgnrmPSD = ('rv' in self.rsltFwd[0] and 'rv' in self.rsltBck[0])
+        assert modeCut is None or lgnrmPSD, 'Fine/Coarse errors can only be caluclated from GRASPs lognormal PSD representation! For this data, you must set modeCut=None' 
+        assert hghtCut is None or ('βext' in self.rsltFwd[0] and 'βext' in self.rsltBck[0]), 'PBL/FT errors can only be calculated LIDAR retrievals! For this data, you must set heghtCut=None' 
         rmsFun = lambda t,r: np.sqrt(np.median((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r)
         biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
@@ -110,8 +111,8 @@ class simulation(object):
         varsAodAvg = [z for z in varsAodAvg if z in self.rsltFwd[0]]
         rmsErr = dict()
         bias = dict()
-        assert (not self.rsltBck is None) and self.rsltFwd, 'You must call loadSim() or runSim() before you can calculate statistics!'
-        for av in varsSpctrl+varsMorph+['rEffMode']:
+        assert (not self.rsltBck is None) and (not self.rsltFwd is None), 'You must call loadSim() or runSim() before you can calculate statistics!'
+        for av in varsSpctrl+varsMorph+['rEffMode'] if lgnrmPSD else varsSpctrl+varsMorph:
             if av=='rEffMode':
                 rtrvd = np.array([self.ReffMode(rb, modeCut) for rb in self.rsltBck])
                 true = np.array([self.ReffMode(rf, modeCut) for rf in self.rsltFwd])
@@ -138,7 +139,7 @@ class simulation(object):
             if rtrvd.ndim>1 and not av=='rEffMode' and hghtCut:
                 rmsErr[av+'_PBLFT'] = rmsFun(trueBilayer, rtrvdBilayer) # PBL is 1st ind, FT (not total column!) is 2nd
                 bias[av+'_PBLFT'] =  biasFun(trueBilayer, rtrvdBilayer)      
-            if len(self.rsltBck[0]['rv'])==len(self.rsltFwd[0]['rv']):          
+            if true.shape[1]==rtrvd.shape[1]: # truth and retrieved modes can be paired one-to-one    
                 rmsErr[av] = rmsFun(true, rtrvd)
                 bias[av] = biasFun(true, rtrvd)
         return rmsErr, bias
