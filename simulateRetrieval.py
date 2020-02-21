@@ -97,7 +97,9 @@ class simulation(object):
                 hghtCut - PBL/FT seperation in meters (None -> do not calculate error's layer dependence)
                 NOTE: this method generally assumes configuration (e.g. # of modes) is the same across all pixels
                 """
+        assert type(self.rsltFwd) is list, 'rsltFwd must be a list! Note that it was stored as a dict in older versions of the code.'
         assert 'rv' in self.rsltFwd[0] and 'rv' in self.rsltBck[0], 'This function only works with GRASPs lognormal PSD representation.' 
+        assert hghtCut is None or ('βext' in self.rsltFwd[0] and 'βext' in self.rsltBck[0]), 'PBL and FT errors can only be calculated LIDAR retrievals! You must set heghtCut=None' 
         rmsFun = lambda t,r: np.sqrt(np.median((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r)
         biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
