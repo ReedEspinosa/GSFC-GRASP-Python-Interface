@@ -13,7 +13,6 @@ import numpy as np
 import pandas as pd
 import miscFunctions as mf
 from datetime import datetime as dt # we want datetime.datetime
-from datetime import timedelta
 from shutil import copyfile
 from subprocess import Popen,PIPE
 from scipy.stats import gaussian_kde

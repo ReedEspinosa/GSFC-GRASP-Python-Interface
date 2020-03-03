@@ -96,6 +96,11 @@ class simulation(object):
                 modeCut - fine/coarse seperation radius in um (None -> do not calculate error's modal dependence)
                 hghtCut - PBL/FT seperation in meters (None -> do not calculate error's layer dependence)
                 NOTE: this method generally assumes configuration (e.g. # of modes) is the same across all pixels
+                TODO: we can do a lot better than we do here in terms of modeCut and hghtCut...
+                    - Why are we doing volume weighted averages? It should be AOD weighted.
+                    - rEff needs to include seperate errors for PBL and column/FT
+                    - we can also do g and LidarRatio exactly but formulas are less trivial (see/merge with rtrvdDataSetPixels() in readOSSEnetCDF)
+                        - note that these are only exact for a single species (i.e. one CRI, PSD, etc.), ultimatly we need to save modal g and lidarRatio
                 """
         assert type(self.rsltFwd) is list or type(self.rsltFwd) is np.ndarray, 'rsltFwd must be a list! Note that it was stored as a dict in older versions of the code.'
         lgnrmPSD = ('rv' in self.rsltFwd[0] and 'rv' in self.rsltBck[0])
@@ -106,42 +111,45 @@ class simulation(object):
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc', 'height']
         varsAodAvg = ['n', 'k'] # modal variables for which we will append aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
+        modalVars = ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode','aodMode'] + varsAodAvg # variables for which we find fine/coarse or FT/PBL errors seperately  
         varsSpctrl = [z for z in varsSpctrl if z in self.rsltFwd[0]] # check that the variable is used in current configuration
         varsMorph = [z for z in varsMorph if z in self.rsltFwd[0]]
-        varsAodAvg = [z for z in varsAodAvg if z in self.rsltFwd[0]]
         rmsErr = dict()
         bias = dict()
         assert (not self.rsltBck is None) and (not self.rsltFwd is None), 'You must call loadSim() or runSim() before you can calculate statistics!'
-        for av in varsSpctrl+varsMorph+['rEffMode'] if lgnrmPSD else varsSpctrl+varsMorph:
-            if av=='rEffMode':
-                rtrvd = np.array([self.ReffMode(rb, modeCut) for rb in self.rsltBck])
-                true = np.array([self.ReffMode(rf, modeCut) for rf in self.rsltFwd])
-            else:
-                rtrvd = np.array([rb[av] for rb in self.rsltBck])
-                true = np.array([rf[av] for rf in self.rsltFwd])
-                if av in varsSpctrl:
-                    rtrvd = rtrvd[...,wvlnthInd]
-                    true = true[...,wvlnthInd]
-            if rtrvd.ndim>1 and not av=='rEffMode': # we will seperate fine/coarse or FT/PBL modes here (rtrvd.ndim==1 for nonmodal vars, e.g. AOD) 
-                if modeCut: # use modeCut to calculate vol weighted contribution to fine and coarse
+        for av in varsSpctrl+varsMorph:
+            rtrvd = np.array([rb[av] for rb in self.rsltBck])
+            true = np.array([rf[av] for rf in self.rsltFwd])
+            if av in varsSpctrl:
+                rtrvd = rtrvd[...,wvlnthInd]
+                true = true[...,wvlnthInd]
+            if rtrvd.ndim==1: rtrvd = np.expand_dims(rtrvd,1) # we want [ipix, imode], we add a singleton dimension if only one mode
+            if true.ndim==1: true = np.expand_dims(true,1)            
+            if rtrvd.ndim>1: # we will seperate fine/coarse or FT/PBL modes here (rtrvd.ndim==1 for nonmodal vars, e.g. AOD) 
+                if modeCut and av in modalVars: # use modeCut to calculate vol weighted contribution to fine and coarse
                     rtrvdBimode = self.volWghtedAvg(rtrvd, self.rsltBck, modeCut)
                     trueBimode = self.volWghtedAvg(true, self.rsltFwd, modeCut)
-                if hghtCut: # use hghtCut to calculate vol weighted contribution to PBL and Free Trop.
+                if hghtCut and av in modalVars: # use hghtCut to calculate vol weighted contribution to PBL and Free Trop.
                     rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut)
                     trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd, wvlnthInd, hghtCut)
                 if av in varsAodAvg: # calculate the total, mode AOD weighted value of the variable (likely just CRI) -> [total, mode1, mode2,...]
                     rtrvd = np.vstack([self.τWghtedAvg(av, self.rsltBck, wvlnthInd), rtrvd.T]).T
                     true = np.vstack([self.τWghtedAvg(av, self.rsltFwd, wvlnthInd), true.T]).T                    
             # cacluate RMS and bias to be returned
-            if rtrvd.ndim>1 and not av=='rEffMode' and modeCut:
+            if av in modalVars and modeCut:
                 rmsErr[av+'_finecoarse'] = rmsFun(trueBimode, rtrvdBimode) # fine is 1st ind, coarse is 2nd
                 bias[av+'_finecoarse'] = biasFun(trueBimode, rtrvdBimode)
-            if rtrvd.ndim>1 and not av=='rEffMode' and hghtCut:
+            if av in modalVars and hghtCut:
                 rmsErr[av+'_PBLFT'] = rmsFun(trueBilayer, rtrvdBilayer) # PBL is 1st ind, FT (not total column!) is 2nd
                 bias[av+'_PBLFT'] =  biasFun(trueBilayer, rtrvdBilayer)      
-            if true.shape[1]==rtrvd.shape[1]: # truth and retrieved modes can be paired one-to-one    
+            if true.shape[1] == rtrvd.shape[1]: # truth and retrieved modes can be paired one-to-one    
                 rmsErr[av] = rmsFun(true, rtrvd)
                 bias[av] = biasFun(true, rtrvd)
+        # calculate for rEff, could probably be abstracted into above code but tricky b/c volume weighted mean will not give exactly correct results (code below is exact)
+        rtrvd = np.array([self.ReffMode(rb, modeCut) for rb in self.rsltBck])
+        true = np.array([self.ReffMode(rf, modeCut) for rf in self.rsltFwd])
+        rmsErr['rEff_finecoarse'] = rmsFun(true, rtrvd)
+        bias['rEff_finecoarse'] = biasFun(true, rtrvd)
         return rmsErr, bias
     
     def volWghtedAvg(self, val, rslts, modeCut, vol=None):
@@ -185,12 +193,12 @@ class simulation(object):
 
     def ReffMode(self, rs, modeCut):
         if not modeCut: 
-            dndr = rs['rv']/np.exp(3*rs['sigma']**2)
-            return dndr*np.exp(5/2*rs['sigma']**2) # eq. 60 from Grainger's "Useful Formulae for Aerosol Size Distributions"
+            rv_dndr = rs['rv']/np.exp(3*rs['sigma']**2)
+            return rv_dndr*np.exp(5/2*rs['sigma']**2) # eq. 60 from Grainger's "Useful Formulae for Aerosol Size Distributions"
         Vfc = self.volWghtedAvg(None, [rs], modeCut)
         Amode = rs['vol']/rs['rv']*np.exp(rs['sigma']**2/2) # convert N to rv and then ratio 1st and 4th rows of Table 1 of Grainger's "Useful Formulae for Aerosol Size Distributions"
         Afc = self.volWghtedAvg(None, [rs], modeCut, Amode)
-        return Vfc/Afc # NOTE: ostensibly this should be Vfc/Afc/3 but we ommited the factor of 3 from Amode
+        return Vfc/Afc # NOTE: ostensibly this should be Vfc/Afc/3 but we ommited the factor of 3 from Amode as well
     
     
         
