@@ -104,9 +104,10 @@ class simulation(object):
         # check on input and available variables
         assert (not self.rsltBck is None) and (not self.rsltFwd is None), 'You must call loadSim() or runSim() before you can calculate statistics!'
         assert type(self.rsltFwd) is list or type(self.rsltFwd) is np.ndarray, 'rsltFwd must be a list! Note that it was stored as a dict in older versions of the code.'
-        lgnrmPSD = ('rv' in self.rsltFwd[0] or 'aod_Fine' in self.rsltFwd[0]) and 'rv' in self.rsltBck[0]
+        fwdKys = self.rsltFwd[0].keys()
+        lgnrmPSD = ('rv' in fwdKys or 'aod_Fine' in fwdKys) and 'rv' in self.rsltBck[0]
         assert modeCut is None or lgnrmPSD, 'Fine/Coarse errors can only be caluclated from GRASPs lognormal PSD representation! For this data, you must set modeCut=None' 
-        hghtInfo = ('βext' in self.rsltFwd[0] or 'aod_PBL' in self.rsltFwd[0]) and 'βext' in self.rsltBck[0]
+        hghtInfo = ('βext' in fwdKys or 'aod_PBL' in fwdKys) and 'βext' in self.rsltBck[0]
         assert hghtCut is None or hghtInfo, 'PBL/FT errors can only currently be calculated from LIDAR retrievals! For this retrieval dataset, you must set heghtCut=None' 
         # define functions for calculating RMS and bias
         rmsFun = lambda t,r: np.sqrt(np.median((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r)
@@ -115,9 +116,9 @@ class simulation(object):
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc', 'height']
         varsAodAvg = ['n', 'k'] # modal variables for which we will append aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
-        modalVars = ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode','aodMode'] + varsAodAvg # variables for which we find fine/coarse or FT/PBL errors seperately  
-        varsSpctrl = [z for z in varsSpctrl if z in self.rsltFwd[0] and z in self.rsltBck[0]] # check that the variable is used in current configuration
-        varsMorph = [z for z in varsMorph if z in self.rsltFwd[0] and z in self.rsltBck[0]]
+        modalVars = ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode'] + varsAodAvg # variables for which we find fine/coarse or FT/PBL errors seperately  
+        varsSpctrl = [z for z in varsSpctrl if z in fwdKys and z in self.rsltBck[0]] # check that the variable is used in current configuration
+        varsMorph = [z for z in varsMorph if z in fwdKys and z in self.rsltBck[0]]
         # loop through varsSpctrl and varsMorph calcualted RMS and bias
         rmsErr = dict()
         bias = dict()
@@ -129,30 +130,31 @@ class simulation(object):
                 true = true[...,wvlnthInd]
             if rtrvd.ndim==1: rtrvd = np.expand_dims(rtrvd,1) # we want [ipix, imode], we add a singleton dimension if only one mode/nonmodal 
             if true.ndim==1: true = np.expand_dims(true,1) # we want [ipix, imode], we add a singleton dimension if only one mode/nonmodal             
-            if modeCut and av in modalVars: # use modeCut to calculate vol weighted contribution to fine and coarse
-                rtrvdBimode = self.volWghtedAvg(rtrvd, self.rsltBck, modeCut)
-                trueBimode = self.volWghtedAvg(true, self.rsltFwd, modeCut)
-            if hghtCut and av in modalVars and \
-                (av+'_PBL' in self.rsltFwd[0] or 'aodMode' in self.rsltFwd[0]): # calculate vertical dependent RMS/BIAS [PBL, FT]
-                if av+'_PBL' in self.rsltFwd[0]: # TODO: we have foward model PBL height... we should use it
-                    trueBilayer = getStateVals(av+'_PBL', self.rsltFwd, varsSpctrl, wvlnthInd)
+            if hghtCut and av in modalVars and (av+'_PBL' in fwdKys or 'aodMode' in fwdKys): # calculate vertical dependent RMS/BIAS [PBL, FT*]
+                if av+'_PBL' in fwdKys: # TODO: we have foward model PBL height... we should use it
+                    trueBilayer = self.getStateVals(av+'_PBL', self.rsltFwd, varsSpctrl, wvlnthInd)
                     rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut, pblOnly=True)
                 else: # 'aodMode' in self.rsltFwd[0]
                     trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd, wvlnthInd, hghtCut)
                     rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut)
                 rmsErr[av+'_PBLFT'] = rmsFun(trueBilayer, rtrvdBilayer) # PBL is 1st ind, FT (not total column!) is 2nd
                 bias[av+'_PBLFT'] =  biasFun(trueBilayer, rtrvdBilayer)
+            if modeCut and av in modalVars and (av+'_Fine' in fwdKys or 'aodMode' in fwdKys): # calculate mode dependent RMS/BIAS [Fine, Coarse*]
+                if av+'_Fine' in fwdKys: # TODO: we have foward model PBL height... we should use it
+                    trueBimode = self.getStateVals(av+'_Fine', self.rsltFwd, varsSpctrl, wvlnthInd)
+                    rtrvdBimode = self.volWghtedAvg(rtrvd, self.rsltBck, modeCut, fineOnly=True)
+                else: # 'aodMode' in self.rsltFwd[0]
+                    trueBimode = self.volWghtedAvg(true, self.rsltFwd, modeCut)
+                    rtrvdBimode = self.volWghtedAvg(rtrvd, self.rsltBck, modeCut)
+                rmsErr[av+'_finecoarse'] = rmsFun(trueBimode, rtrvdBimode) # PBL is 1st ind, FT (not total column!) is 2nd
+                bias[av+'_finecoarse'] =  biasFun(trueBimode, rtrvdBimode)
             if av in varsAodAvg: # calculate the total, mode AOD weighted value of the variable (likely just CRI) -> [total, mode1, mode2,...]
                 rtrvd = np.hstack([self.τWghtedAvg(rtrvd, av, self.rsltBck, wvlnthInd), rtrvd])
                 true = np.hstack([self.τWghtedAvg(true, av, self.rsltFwd, wvlnthInd), true])                    
-            if av in modalVars and modeCut: # calculate modal RMS/BIAS [fine, coarse]
-                rmsErr[av+'_finecoarse'] = rmsFun(trueBimode, rtrvdBimode) # fine is 1st ind, coarse is 2nd
-                bias[av+'_finecoarse'] = biasFun(trueBimode, rtrvdBimode)
-            if av in modalVars and hghtCut: 
             if true.shape[1] == rtrvd.shape[1]: # truth and retrieved modes can be paired one-to-one    
                 rmsErr[av] = rmsFun(true, rtrvd)
                 bias[av] = biasFun(true, rtrvd)
-            elif av in varsAodAvg and 'aodMode' in self.rsltFwd[0] and 'aodMode' in self.rsltBck[0]: # we at least know the first, total elements of CRI correspond to each other
+            elif av in varsAodAvg and 'aodMode' in fwdKys and 'aodMode' in self.rsltBck[0]: # we at least know the first, total elements of CRI correspond to each other
                 rmsErr[av] = rmsFun(true[:,0], rtrvd[:,0])
                 rmsErr[av] = biasFun(true[:,0], rtrvd[:,0])
             if modeCut: # calculate rEff, could be abstracted into above code but tricky b/c volume weighted mean will not give exactly correct results (code below is exact)
@@ -169,21 +171,26 @@ class simulation(object):
             stateVals = stateVals[...,wvlnthInd]
         return stateVals
     
-    def volWghtedAvg(self, val, rslts, modeCut, vol=None):
-        N = 1e3
-        lower = [modeCut/50, modeCut]
-        upper = [modeCut, modeCut*50]
-        Bimode = np.full([len(rslts),2], np.nan)
-        for i,rslt in enumerate(rslts): 
-            crsWght = []
+    def volWghtedAvg(self, val, rslts, modeCut, vol=None, fineOnly=False):
+        N = 1e3 # number of radii bins
+        lower = [modeCut/50] if fineOnly else [modeCut/50, modeCut]
+        upper = [modeCut] if fineOnly else [modeCut, modeCut*50]
+        Bimode = np.full([len(rslts), 2-fineOnly], np.nan)
+        for i,rslt in enumerate(rslts): # loop over each pixel/time
+            crsWght = [] # this will be [upr/lwr(N=2), mode]
             for upr, lwr, in zip(upper,lower):
                 r = np.logspace(np.log10(lwr),np.log10(upr),N)
-                crsWght.append([np.trapz(ms.logNormal(mu, σ, r)[0],r) for mu,σ in zip (rslt['rv'],rslt['sigma'])])
-            crsWght = np.array(crsWght)*rslt['vol'] if vol is None else np.array(crsWght)*vol
+                crsWght.append([np.trapz(ms.logNormal(mu, σ, r)[0],r) for mu,σ in zip (rslt['rv'],rslt['sigma'])]) # integrated r 0->inf this will sum to unity
+            if not np.isclose(crsWght.sum(axis=0), 1, rtol=0.001).all():
+                warnings.warn('The sum of the crsWght values across all modes was greater than 0.1%% from unity')
             if val is None: # we just want volume (or area if vol arugment contains area) concentration of each mode
-                Bimode[i] = np.sum(crsWght,axis=1)
+                if vol is None:
+                    crsWght = np.array(crsWght)*rslt['vol'] 
+                else:
+                    crsWght = np.array(crsWght)*vol
+                Bimode[i] = np.sum(crsWght, axis=1)
             else: 
-                Bimode[i] = np.sum(crsWght*val[i],axis=1)/np.sum(crsWght,axis=1)
+                Bimode[i] = np.sum(crsWght*val[i], axis=1)
         return Bimode
 
     def hghtWghtedAvg(self, val, rslts, wvlnthInd, hghtCut, pblOnly=False): 
