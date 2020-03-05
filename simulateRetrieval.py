@@ -90,21 +90,26 @@ class simulation(object):
                 self.rsltFwd = [self.rsltBck[-1]] # resltFwd as a array of len==0 (not totaly backward compatible, it used to be straight dict)
                 self.rsltBck = self.rsltBck[:-1]
  
-    def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None): 
+    def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None, fineModesFwd=None, fineModesBck=None): 
         """ Returns the RMSE and bias (defined below) from the simulation results
                 wvlngthInd - the index of the wavelength to calculate stats for
-                modeCut - fine/coarse seperation radius in um (None -> do not calculate error's modal dependence)
+                modeCut - fine/coarse seperation radius in um, currenltly only applied to rEff (None -> do not calculate error's modal dependence)
                 hghtCut - PBL/FT seperation in meters (None -> do not calculate error's layer dependence)
+                fineModesFwd - [array-like] the indices of the fine modes in the foward calculation, set to None to use OSSE ..._Fine variables instead 
+                fineModesBck -  [array-like] the indices of the fine modes in the retrieval
                 NOTE: this method generally assumes configuration (e.g. # of modes) is the same across all pixels
                 TODO: we can do a lot better than we do here in terms of modeCut and hghtCut...
-                    - rEff needs to include seperate errors for PBL and column/FT
-                    - we can also do fine/coarse and pbl/FT g and LidarRatio exactly but formulas are less trivial (see/merge with rtrvdDataSetPixels() in readOSSEnetCDF)
+                    - rEff needs to include seperate errors for PBL and column/FT, if it comes out now it is probably just AOD weighted (which isn't exact)
+                    - modeCut should be applied to more variables (e.g. spherical fraction)
+                    - we can also do pbl/FT g and LidarRatio exactly (instead of just AOD weighted)
+                        - formulas are less trivial but see/merge with rtrvdDataSetPixels() in readOSSEnetCDF
                         - note that these are only exact for a single species (i.e. one CRI, PSD, etc.), ultimatly we need to save modal g and lidarRatio
                 """
         # check on input and available variables
         assert (not self.rsltBck is None) and (not self.rsltFwd is None), 'You must call loadSim() or runSim() before you can calculate statistics!'
         assert type(self.rsltFwd) is list or type(self.rsltFwd) is np.ndarray, 'rsltFwd must be a list! Note that it was stored as a dict in older versions of the code.'
         fwdKys = self.rsltFwd[0].keys()
+        bckKys = self.rsltBck[0].keys()
         lgnrmPSD = ('rv' in fwdKys or 'aod_Fine' in fwdKys) and 'rv' in self.rsltBck[0]
         assert modeCut is None or lgnrmPSD, 'Fine/Coarse errors can only be caluclated from GRASPs lognormal PSD representation! For this data, you must set modeCut=None' 
         hghtInfo = ('βext' in fwdKys or 'aod_PBL' in fwdKys) and 'βext' in self.rsltBck[0]
@@ -117,8 +122,8 @@ class simulation(object):
         varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc', 'height']
         varsAodAvg = ['n', 'k'] # modal variables for which we will append aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
         modalVars = ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode'] + varsAodAvg # variables for which we find fine/coarse or FT/PBL errors seperately  
-        varsSpctrl = [z for z in varsSpctrl if z in fwdKys and z in self.rsltBck[0]] # check that the variable is used in current configuration
-        varsMorph = [z for z in varsMorph if z in fwdKys and z in self.rsltBck[0]]
+        varsSpctrl = [z for z in varsSpctrl if z in fwdKys and z in bckKys] # check that the variable is used in current configuration
+        varsMorph = [z for z in varsMorph if z in fwdKys and z in bckKys]
         # loop through varsSpctrl and varsMorph calcualted RMS and bias
         rmsErr = dict()
         bias = dict()
@@ -139,37 +144,85 @@ class simulation(object):
                     rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut)
                 rmsErr[av+'_PBLFT'] = rmsFun(trueBilayer, rtrvdBilayer) # PBL is 1st ind, FT (not total column!) is 2nd
                 bias[av+'_PBLFT'] =  biasFun(trueBilayer, rtrvdBilayer)
-            if modeCut and av in modalVars and (av+'_Fine' in fwdKys or 'aodMode' in fwdKys): # calculate mode dependent RMS/BIAS [Fine, Coarse*]
-                if av+'_Fine' in fwdKys: # TODO: we have foward model PBL height... we should use it
-                    trueBimode = self.getStateVals(av+'_Fine', self.rsltFwd, varsSpctrl, wvlnthInd)
-                    rtrvdBimode = self.volWghtedAvg(rtrvd, self.rsltBck, modeCut, fineOnly=True)
-                else: # 'aodMode' in self.rsltFwd[0]
-                    trueBimode = self.volWghtedAvg(true, self.rsltFwd, modeCut)
-                    rtrvdBimode = self.volWghtedAvg(rtrvd, self.rsltBck, modeCut)
-                rmsErr[av+'_finecoarse'] = rmsFun(trueBimode, rtrvdBimode) # PBL is 1st ind, FT (not total column!) is 2nd
-                bias[av+'_finecoarse'] =  biasFun(trueBimode, rtrvdBimode)
+            if not fineModesBck is None and av in modalVars: # calculate fine mode dependent RMS/BIAS
+                fineCalculated = False
+                if av+'_Fine' in fwdKys and fineModesFwd is None and 'aodMode' in bckKys: # we have OSSE outputs, currently user provided fineModesFwd trumps this though
+                    trueFine = self.getStateVals(av+'_Fine', self.rsltFwd, varsSpctrl, wvlnthInd)
+                    rtrvdFine = self.getStateVals(av, self.rsltBck, varsSpctrl, wvlnthInd, fineModesBck)
+                    fineCalculated = True
+                elif not fineModesFwd is None and 'aodMode' in fwdKys and 'aodMode' in bckKys: # user provided fwd and bck fine mode indices
+                    trueFine = self.getStateVals(av, self.rsltFwd, varsSpctrl, wvlnthInd, fineModesFwd)
+                    rtrvdFine = self.getStateVals(av, self.rsltBck, varsSpctrl, wvlnthInd, fineModesBck)
+                    fineCalculated = True                    
+                elif not fineModesFwd is None: # something went wrong...
+                    assert False, 'If fineModeFwd and fineModeBck are provided aodMode must be present in rsltsBck and rsltsFwd!'
+                if fineCalculated:
+                    rmsErr[av+'_fine'] = rmsFun(trueFine, rtrvdFine) # PBL is 1st ind, FT (not total column!) is 2nd
+                    bias[av+'_fine'] =  biasFun(trueFine, rtrvdFine)
             if av in varsAodAvg: # calculate the total, mode AOD weighted value of the variable (likely just CRI) -> [total, mode1, mode2,...]
-                rtrvd = np.hstack([self.τWghtedAvg(rtrvd, av, self.rsltBck, wvlnthInd), rtrvd])
-                true = np.hstack([self.τWghtedAvg(true, av, self.rsltFwd, wvlnthInd), true])                    
+                rtrvd = np.hstack([self.τWghtedAvg(rtrvd, self.rsltBck, wvlnthInd), rtrvd])
+                true = np.hstack([self.τWghtedAvg(true, self.rsltFwd, wvlnthInd), true])                    
             if true.shape[1] == rtrvd.shape[1]: # truth and retrieved modes can be paired one-to-one    
                 rmsErr[av] = rmsFun(true, rtrvd)
                 bias[av] = biasFun(true, rtrvd)
-            elif av in varsAodAvg and 'aodMode' in fwdKys and 'aodMode' in self.rsltBck[0]: # we at least know the first, total elements of CRI correspond to each other
+            elif av in varsAodAvg and 'aodMode' in fwdKys and 'aodMode' in bckKys: # we at least know the first, total elements of CRI correspond to each other
                 rmsErr[av] = rmsFun(true[:,0], rtrvd[:,0])
                 rmsErr[av] = biasFun(true[:,0], rtrvd[:,0])
             if modeCut: # calculate rEff, could be abstracted into above code but tricky b/c volume weighted mean will not give exactly correct results (code below is exact)
                 rtrvd = np.array([self.ReffMode(rb, modeCut) for rb in self.rsltBck])
                 true = np.array([self.ReffMode(rf, modeCut) for rf in self.rsltFwd])
-                rmsErr['rEff_finecoarse'] = rmsFun(true, rtrvd)
-                bias['rEff_finecoarse'] = biasFun(true, rtrvd)
+                rmsErr['rEff_sub%dnm' % 1000*modeCut] = rmsFun(true, rtrvd)
+                bias['rEff_sub%dnm' % 1000*modeCut] = biasFun(true, rtrvd)
+                # TODO: add sph fraction here? It would use volWghtedAvg, I think in its exact current form
         return rmsErr, bias
     
-    def getStateVals(self, av, rslts, varsSpctrl, wvlnthInd):
+    def getStateVals(self, av, rslts, varsSpctrl, wvlnthInd, modeInd=None):
         assert av in rslts[0], 'Variable %s was not found in the rslts dictionary!' % av
         stateVals = np.array([rf[av] for rf in rslts])
         if av in varsSpctrl:
             stateVals = stateVals[...,wvlnthInd]
+        if not modeInd is None and 'aod' in av: # we will sum multiple fine modes to get total fine mode AOD
+            stateVals = np.expand_dims(stateVals[:, modeInd].sum(axis=1),1)
+        elif not modeInd is None: # we will perform AOD weighted averaging from alll fine modes of an intensive property
+            stateVals = self.τWghtedAvg(stateVals, rslts, wvlnthInd, modeInd)
         return stateVals
+
+    def τWghtedAvg(self, val, rslts, wvlnthInd, modeInd=slice(None)):
+        avgVal = np.full(len(rslts), np.nan)
+        if (val.shape[1]==1 and slice(None)==modeInd) or not 'aodMode' in rslts: # there was only one mode to start OR can't calculate b/c we don't have aodMode
+            return np.zeros([val.shape[0], 0]) # return an empty array
+        for i,rslt in enumerate(rslts):
+            ttlSum = np.sum(val[i]*rslt['aodMode'][modeInd,wvlnthInd])
+            normDenom = np.sum(rslt['aodMode'][modeInd,wvlnthInd])
+            avgVal[i] = ttlSum/normDenom
+        return np.expand_dims(avgVal, 1)
+    
+    def hghtWghtedAvg(self, val, rslts, wvlnthInd, hghtCut, pblOnly=False): 
+        Bilayer = np.full([len(rslts), 2-pblOnly], np.nan)
+        if np.any(rslts[0]['range']==hghtCut): warnings.warn('hghtCut fell exactly on one of the vertical bins, this bin will be excluded from the weighting.')
+        for i,rslt in enumerate(rslts): 
+            wghtsPBL = []
+            for β,h,τ in zip(rslt['βext'], rslt['range'], rslt['aodMode'][:,wvlnthInd]): # loop over modes
+                wghtsPBL.append(β[h < hghtCut].sum()/β.sum()*τ)
+            valPBL = np.sum(val*wghtsPBL)/np.sum(wghtsPBL)
+            if not pblOnly:
+                wghtsFT = []
+                for β,h,τ in zip(rslt['βext'], rslt['range'], rslt['aodMode'][:,wvlnthInd]):
+                    wghtsFT.append(β[h > hghtCut].sum()/β.sum()*τ)
+                    valFT = np.sum(val*wghtsFT)/np.sum(wghtsFT)
+                Bilayer[i] = [valPBL, valFT]
+            else:
+                Bilayer[i] = [valPBL]
+        return Bilayer
+
+    def ReffMode(self, rs, modeCut):
+        if not modeCut: 
+            rv_dndr = rs['rv']/np.exp(3*rs['sigma']**2)
+            return rv_dndr*np.exp(5/2*rs['sigma']**2) # eq. 60 from Grainger's "Useful Formulae for Aerosol Size Distributions"
+        Vfc = self.volWghtedAvg(None, [rs], modeCut)
+        Amode = rs['vol']/rs['rv']*np.exp(rs['sigma']**2/2) # convert N to rv and then ratio 1st and 4th rows of Table 1 of Grainger's "Useful Formulae for Aerosol Size Distributions"
+        Afc = self.volWghtedAvg(None, [rs], modeCut, Amode)
+        return Vfc/Afc # NOTE: ostensibly this should be Vfc/Afc/3 but we ommited the factor of 3 from Amode as well
     
     def volWghtedAvg(self, val, rslts, modeCut, vol=None, fineOnly=False):
         N = 1e3 # number of radii bins
@@ -193,43 +246,6 @@ class simulation(object):
                 Bimode[i] = np.sum(crsWght*val[i], axis=1)
         return Bimode
 
-    def hghtWghtedAvg(self, val, rslts, wvlnthInd, hghtCut, pblOnly=False): 
-        Bilayer = np.full([len(rslts), 2-pblOnly], np.nan)
-        if np.any(rslts[0]['range']==hghtCut): warnings.warn('hghtCut fell exactly on one of the vertical bins, this bin will be excluded from the weighting.')
-        for i,rslt in enumerate(rslts): 
-            wghtsPBL = []
-            for β,h,τ in zip(rslt['βext'], rslt['range'], rslt['aodMode'][:,wvlnthInd]): # loop over modes
-                wghtsPBL.append(β[h < hghtCut].sum()/β.sum()*τ)
-            valPBL = np.sum(val*wghtsPBL)/np.sum(wghtsPBL)
-            if not pblOnly:
-                wghtsFT = []
-                for β,h,τ in zip(rslt['βext'], rslt['range'], rslt['aodMode'][:,wvlnthInd]):
-                    wghtsFT.append(β[h > hghtCut].sum()/β.sum()*τ)
-                    valFT = np.sum(val*wghtsFT)/np.sum(wghtsFT)
-                Bilayer[i] = [valPBL, valFT]
-            else:
-                Bilayer[i] = [valPBL]
-        return Bilayer
-
-    def τWghtedAvg(self, val, av, rslts, wvlnthInd):
-        avgVal = np.full(len(rslts), np.nan)
-        if val.shape[1]==1 or not 'aodMode' in rslts: # there was only one mode to start OR can't calculate b/c we don't have aodMode
-            return np.zeros([val.shape[0], 0]) # return an empty array
-        for i,rslt in enumerate(rslts):
-            ttlSum = np.sum(val[i]*rslt['aodMode'][:,wvlnthInd])
-            normDenom = np.sum(rslt['aodMode'][:,wvlnthInd])
-            avgVal[i] = ttlSum/normDenom
-        return np.expand_dims(avgVal, 1)
-
-    def ReffMode(self, rs, modeCut):
-        if not modeCut: 
-            rv_dndr = rs['rv']/np.exp(3*rs['sigma']**2)
-            return rv_dndr*np.exp(5/2*rs['sigma']**2) # eq. 60 from Grainger's "Useful Formulae for Aerosol Size Distributions"
-        Vfc = self.volWghtedAvg(None, [rs], modeCut)
-        Amode = rs['vol']/rs['rv']*np.exp(rs['sigma']**2/2) # convert N to rv and then ratio 1st and 4th rows of Table 1 of Grainger's "Useful Formulae for Aerosol Size Distributions"
-        Afc = self.volWghtedAvg(None, [rs], modeCut, Amode)
-        return Vfc/Afc # NOTE: ostensibly this should be Vfc/Afc/3 but we ommited the factor of 3 from Amode as well
-    
     
         
         
