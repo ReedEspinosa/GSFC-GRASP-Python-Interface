@@ -398,9 +398,10 @@ class graspRun(object):
     
     def output2netCDF(self, nc4Path, rsltDict=None, customOUT=None, seaLevel=False):
         """ This function will take grasp output and dump it in a netCDF file
-            If resultDict is provided, this data will be written to netCDF
-            If customOUT is provided, data from GRASP output text file specified will be written to netCDF
-            If neither are provided the output text file associated with current instance will be written """
+            If resultDict is provided, this data will be written to netCDF.
+            If customOUT is provided, data from GRASP output text file specified will be written to netCDF.
+            If neither are provided the output text file associated with current instance will be written.
+            seaLevel=True should be used with caution, see assumed ROD and depol. below. """
         assert not (rsltDict is not None and customOUT is not None), 'Only one of rsltDict or customOUT should be provided, not both!'
         if not rsltDict: rsltDict = self.readOutput(customOUT)
         Nvis = np.unique(rsltDict[0]['vis'][:,0]).shape[0]
@@ -484,13 +485,13 @@ class graspRun(object):
                     var = 'ROD'
                     varHnds[var] = root_grp.createVariable(var, 'f8', (λName))
                     varHnds[var].units = 'none'
-                    varHnds[var][:] = self.seaLevelROD(varHnds[λName])
+                    varHnds[var][:] = self.seaLevelROD(varHnds[λName][:])
                     varHnds[var].long_name = 'Rayleigh Optical Depth'                                
                     var = 'rayleigh_depol'
                     varHnds[var] = root_grp.createVariable(var, 'f8', (λName))
                     varHnds[var].units = 'none'
-                    varHnds[var][:] = 0.0295*np.ones(len(varHnds[λName]))
-                    varHnds[var].long_name = 'Rayleigh Depolarization Factor'                                
+                    varHnds[var][:] = 0.0295*np.ones(len(varHnds[λName][:]))
+                    varHnds[var].long_name = 'Rayleigh Depolarization Ratio'                                
 
     def seaLevelROD(self, λtarget):
         λ =   np.r_[0.3600,	0.3800,	0.4100,	0.5500,	0.6700,	0.8700,	1.5500,	1.6500]
