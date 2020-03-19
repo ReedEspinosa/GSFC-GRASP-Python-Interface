@@ -396,7 +396,7 @@ class graspRun(object):
         self.calcAsymParam(rsltDict)
         return rsltDict
     
-    def output2netCDF(self, nc4Path, rsltDict=None, customOUT=None):
+    def output2netCDF(self, nc4Path, rsltDict=None, customOUT=None, seaLevel=False):
         """ This function will take grasp output and dump it in a netCDF file
             If resultDict is provided, this data will be written to netCDF
             If customOUT is provided, data from GRASP output text file specified will be written to netCDF
@@ -410,97 +410,94 @@ class graspRun(object):
             assert Nvis == np.unique(vis).shape[0], msg % 'viewing zenith' 
             assert Nfis == np.unique(fis).shape[0], msg % 'relative azimuth'
         # create netCDF4 data file
-        root_grp = Dataset(nc4Path, 'w', format='NETCDF4')
-        root_grp.description = 'Results of GRASP run'
-        varHnds = dict()
-        # add dimensions and write corresponding variables
-        tName = 'pixNumber'
-        root_grp.createDimension(tName, len(rsltDict))
-        varHnds[tName] = root_grp.createVariable(tName, 'u2', (tName))
-        varHnds[tName][:] = np.r_[0:len(rsltDict)]
-        λName = 'wavelength'
-        root_grp.createDimension(λName, len(rsltDict[0]['lambda']))
-        varHnds[λName] = root_grp.createVariable(λName, 'f4', (λName))
-        varHnds[λName][:] = rsltDict[0]['lambda']
-        visName = 'viewing_zenith'
-        root_grp.createDimension(visName, Nvis)
-        varHnds[visName] = root_grp.createVariable(visName, 'u2', (visName))
-        varHnds[visName][:] = np.unique(rsltDict[0]['vis'][:,0]).sort()
-        fisName = 'relative_azimuth'
-        root_grp.createDimension(fisName, Nfis)
-        varHnds[fisName] = root_grp.createVariable(fisName, 'u2', (fisName))
-        varHnds[fisName][:] = np.unique(rsltDict[0]['fis'][:,0]).sort()
-        # write data variables
-        for key in rsltDict[0].keys(): # loop over keys
-            if 'fit' in key:
-                var = key.replace('fit_','')
-                varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName, visName, fisName))
-                varHnds[var].units = 'none' if var in ['I','Q','U'] else 'unkown'
-                varHnds[var].long_name = '%s at TOA' % var if var in ['I','Q','U'] else 'none'
-                for ti, rslt in rsltDict: # loop over pixels
-                    for λi in range(len(varHnds[λName])): # loop over wavelengths
-                        for θi,θ in enumerate(varHnds[visName][:]): # loop over viewing zeniths
-                            for φi,φ in enumerate(varHnds[fisName][:]): # loop over realtive azimuths
-                                ind = np.logical_and(rslt['vis'][:,λi]==θ, rslt['fis'][:,λi]==φ).nonzero()[0]
-                                assert ind.shape[0] == 1, "%d values were found for %s at pixel# %d, λind=%d, θ=%4.1f, φ=%4.1f!" % (ind.shape[0],key,ti,λi,θ,φ)
-                                varHnds[var][ti,λi,θi,φi] = rslt[key][ind[0],λi]
-            elif 'brdf'==key and rslt['brdf'].shape[0]==3: # probably RTLS parameters
-                for i,var in enumerate(['RTLS_ISO', 'RTLS_VOL', 'RTLS_GEO']):
+        with Dataset(nc4Path, 'w', format='NETCDF4') as root_grp:
+            root_grp.description = 'Results of GRASP run'
+            varHnds = dict()
+            # add dimensions and write corresponding variables
+            tName = 'pixNumber'
+            root_grp.createDimension(tName, len(rsltDict))
+            varHnds[tName] = root_grp.createVariable(tName, 'u2', (tName))
+            varHnds[tName][:] = np.r_[0:len(rsltDict)]
+            varHnds[tName].units = 'none'
+            varHnds[tName].long_name = 'index of pixel'
+            λName = 'wavelength'
+            root_grp.createDimension(λName, len(rsltDict[0]['lambda']))
+            varHnds[λName] = root_grp.createVariable(λName, 'f4', (λName))
+            varHnds[λName][:] = rsltDict[0]['lambda']
+            varHnds[λName].units = 'μm'
+            varHnds[λName].long_name = 'wavelength of measurement'
+            visName = 'viewing_zenith'
+            root_grp.createDimension(visName, Nvis)
+            varHnds[visName] = root_grp.createVariable(visName, 'f4', (visName))
+            varHnds[visName][:] = np.sort(np.unique(rsltDict[0]['vis'][:,0]))
+            varHnds[visName].units = 'degree'
+            varHnds[visName].long_name = 'viewing zenith angle'
+            fisName = 'relative_azimuth'
+            root_grp.createDimension(fisName, Nfis)
+            varHnds[fisName] = root_grp.createVariable(fisName, 'f4', (fisName))
+            varHnds[fisName][:] = np.sort(np.unique(rsltDict[0]['fis'][:,0]))
+            varHnds[fisName].units = 'degree'
+            varHnds[fisName].long_name = 'relative azimuth angle (φ_solar - φ_viewing)'
+            # write data variables
+            for key in rsltDict[0].keys(): # loop over keys
+                if 'fit' in key or 'sca_ang' in key:
+                    if key.replace('fit_','') in ['I','Q','U']:
+                        var = key.replace('fit_','')
+                        varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName, visName, fisName))
+                        varHnds[var].units = 'none'
+                        varHnds[var].long_name = '%s at TOA' % var
+                    elif key == 'sca_ang':
+                        var = key
+                        varHnds[var] = root_grp.createVariable(var, 'f4', (tName, λName, visName, fisName))
+                        varHnds[var].units = 'degree'
+                        varHnds[var].long_name = 'scattering angle'    
+                    else:
+                        assert False, 'This function does not know how to handle the variable %s' % key
+                    for ti, rslt in enumerate(rsltDict): # loop over pixels
+                        for λi in range(len(varHnds[λName])): # loop over wavelengths
+                            for θi,θ in enumerate(varHnds[visName][:]): # loop over viewing zeniths
+                                for φi,φ in enumerate(varHnds[fisName][:]): # loop over realtive azimuths
+                                    ind = np.logical_and(rslt['vis'][:,λi]==θ, rslt['fis'][:,λi]==φ).nonzero()[0]
+                                    assert ind.shape[0] == 1, "%d values were found for %s at pixel# %d, λind=%d, θ=%4.1f, φ=%4.1f!" % (ind.shape[0],key,ti,λi,θ,φ)
+                                    varHnds[var][ti,λi,θi,φi] = rslt[key][ind[0],λi]
+                elif 'brdf'==key and rsltDict[0]['brdf'].shape[0]==3: # probably RTLS parameters
+                    for i,var in enumerate(['RTLS_ISO', 'RTLS_VOL', 'RTLS_GEO']): # loop over the three RTLS kernels
+                        varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName))
+                        varHnds[var].units = 'none'
+                        varHnds[var][:,:] = np.array([rslt['brdf'][i,:] for rslt in rsltDict]) # loop over times, select all λ
+                    varHnds['RTLS_ISO'].long_name = 'Isotropic kernel of the RTLS model'
+                    varHnds['RTLS_VOL'].long_name = 'Volume kernel of the RTLS model (MAIAC_vol/MAIAC_iso)'
+                    varHnds['RTLS_GEO'].long_name = 'Geometric kernel of the RTLS model (MAIAC_geo/MAIAC_iso)'
+                elif 'bpdf'==key and rsltDict[0]['brdf'].ndim==1: # probably Maignan parameters
+                    var = 'maignan_parameter'
                     varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName))
-                    # set the values
-                varHnds['RTLS_ISO'].long_name = 'Isotropic kernel of the RTLS model'
-                varHnds['RTLS_VOL'].long_name = 'Volume kernel of the RTLS model (MAIAC_vol/MAIAC_iso)'
-                varHnds['RTLS_GEO'].long_name = 'Geometric kernel of the RTLS model (MAIAC_geo/MAIAC_iso)'
-            elif 'bpdf'==key and rslt['brdf'].shape[0]==1: # probably Maignan parameters
-                print('Maignan not done')
-        sizeBin = root_grp.createVariable('sizeBin', 'u1', ('sizeBin'))
-        sizeBin.units = 'none'
-        sizeBin.long_name = 'dust size bin index'
-        wavelength = root_grp.createVariable('lambda', 'f4', ('lambda'))
-        wavelength.units = 'um'
-        wavelength.long_name = 'wavelength'
-        angle = root_grp.createVariable('angle', 'f4', ('angle'))
-        angle.units = 'degree'
-        angle.long_name = 'scattering angle'
-        PMvarNms = ['p11', 'p12', 'p22', 'p33', 'p34', 'p44']
-        PMvars = dict()
-        for varNm in PMvarNms:
-            PMvars[varNm] = root_grp.createVariable(varNm, 'f8', ('sizeBin', 'lambda', 'angle'))
-            PMvars[varNm].units = 'sr-1'
-            PMvars[varNm].long_name = varNm + ' phase matrix element' 
-        bext_vol = root_grp.createVariable('bext_vol', 'f8', ('sizeBin', 'lambda'))
-        bext_vol.units = 'm2·m-3 '
-        bext_vol.long_name = 'volume extinction efficiency'
-        bext_vol.description = "The extinction cross section per unit of particle volume.\
-         This is also the extinction coefficient per unit of volume concentration.\
-         bext_vol x ρ = βext where ρ is the particle density and βext is the mass extinction efficiency."
-        bsca_vol = root_grp.createVariable('bsca_vol', 'f8', ('sizeBin', 'lambda'))
-        bsca_vol.units = 'm2·m-3'
-        bsca_vol.long_name = 'volume scattering efficiency'
-        bsca_vol.description = "The scattering cross section per unit of particle volume.\
-         This is also the scattering coefficient per unit of volume concentration.\
-         bsca_vol x ρ = βsca where ρ is the particle density and βsca is the mass scattering efficiency."
-        refreal = root_grp.createVariable('refreal', 'f8', ('sizeBin', 'lambda'))
-        refreal.units = 'none'
-        refreal.long_name = 'real refractive index'
-        refimag = root_grp.createVariable('refimag', 'f8', ('sizeBin', 'lambda'))
-        refimag.units = 'none'
-        refimag.long_name = 'imaginary refractive index'
-        rv = root_grp.createVariable('rv', 'f8', ('sizeBin'))
-        rv.units = 'um'
-        rv.long_name = 'lognormal volume median radius'
-        sigma = root_grp.createVariable('sigma', 'f8', ('sizeBin'))
-        sigma.units = 'none'
-        sigma.long_name = 'lognormal sigma'
-        sph = root_grp.createVariable('sph', 'f8', ('sizeBin'))
-        sph.units = 'none'
-        sph.long_name = 'fraction of spherical particles'
-        rEff = root_grp.createVariable('rEff', 'f8', ('sizeBin'))
-        rEff.units = 'um'
-        rEff.long_name = 'effective radius'
+                    varHnds[var].units = 'none'
+                    varHnds[var][:,:] = np.array([rslt['bpdf'] for rslt in rsltDict]) # loop over times, select all λ
+                    varHnds[var].long_name = 'Value of the Maignan model (exp(-NDVI)*C_maignan)'
+                elif 'aod'==key:
+                    var = 'aod'
+                    varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName))
+                    varHnds[var].units = 'none'
+                    varHnds[var][:,:] = np.array([rslt['aod'] for rslt in rsltDict]) # loop over times, select all λ
+                    varHnds[var].long_name = 'aerosol optical depth'        
+            if seaLevel: # This is a little nasty, need to double check numbers below before using                  
+                    var = 'ROD'
+                    varHnds[var] = root_grp.createVariable(var, 'f8', (λName))
+                    varHnds[var].units = 'none'
+                    varHnds[var][:] = self.seaLevelROD(varHnds[λName])
+                    varHnds[var].long_name = 'Rayleigh Optical Depth'                                
+                    var = 'rayleigh_depol'
+                    varHnds[var] = root_grp.createVariable(var, 'f8', (λName))
+                    varHnds[var].units = 'none'
+                    varHnds[var][:] = 0.0295*np.ones(len(varHnds[λName]))
+                    varHnds[var].long_name = 'Rayleigh Depolarization Factor'                                
 
-        
-    
+    def seaLevelROD(self, λtarget):
+        λ =   np.r_[0.3600,	0.3800,	0.4100,	0.5500,	0.6700,	0.8700,	1.5500,	1.6500]
+        rod = np.r_[0.5612,	0.4474,	0.3259,	0.0973,	0.0436,	0.0152,	0.0015,	0.0012]
+        assert λ.min()<=λtarget.min() and λ.max()>=λtarget.max(), 'λtarget falls outside the range of pre-programed values!'
+        return np.interp(λtarget, λ, rod**-0.25)**-4
+                    
     def parseOutDateTime(self, contents):
         results = []
         ptrnDate = re.compile('^[ ]*Date[ ]*:[ ]+')
@@ -924,7 +921,7 @@ class graspYAML(object):
         if not self.dl:
             assert os.path.isfile(self.YAMLpath), 'The file '+self.YAMLpath+' does not exist!'
             with open(self.YAMLpath, 'r') as stream:
-                self.dl = yaml.load(stream)
+                self.dl = yaml.load(stream, Loader=yaml.FullLoader)
         
     def YAMLrecursion(self, yamlDict, fldPath, newVal=None):
         if not fldPath[0] in yamlDict: return None
