@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-discover = False 
-
 import numpy as np
 import runGRASP as rg
 from netCDF4 import Dataset
 import datetime as dt
 import sys
+from miscFunctions import checkDiscover
+import os
+discover = checkDiscover()
 if discover:
-    syncPath = '/discover/nobackup/wrespino/synced/'
-    sys.path.append("/discover/nobackup/wrespino/MADCAP_scripts")
+    nobackup = os.environ['NOBACKUP']
+    syncPath = os.path.join(nobackup, 'synced')
+    sys.path.append(os.path.join(nobackup, 'MADCAP_scripts'))
+    binPathGRASP = os.path.join(nobackup, 'grasp_open/build/bin/grasp')
+    GRASPkrnls = os.path.join(nobackup, 'local/share/grasp/kernels')
 else:
     syncPath = '/Users/wrespino/Synced/'
-    sys.path.append("/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis")
+    sys.path.append('/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis')
+    binPathGRASP = '/usr/local/bin/grasp'
+    GRASPkrnls = '/usr/local/share/grasp/kernels/'
 from MADCAP_functions import loadVARSnetCDF
-
 
 
 netCDFpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc' # just need for lambda's and dummy ext
@@ -29,8 +34,9 @@ maxL = 13 # max number of wavelengths in a single GRASP run
 Nangles = 181 # determined by GRASP kernels
 
 # if loadPath_pkl is None grasp results is generated (not loaded) and the following are required:
-binPathGRASP = '/discover/nobackup/wrespino/grasp_open/build/bin/grasp' if discover else '/usr/local/bin/grasp' # currently has lambda checks disabled
-YAMLpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_9lambda_80nmTO20μm.yml'
+ # currently has lambda checks disabled
+GRASPkrnls = '' if discover else '/usr/local/share/grasp/kernels/KERNELS_BASE/'
+YAMLpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_9lambda_80nmTO500nm.yml'
 lgnrmfld = 'retrieval.constraints.characteristic[1].mode[1].initial_guess.value'
 RRIfld =   'retrieval.constraints.characteristic[3].mode[1].initial_guess.value' # should match setting in YAML file
 IRIfld =   'retrieval.constraints.characteristic[4].mode[1].initial_guess.value'
@@ -90,7 +96,7 @@ else: # perform calculations
             gspRunNow.addPix(nowPix)
             gspRun.append(gspRunNow)
     gDB = rg.graspDB(gspRun, maxCPU)
-    rslts = gDB.processData(savePath=savePath_netCDF[0:-2]+'pkl', binPathGRASP=binPathGRASP)
+    rslts = gDB.processData(savePath=savePath_netCDF[0:-2]+'pkl', binPathGRASP=binPathGRASP, krnlPathGRASP=GRASPkrnls)
 
 root_grp = Dataset(savePath_netCDF, 'w', format='NETCDF4')
 #root_grp = Dataset('/Users/wrespino/Desktop/netCDF_TEST.nc', 'w', format='NETCDF4')

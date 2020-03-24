@@ -922,7 +922,11 @@ class graspYAML(object):
         if not self.dl:
             assert os.path.isfile(self.YAMLpath), 'The file '+self.YAMLpath+' does not exist!'
             with open(self.YAMLpath, 'r') as stream:
-                self.dl = yaml.load(stream, Loader=yaml.FullLoader)
+                try:
+                    self.dl = yaml.load(stream, Loader=yaml.FullLoader)
+                except:
+                    warnings.warn('Could not call yaml with FullLoader option. Is your conda up to date?')
+                    self.dl = yaml.load(stream)
         
     def YAMLrecursion(self, yamlDict, fldPath, newVal=None):
         if not fldPath[0] in yamlDict: return None
