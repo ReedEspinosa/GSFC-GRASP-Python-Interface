@@ -19,7 +19,7 @@ from MADCAP_functions import loadVARSnetCDF
 
 
 netCDFpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc' # just need for lambda's and dummy ext
-savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_VTEST_LOCAL.nc'
+savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4_sub500nm.nc'
 #loadPath_pkl = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4.pkl'
 # netCDFpath = syncPath+'Working/GRASP_PMgenerationRun/optics_SU.v5_7.GSFun.nc' # just need for lambda's and dummy ext
 # savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-SU-RH0/GRASP_LUT-DrySU_V1.nc'
@@ -41,8 +41,8 @@ szVars = np.array([[0.6576, 0.2828],
                   [2.2969, 0.3440],
                   [5.3645, 0.7070],
                   [9.9649, 0.7263]])
-szVars = np.array([[0.6576, 0.2828],
-                  [1.2436, 0.2500]])
+# szVars = np.array([[0.6576, 0.2828],
+#                   [1.2436, 0.2500]])
 #                   rv      sigma [currently: MADCAP DrySU-LUT V1]
 # szVars = np.array([[0.18482, 0.5709795355796814]])
 nBnds = [1.301, 1.699] # taken from netCDF but forced to these bounds
@@ -74,7 +74,7 @@ else: # perform calculations
             dtObj = dt.datetime.now() + dt.timedelta(hours=bn)
             nowPix = rg.pixel(dtObj, 1, 1, 0, 0, 0, 100)
             for wvl, wvInd in zip(wvlsNow, wvInds): # This will be expanded for wavelength dependent measurement types/geometry
-                meas = np.r_[optTbl['qext'][bn,0,wvInd]]
+                meas = np.r_[optTbl['qext'][bn,0,wvInd]] # used as dummy value, real conversion to qext below
                 nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv, phi, meas)
             n = optTbl['refreal'][bn,0,wvInds]
             n = np.minimum(n, nBnds[1])
@@ -83,7 +83,7 @@ else: # perform calculations
             k = np.minimum(k, kBnds[1])
             k = np.maximum(k, kBnds[0])
             gspRunNow.yamlObj.adjustLambda(maxL)
-            gspRunNow.yamlObj.access('retrieval.convergence.stop_before_performing_retrieval', False)
+            gspRunNow.yamlObj.access('retrieval.convergence.stop_before_performing_retrieval', True)
             gspRunNow.yamlObj.access(lgnrmfld, szVars[bn])
             gspRunNow.yamlObj.access(RRIfld, n) 
             gspRunNow.yamlObj.access(IRIfld, k)
