@@ -18,31 +18,33 @@ from MADCAP_functions import loadVARSnetCDF
 
 
 
-#netCDFpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc' # just need for lambda's and dummy ext
-#savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4_LOCAL.nc'
+netCDFpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc' # just need for lambda's and dummy ext
+savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_VTEST_LOCAL.nc'
 #loadPath_pkl = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4.pkl'
-netCDFpath = syncPath+'Working/GRASP_PMgenerationRun/optics_SU.v5_7.GSFun.nc' # just need for lambda's and dummy ext
-savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-SU-RH0/GRASP_LUT-DrySU_V1.nc'
+# netCDFpath = syncPath+'Working/GRASP_PMgenerationRun/optics_SU.v5_7.GSFun.nc' # just need for lambda's and dummy ext
+# savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-SU-RH0/GRASP_LUT-DrySU_V1.nc'
 loadPath_pkl = None
 
-maxL = 9 # max number of wavelengths in a single GRASP run
+maxL = 13 # max number of wavelengths in a single GRASP run
 Nangles = 181 # determined by GRASP kernels
 
 # if loadPath_pkl is None grasp results is generated (not loaded) and the following are required:
 binPathGRASP = '/discover/nobackup/wrespino/grasp_open/build/bin/grasp' if discover else '/usr/local/bin/grasp' # currently has lambda checks disabled
-YAMLpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-SU-RH0/settings_BCK_ExtSca_9lambda.yml'
-lgnrmfld = 'retrieval.constraints.characteristic[2].mode[1].initial_guess.value'
+YAMLpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_9lambda_80nmTO20μm.yml'
+lgnrmfld = 'retrieval.constraints.characteristic[1].mode[1].initial_guess.value'
 RRIfld =   'retrieval.constraints.characteristic[3].mode[1].initial_guess.value' # should match setting in YAML file
 IRIfld =   'retrieval.constraints.characteristic[4].mode[1].initial_guess.value'
 maxCPU = 28 if discover else 3
 ##                   rv      sigma [currently: MADCAP DUST-LUT V3 (fitting total ext, not just spectral dependnece)]
-#szVars = np.array([[0.6576, 0.2828],
-#                   [1.2436, 0.2500],
-#                   [2.2969, 0.3440],
-#                   [5.3645, 0.7070],
-#                   [9.9649, 0.7263]])
+szVars = np.array([[0.6576, 0.2828],
+                  [1.2436, 0.2500],
+                  [2.2969, 0.3440],
+                  [5.3645, 0.7070],
+                  [9.9649, 0.7263]])
+szVars = np.array([[0.6576, 0.2828],
+                  [1.2436, 0.2500]])
 #                   rv      sigma [currently: MADCAP DrySU-LUT V1]
-szVars = np.array([[0.18482, 0.5709795355796814]])
+# szVars = np.array([[0.18482, 0.5709795355796814]])
 nBnds = [1.301, 1.699] # taken from netCDF but forced to these bounds
 kBnds = [1e-8, 0.499]
 
@@ -69,7 +71,7 @@ else: # perform calculations
             wvlsNow = wvls[lstrt:min(lstrt+maxL,Nlambda)]
             wvInds = np.r_[lstrt:min(lstrt+maxL,Nlambda)]
             gspRunNow = rg.graspRun(YAMLpath)
-            dtObj = dt.datetime.now + dt.timedelta(hours=bn)
+            dtObj = dt.datetime.now() + dt.timedelta(hours=bn)
             nowPix = rg.pixel(dtObj, 1, 1, 0, 0, 0, 100)
             for wvl, wvInd in zip(wvlsNow, wvInds): # This will be expanded for wavelength dependent measurement types/geometry
                 meas = np.r_[optTbl['qext'][bn,0,wvInd]]
@@ -80,6 +82,8 @@ else: # perform calculations
             k = -optTbl['refimag'][bn,0,wvInds]
             k = np.minimum(k, kBnds[1])
             k = np.maximum(k, kBnds[0])
+            gspRunNow.yamlObj.adjustLambda(maxL)
+            gspRunNow.yamlObj.access('retrieval.convergence.stop_before_performing_retrieval', False)
             gspRunNow.yamlObj.access(lgnrmfld, szVars[bn])
             gspRunNow.yamlObj.access(RRIfld, n) 
             gspRunNow.yamlObj.access(IRIfld, k)
