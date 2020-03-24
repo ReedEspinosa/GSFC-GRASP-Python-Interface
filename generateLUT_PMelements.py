@@ -23,8 +23,8 @@ else:
 from MADCAP_functions import loadVARSnetCDF
 
 
-netCDFpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc' # just need for lambda's and dummy ext
-savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4_sub500nm.nc'
+netCDFpath = os.path.join(syncPath,'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc') # just need for lambda's and dummy ext
+savePath_netCDF = os.path.join(syncPath,'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4_sub500nm.nc')
 #loadPath_pkl = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4.pkl'
 # netCDFpath = syncPath+'Working/GRASP_PMgenerationRun/optics_SU.v5_7.GSFun.nc' # just need for lambda's and dummy ext
 # savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-SU-RH0/GRASP_LUT-DrySU_V1.nc'
@@ -35,8 +35,7 @@ Nangles = 181 # determined by GRASP kernels
 
 # if loadPath_pkl is None grasp results is generated (not loaded) and the following are required:
  # currently has lambda checks disabled
-GRASPkrnls = '' if discover else '/usr/local/share/grasp/kernels/KERNELS_BASE/'
-YAMLpath = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_9lambda_80nmTO500nm.yml'
+YAMLpath = os.path.join(syncPath,'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_9lambda_80nmTO500nm.yml')
 lgnrmfld = 'retrieval.constraints.characteristic[1].mode[1].initial_guess.value'
 RRIfld =   'retrieval.constraints.characteristic[3].mode[1].initial_guess.value' # should match setting in YAML file
 IRIfld =   'retrieval.constraints.characteristic[4].mode[1].initial_guess.value'
