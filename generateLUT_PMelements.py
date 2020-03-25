@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import scipy.integrate
 import runGRASP as rg
 from netCDF4 import Dataset
 import datetime as dt
@@ -24,7 +25,7 @@ from MADCAP_functions import loadVARSnetCDF
 
 
 netCDFpath = os.path.join(syncPath,'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc') # just need for lambda's and dummy ext
-savePath_netCDF = os.path.join(syncPath,'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4_sub500nm.nc')
+savePath_netCDF = os.path.join(syncPath,'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V5')
 #loadPath_pkl = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4.pkl'
 # netCDFpath = syncPath+'Working/GRASP_PMgenerationRun/optics_SU.v5_7.GSFun.nc' # just need for lambda's and dummy ext
 # savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-SU-RH0/GRASP_LUT-DrySU_V1.nc'
@@ -35,7 +36,7 @@ Nangles = 181 # determined by GRASP kernels
 
 # if loadPath_pkl is None grasp results is generated (not loaded) and the following are required:
  # currently has lambda checks disabled
-YAMLpath = os.path.join(syncPath,'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_9lambda_80nmTO500nm.yml')
+YAMLpath = os.path.join(syncPath,'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/settings_BCK_ExtSca_9lambda.yml')
 lgnrmfld = 'retrieval.constraints.characteristic[1].mode[1].initial_guess.value'
 RRIfld =   'retrieval.constraints.characteristic[3].mode[1].initial_guess.value' # should match setting in YAML file
 IRIfld =   'retrieval.constraints.characteristic[4].mode[1].initial_guess.value'
@@ -52,7 +53,8 @@ szVars = np.array([[0.6576, 0.2828],
 # szVars = np.array([[0.18482, 0.5709795355796814]])
 nBnds = [1.301, 1.699] # taken from netCDF but forced to these bounds
 kBnds = [1e-8, 0.499]
-
+# rBnds = [0.08, 0.5] # PSD integration bounds in μm
+rBnds = [0.08, 20.0] # PSD integration bounds in μm
 
 # DUMMY VALUES
 msTyp = [12] 
@@ -65,6 +67,7 @@ loaddVarNames = ['lambda', 'qext', 'qsca', 'refreal', 'refimag']
 optTbl = loadVARSnetCDF(netCDFpath, loaddVarNames)
 wvls = optTbl['lambda']*1e6
 gspRun = []
+savePath_netCDF = savePath_netCDF + '_%dnmTO%dnm.nc' % tuple(1000*np.array(rBnds))
 Nlambda = len(wvls)
 lEdg = np.r_[0:Nlambda:maxL]
 Nbin = szVars.shape[0]
@@ -88,6 +91,8 @@ else: # perform calculations
             k = np.minimum(k, kBnds[1])
             k = np.maximum(k, kBnds[0])
             gspRunNow.yamlObj.adjustLambda(maxL)
+            gspRunNow.yamlObj.access('retrieval.phase_matrix.radius.mode[1].min', rBnds[0])
+            gspRunNow.yamlObj.access('retrieval.phase_matrix.radius.mode[1].max', rBnds[1])
             gspRunNow.yamlObj.access('retrieval.convergence.stop_before_performing_retrieval', True)
             gspRunNow.yamlObj.access(lgnrmfld, szVars[bn])
             gspRunNow.yamlObj.access(RRIfld, n) 
@@ -110,6 +115,14 @@ root_grp.createDimension('angle', Nangles)
 sizeBin = root_grp.createVariable('sizeBin', 'u1', ('sizeBin'))
 sizeBin.units = 'none'
 sizeBin.long_name = 'dust size bin index'
+psdIntMIN = root_grp.createVariable('psdIntMIN', 'f4', ('sizeBin'))
+psdIntMIN.units = 'μm'
+psdIntMIN.long_name = 'Lower bound of PSD integration range'
+psdIntMIN[:] = np.repeat(rBnds[0], Nbin)
+psdIntMAX = root_grp.createVariable('psdIntMAX', 'f4', ('sizeBin'))
+psdIntMAX.units = 'μm'
+psdIntMAX.long_name = 'Upper bound of PSD integration range'
+psdIntMIN[:] = np.repeat(rBnds[1], Nbin)
 wavelength = root_grp.createVariable('lambda', 'f4', ('lambda'))
 wavelength.units = 'um'
 wavelength.long_name = 'wavelength'
@@ -166,8 +179,9 @@ for i,rslt in enumerate(rslts):
         sph[binInd] = np.atleast_1d(rslt['sph'])[0]
         rEff[binInd] = np.atleast_1d(rslt['rEffCalc'])[0]
     lInd = np.r_[lEdg[lEdgInd]:min(lEdg[lEdgInd]+maxL,Nlambda)]
-    bext_vol[binInd, lInd] = rslt['aod']/rslt['vol'][0]
-    bsca_vol[binInd, lInd] = rslt['ssa']*rslt['aod']/rslt['vol'][0]
+    vol = scipy.integrate.simps(rslt['vol'][0]*rslt['dVdlnr'][0,:]/rslt['r'][0,:], rslt['r'][0,:]) # vol is volume of full lognormal! Need to integrate ourselves b/c some of the volume may be truncated.
+    bext_vol[binInd, lInd] = rslt['aod']/vol 
+    bsca_vol[binInd, lInd] = rslt['ssa']*rslt['aod']/vol
     refreal[binInd, lInd] = rslt['n']  # HINT: WE DID NOT HAVE MODE SPECIFIC REF IND IN YAML
     refimag[binInd, lInd] = rslt['k']
     for varNm in PMvarNms:
