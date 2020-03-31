@@ -25,11 +25,13 @@ from MADCAP_functions import loadVARSnetCDF
 
 
 netCDFpath = os.path.join(syncPath,'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/optics_DU.v15_6.nc') # just need for lambda's and dummy ext
-savePath_netCDF = os.path.join(syncPath,'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V5')
+savePath_netCDF = os.path.join(syncPath,'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V5A')
 #loadPath_pkl = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V4.pkl'
 # netCDFpath = syncPath+'Working/GRASP_PMgenerationRun/optics_SU.v5_7.GSFun.nc' # just need for lambda's and dummy ext
 # savePath_netCDF = syncPath+'Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-SU-RH0/GRASP_LUT-DrySU_V1.nc'
-loadPath_pkl = None
+loadPath_pkl = '/Users/wrespino/Synced/Remote_Sensing_Projects/MADCAP_CAPER/newOpticsTables/LUT-DUST/GRASP_LUT-DUST_V5_80nmTO500nm.pkl'
+# WARNING: rBnds below will still be appended to the file name, regaurdless of what is in the above file
+# TODO: fix this
 
 maxL = 13 # max number of wavelengths in a single GRASP run
 Nangles = 181 # determined by GRASP kernels
@@ -53,8 +55,8 @@ szVars = np.array([[0.6576, 0.2828],
 # szVars = np.array([[0.18482, 0.5709795355796814]])
 nBnds = [1.301, 1.699] # taken from netCDF but forced to these bounds
 kBnds = [1e-8, 0.499]
-# rBnds = [0.08, 0.5] # PSD integration bounds in μm
-rBnds = [0.08, 20.0] # PSD integration bounds in μm
+rBnds = [0.08, 0.5] # PSD integration bounds in μm
+# rBnds = [0.08, 20.0] # PSD integration bounds in μm
 
 # DUMMY VALUES
 msTyp = [12] 
@@ -101,7 +103,6 @@ else: # perform calculations
             gspRun.append(gspRunNow)
     gDB = rg.graspDB(gspRun, maxCPU)
     rslts = gDB.processData(savePath=savePath_netCDF[0:-2]+'pkl', binPathGRASP=binPathGRASP, krnlPathGRASP=GRASPkrnls)
-
 root_grp = Dataset(savePath_netCDF, 'w', format='NETCDF4')
 #root_grp = Dataset('/Users/wrespino/Desktop/netCDF_TEST.nc', 'w', format='NETCDF4')
 root_grp.description = 'Single scattering properties of dust bins derived with GRASP'
@@ -122,7 +123,7 @@ psdIntMIN[:] = np.repeat(rBnds[0], Nbin)
 psdIntMAX = root_grp.createVariable('psdIntMAX', 'f4', ('sizeBin'))
 psdIntMAX.units = 'μm'
 psdIntMAX.long_name = 'Upper bound of PSD integration range'
-psdIntMIN[:] = np.repeat(rBnds[1], Nbin)
+psdIntMAX[:] = np.repeat(rBnds[1], Nbin)
 wavelength = root_grp.createVariable('lambda', 'f4', ('lambda'))
 wavelength.units = 'um'
 wavelength.long_name = 'wavelength'
