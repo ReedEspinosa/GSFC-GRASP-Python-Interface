@@ -383,7 +383,7 @@ class graspRun(object):
         if not rsltAeroDict:
             warnings.warn('Aerosol data could not be read from %s\n  Returning empty list in place of output data...' % outputFN)
             return []
-        rsltSurfDict = self.parseOutSurface(contents)
+        rsltSurfDict = self.parseOutSurface(contents, Nλ=len(wavelengths))
         rsltFitDict = self.parseOutFit(contents, wavelengths)
         rsltPMDict = self.parsePhaseMatrix(contents, wavelengths)
         rsltDict = []
@@ -598,6 +598,8 @@ class graspRun(object):
                     rs['βext'] = rs['βext'].reshape(nsd,-1)
                 rs['aodMode'] = rs['aodMode'].reshape(nsd,-1)
                 rs['ssaMode'] = rs['ssaMode'].reshape(nsd,-1)
+                for λflatKey in [k for k in ['n','k'] if k in rs.keys()]: # check if spectrally flat RI values used
+                    for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value
         if ('r' in results[0]) and np.all(results[0]['r'][0]==results[0]['r']): # check if all r value are same at all lambda, may remove this condition later but makes logic much more complicated
             for rs in results:
                 dvdlnr = (rs['dVdlnr']*np.atleast_2d(rs['vol']).T).sum(axis=0)
@@ -609,7 +611,7 @@ class graspRun(object):
                 rs['height'] = np.trapz(βprfl*rng,rng)/np.trapz(βprfl,rng) # mean height
         return results, wavelengths
     
-    def parseOutSurface(self, contents):
+    def parseOutSurface(self, contents, Nλ=None):
         results = self.parseOutDateTime(contents)
         ptrnALB = re.compile('^[ ]*Wavelength \(um\),[ ]+Surface ALBEDO')
         ptrnBRDF = re.compile('^[ ]*Wavelength \(um\),[ ]+BRDF parameters')
@@ -618,9 +620,9 @@ class graspRun(object):
         i = 0
         while i<len(contents):
             self.parseMultiParamFld(contents, i, results, ptrnALB, 'albedo')
-            self.parseMultiParamFld(contents, i, results, ptrnBRDF, 'brdf')
+            self.parseMultiParamFld(contents, i, results, ptrnBRDF, 'brdf', Nλ=Nλ) #  GRASP cox-munk doens't require 2nd & 3rd parameters to be retrieved at all λ, not tested for BRDFs
             self.parseMultiParamFld(contents, i, results, ptrnBPDF, 'bpdf')
-            self.parseMultiParamFld(contents, i, results, ptrnWater, 'wtrSurf')            
+            self.parseMultiParamFld(contents, i, results, ptrnWater, 'wtrSurf', Nλ=Nλ)            
             i+=1
         return results
 
@@ -706,7 +708,7 @@ class graspRun(object):
             i+=1        
         return results
     
-    def parseMultiParamFld(self, contents, i, results, ptrn, fdlName, fldName0=False, colOffset=0):
+    def parseMultiParamFld(self, contents, i, results, ptrn, fdlName, fldName0=False, colOffset=0, Nλ=None):
         if not ptrn.match(contents[i]) is None: # RRI by aersol size mode
             singNumeric = re.compile('^[ ]*[0-9]+[ ]*$')
             numericLn = re.compile('^[ ]*[0-9]+')
@@ -724,7 +726,15 @@ class graspRun(object):
                     Nparams += 1
             if Nparams > 1:
                 for k in range(len(results)): # seperate parameters from wavelengths
-                    results[k][fdlName] = results[k][fdlName].reshape(Nparams,-1)
+                    if Nλ is None or len(results[k][fdlName]) == Nλ*Nparams: 
+                        results[k][fdlName] = results[k][fdlName].reshape(Nparams,-1)
+                    elif Nλ and len(results[k][fdlName]) == (Nλ+Nparams-1): # we take 1st parameter to contain spectrum, single value for 2nd, 3rd,...
+                        top = results[k][fdlName][0:Nλ]
+                        bot = [np.repeat(val,Nλ) for val in results[k][fdlName][Nλ:]]                      
+                        results[k][fdlName] = np.vstack([top, bot])
+                    elif k==0: # only show warning once
+                        msg = 'Could not divide %s (len=%d) in Nparam=%d modes! Returning 1D array instead.'
+                        warnings.warn(msg % (fdlName, len(results[k][fdlName]), Nparams))
             i = lastLine - 1
             
     def genSDATAHead(self, unqTimes):
