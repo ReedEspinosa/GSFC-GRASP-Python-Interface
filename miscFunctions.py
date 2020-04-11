@@ -3,7 +3,11 @@
 
 import os
 import numpy as np
-import PyMieScatt as ps
+try:
+    import PyMieScatt as ps
+    PyMieLoaded = True
+except ImportError:
+    PyMieLoaded = False
 try:
     import matplotlib.pyplot as plt
     pltLoad = True
@@ -94,6 +98,7 @@ def phaseMat(r, dvdlnr, n, k, wav=0.550):
         wav: wavelength in μm
     Returns tupple with three arrays: (scattering_angle, normalized_P11, -P12/P11) 
     """
+    assert PyMieLoaded, "Import errors occured when loading the PyMieScatt module" 
     m = complex(n, k)   
     dp = r*2
     ndp = dvdlnr/(r**3) # this should be r^4 but we seem to match with r^3... we _think_ PyMieScatt really wants dn/dr*r, contrary to docs
