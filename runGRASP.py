@@ -844,17 +844,18 @@ class graspYAML(object):
         for lt in self.lambdaTypes: # loop over constraint types
             m = 1;
             while self.access('%s.%d' % (lt,m)): # loop over each mode
-                for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
-                    orgVal = self.access('%s.%d.%s' % (lt,m,f))
-                    if len(orgVal) >= Nlambda:
-                        self.access('%s.%d.%s' % (lt,m,f), orgVal[0:Nlambda], write2disk=False)
-                    else:
-                        rpts = Nlambda - len(orgVal)
-                        if f=='index_of_wavelength_involved':
-                            newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
-                        else:
-                            newVal = orgVal + np.repeat(orgVal[-1],rpts).tolist()
-                        self.access('%s.%d.%s' % (lt,m,f), newVal, write2disk=False)
+                if self.access('%s.%d.index_of_wavelength_involved' % (lt,m))[0] > 0: # otherwise yaml specified [0] implying the parameter should be spectrally invarient
+                    for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
+                            orgVal = self.access('%s.%d.%s' % (lt,m,f))
+                            if len(orgVal) >= Nlambda:
+                                self.access('%s.%d.%s' % (lt,m,f), orgVal[0:Nlambda], write2disk=False)
+                            else:
+                                rpts = Nlambda - len(orgVal)
+                                if f=='index_of_wavelength_involved':
+                                    newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
+                                else:
+                                    newVal = orgVal + np.repeat(orgVal[-1],rpts).tolist()
+                                self.access('%s.%d.%s' % (lt,m,f), newVal, write2disk=False)
                 m+=1
         for n in range(len(self.access('retrieval.noises'))): # adjust the noise lambda as well
             m = 1
