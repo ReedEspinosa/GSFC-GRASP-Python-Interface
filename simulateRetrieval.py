@@ -90,6 +90,53 @@ class simulation(object):
                 self.rsltFwd = [self.rsltBck[-1]] # resltFwd as a array of len==0 (not totaly backward compatible, it used to be straight dict)
                 self.rsltBck = self.rsltBck[:-1]
  
+    def conerganceFilter(self, χthresh=None, σ=None, verbose=False):
+        if σ is None:
+            σ={'I'  :0.03, # relative
+              'QoI' :0.005, # absolute 
+              'UoI' :0.005, # absolute 
+              'Q'   :0.005, # absolute in terms of Q/I
+              'U'   :0.005, # absolute in terms of U/I
+              'LS'  :0.05, # relative
+              'VBS' :0.05, # relative
+              'VExt':17e-6, # absolute
+              }
+        for i,rb in enumerate(self.rsltBck):
+            rf = self.rsltFwd[0] if len(self.rsltFwd)==1 else self.rsltFwd[i]
+            χΤοtal = np.array([])
+            for measType in ['VExt', 'VBS', 'LS', 'I', 'QoI', 'UoI', 'Q', 'U']:
+                fitKey = 'fit_'+measType
+                if fitKey in rb:
+                    DBck = rb[fitKey][~np.isnan(rb[fitKey])] 
+                    if fitKey in rf: 
+                         DFwd = rf[fitKey][~np.isnan(rf[fitKey])]
+                    elif measType in ['QoI', 'UoI'] and fitKey[:-2] in rf: # rf has X while rb has XoI
+                         DFwd = rf[fitKey[:-2]][~np.isnan(rf[fitKey[:-2]])]/rf['fit_I'][~np.isnan(rf[fitKey[:-2]])]
+                    if measType in ['Q', 'U']: # we need to normalize it by I:
+                        DBck = DBck/rb['fit_I'][~np.isnan(rb[fitKey])]
+                        DFwd = DFwd/rf['fit_I'][~np.isnan(rf[fitKey])]                        
+                    if measType in ['I', 'LS', 'VBS']: # relative errors
+                        with np.errstate(divide='ignore'): # possible for DBck+DFwd=0, inf's will be removed below
+                            χLocal = ((2*(DBck-DFwd)/(DBck+DFwd))/σ[measType])**2
+                        χLocal[χLocal>100] = 100 # cap at 10σ (small values may produce huge relative errors)
+                    else: # relative errors
+                        if measType in ['Q', 'U']: # we need to normalize it by I:
+                            DBck = DBck/rb['fit_I'][~np.isnan(rb[fitKey])]
+                            DFwd = DFwd/rf['fit_I'][~np.isnan(rf[fitKey])]
+                        χLocal = ((DBck-DFwd)/σ[measType])**2
+                    χΤοtal = np.r_[χΤοtal, χLocal]   
+            rb['χ2'] = np.sqrt(np.mean(χΤοtal))
+        if χthresh and len(self.rsltBck) > 2: # we will always keep at least 2 entries
+            validInd = np.array([rb['χ2']<=χthresh for rb in self.rsltBck])
+            if verbose: print('%d/%d met χthresh' % (validInd.sum(), len(self.rsltBck)))
+            if validInd.sum() < 2:
+                validInd = np.argsort([rb['χ2'] for rb in self.rsltBck])[0:2] # note validInd went from bool to array of ints
+                if verbose:
+                    print('Preserving the two rsltBck elements with lowest χ scores, even though they did not meet χthresh.')
+            self.rsltBck = self.rsltBck[validInd]
+        elif χthresh and np.sum([rb['χ2']<=χthresh for rb in self.rsltBck])<2 and verbose:
+            print('rsltBck only has two or fewer elements, no χthresh screening will be perofmed.')
+                    
     def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None, fineModesFwd=None, fineModesBck=None): 
         """ Returns the RMSE and bias (defined below) from the simulation results
                 wvlngthInd - the index of the wavelength to calculate stats for
@@ -107,6 +154,7 @@ class simulation(object):
                 """
         # check on input and available variables
         assert (not self.rsltBck is None) and (not self.rsltFwd is None), 'You must call loadSim() or runSim() before you can calculate statistics!'
+        if type(self.rsltFwd) is dict: self.rsltFwd = [self.rsltFwd]
         assert type(self.rsltFwd) is list or type(self.rsltFwd) is np.ndarray, 'rsltFwd must be a list! Note that it was stored as a dict in older versions of the code.'
         fwdKys = self.rsltFwd[0].keys()
         bckKys = self.rsltBck[0].keys()
