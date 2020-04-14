@@ -91,6 +91,7 @@ class simulation(object):
                 self.rsltBck = self.rsltBck[:-1]
  
     def conerganceFilter(self, χthresh=None, σ=None, verbose=False):
+        """ Only removes data from resltBck if χthresh is provided, χthresh=1.5 seems to work well """
         if σ is None:
             σ={'I'  :0.03, # relative
               'QoI' :0.005, # absolute 
@@ -162,6 +163,8 @@ class simulation(object):
         assert modeCut is None or lgnrmPSD, 'Fine/Coarse errors can only be caluclated from GRASPs lognormal PSD representation! For this data, you must set modeCut=None' 
         hghtInfo = ('βext' in fwdKys or 'aod_PBL' in fwdKys) and 'βext' in self.rsltBck[0]
         assert hghtCut is None or hghtInfo, 'PBL/FT errors can only currently be calculated from LIDAR retrievals! For this retrieval dataset, you must set heghtCut=None' 
+        assert 'aodMode' not in fwdKys or self.rsltFwd[0]['aodMode'].shape[0] > max(fineModesFwd), 'fineModesFwd contains indices that are too high given the number of modes in rsltFwd[aodMode]'
+        assert 'aodMode' not in bckKys or self.rsltBck[0]['aodMode'].shape[0] > max(fineModesBck), 'fineModesBck contains indices that are too high given the number of modes in rsltBck[aodMode]'        
         # define functions for calculating RMS and bias
         rmsFun = lambda t,r: np.sqrt(np.median((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r)
         biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output
@@ -211,11 +214,11 @@ class simulation(object):
                 rtrvd = np.hstack([self.τWghtedAvg(rtrvd, self.rsltBck, wvlnthInd), rtrvd])
                 true = np.hstack([self.τWghtedAvg(true, self.rsltFwd, wvlnthInd), true])                    
             if true.shape[1] == rtrvd.shape[1]: # truth and retrieved modes can be paired one-to-one    
-                rmsErr[av] = rmsFun(true, rtrvd)
+                rmsErr[av] = rmsFun(true, rtrvd) # BUG: fineModesFwd and fineModesBck and not taken into accoutn here, really we just shouldn't return n or k with more than one mode (we have n(k)_fine now)
                 bias[av] = biasFun(true, rtrvd)
             elif av in varsAodAvg and 'aodMode' in fwdKys and 'aodMode' in bckKys: # we at least know the first, total elements of CRI correspond to each other
                 rmsErr[av] = rmsFun(true[:,0], rtrvd[:,0])
-                rmsErr[av] = biasFun(true[:,0], rtrvd[:,0])
+                bias[av] = biasFun(true[:,0], rtrvd[:,0])
             if modeCut: # calculate rEff, could be abstracted into above code but tricky b/c volume weighted mean will not give exactly correct results (code below is exact)
                 rtrvd = np.array([self.ReffMode(rb, modeCut) for rb in self.rsltBck])
                 true = np.array([self.ReffMode(rf, modeCut) for rf in self.rsltFwd])
@@ -231,13 +234,13 @@ class simulation(object):
             stateVals = stateVals[...,wvlnthInd]
         if not modeInd is None and 'aod' in av: # we will sum multiple fine modes to get total fine mode AOD
             stateVals = np.expand_dims(stateVals[:, modeInd].sum(axis=1),1)
-        elif not modeInd is None: # we will perform AOD weighted averaging from alll fine modes of an intensive property
-            stateVals = self.τWghtedAvg(stateVals, rslts, wvlnthInd, modeInd)
+        elif not modeInd is None: # we will perform AOD weighted averaging from all fine modes of an intensive property
+            stateVals = self.τWghtedAvg(stateVals[:, modeInd], rslts, wvlnthInd, modeInd)
         return stateVals
 
     def τWghtedAvg(self, val, rslts, wvlnthInd, modeInd=slice(None)):
         avgVal = np.full(len(rslts), np.nan)
-        if (val.shape[1]==1 and slice(None)==modeInd) or not 'aodMode' in rslts: # there was only one mode to start OR can't calculate b/c we don't have aodMode
+        if (val.shape[1]==1 and slice(None)==modeInd) or not 'aodMode' in rslts[0]: # there was only one mode to start OR can't calculate b/c we don't have aodMode
             return np.zeros([val.shape[0], 0]) # return an empty array
         for i,rslt in enumerate(rslts):
             ttlSum = np.sum(val[i]*rslt['aodMode'][modeInd,wvlnthInd])
