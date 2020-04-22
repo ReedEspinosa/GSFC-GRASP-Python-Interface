@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import miscFunctions as mf
 from netCDF4 import Dataset
+from csv import writer as csv_writer
 from datetime import datetime as dt # we want datetime.datetime
 from shutil import copyfile
 from subprocess import Popen,PIPE
@@ -396,14 +397,64 @@ class graspRun(object):
         self.calcAsymParam(rsltDict)
         return rsltDict
     
+    def _findRslts(self, rsltDict=None, customOUT=None):
+        assert not (rsltDict is not None and customOUT is not None), 'Only one of rsltDict or customOUT should be provided, not both!'
+        if not customOUT is None: 
+            return self.readOutput(customOUT)
+        elif rsltDict:
+            return rsltDict
+        else:
+            return self.readOutput()
+        
+    
+    def singleScat2CSV(self, csvPath, pixInd=0, rsltDict=None, customOUT=None):
+        """ This function will take grasp output and dump it in a netCDF file
+            PM of pixInd (defualt 0) will be saved (only one pixel saved at a time)
+            If resultDict is provided, this data will be written to netCDF.
+            If customOUT is provided, data from GRASP output text file specified will be written to netCDF.
+            If neither are provided the output text file associated with current instance will be written """
+        rslt = self._findRslts(rsltDict, customOUT)[pixInd]
+        pmΚeys = ['p11', 'p12', 'p22', 'p33','p34','p44']
+        assert pmΚeys[0] in rslt, 'p11 key not found in results. Is your YAML output set to print the phase matrix?'
+        Nmodes = rslt[pmΚeys[0]].shape[1]
+        Nλ = len(rslt['lambda'])
+        Npm = np.sum([key in pmΚeys for key in rslt.keys()])
+        with open(csvPath, 'w', newline='') as csvfile:
+            dataWriter = csv_writer(csvfile, delimiter=',', quotechar='|')
+            # write 2 header rows TODO: page these with leading column for ext,sca and angle
+            emptyStrList = ['' for _ in range(Npm*Nλ-1)]
+            modeRow = np.hstack([['mode%d' % m] + emptyStrList for m in range(Nmodes)])
+            dataWriter.writerow(np.r_[[''], modeRow])
+            emptyStrList = ['' for _ in range(Npm-1)]
+            λRow = np.hstack([['%5.3f um' % λ] + emptyStrList for λ in rslt['lambda']])
+            dataWriter.writerow(np.r_[[''], np.tile(λRow, Nmodes)])
+            # write ext/sca data
+            extndVect = ['' for _ in range(Npm-2)]
+            dataWriter.writerow(np.r_[[''], np.tile(['Bext (m^2/m^3)','Bsca (m^2/m^3)']+extndVect, Nmodes*Nλ)])
+            dataVect = [''] # first column has angle and thus is empty for sca/ext
+            for mode in range(Nmodes):
+                for λind in range(Nλ):
+                    dataVect.append(rslt['aodMode'][mode,λind]/rslt['vol'][mode]) # bext_vol
+                    dataVect.append(rslt['aodMode'][mode,λind]*rslt['ssaMode'][mode,λind]/rslt['vol'][mode]) # bsca_vol
+                    dataVect.extend(extndVect)
+            dataWriter.writerow(dataVect)            
+            # write PM data
+            dataWriter.writerow(np.r_[['angle'], np.tile(pmΚeys[0:Npm], Nmodes*Nλ)])
+            for angInd, ang in enumerate(rslt['angle'][:,0,0]):
+                dataVect = [ang]
+                for mode in range(Nmodes):
+                    for λind in range(Nλ):
+                        for key in pmΚeys[0:Npm]:
+                            dataVect.append(rslt[key][angInd,mode,λind]) # painfully inefficient, but surprisingly fast
+                dataWriter.writerow(dataVect)
+            
     def output2netCDF(self, nc4Path, rsltDict=None, customOUT=None, seaLevel=False):
         """ This function will take grasp output and dump it in a netCDF file
             If resultDict is provided, this data will be written to netCDF.
             If customOUT is provided, data from GRASP output text file specified will be written to netCDF.
             If neither are provided the output text file associated with current instance will be written.
             seaLevel=True should be used with caution, see assumed ROD and depol. below. """
-        assert not (rsltDict is not None and customOUT is not None), 'Only one of rsltDict or customOUT should be provided, not both!'
-        if not rsltDict: rsltDict = self.readOutput(customOUT)
+        rsltDict = self._findRslts(rsltDict, customOUT)
         Nvis = np.unique(rsltDict[0]['vis'][:,0]).shape[0]
         Nfis = np.unique(rsltDict[0]['fis'][:,0]).shape[0]        
         for vis,fis in zip(rsltDict[0]['vis'].T, rsltDict[0]['fis'].T):
