@@ -21,7 +21,7 @@ class simulation(object):
         self.rsltBck = None
         self.rsltFwd = None
 
-    def runSim(self, fwdData, bckYAMLpath, Nsims=1, maxCPU=4, binPathGRASP=None, savePath=None, lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False):
+    def runSim(self, fwdData, bckYAMLpath, Nsims=1, maxCPU=4, binPathGRASP=None, savePath=None, lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False, dryRun=False):
         """ <> runs the simulation for given set of simulated and inversion conditions <>
         fwdData -> yml file path for GRASP fwd model OR "results style" list of dicts
         bckYAMLpath -> yml file path for GRASP inversion
@@ -31,7 +31,8 @@ class simulation(object):
         savePath -> path to save pickle w/ simulated retrieval results, lightSave -> remove PM data
         intrnlFileGRASP -> alternative path to GRASP kernels, overwrites value in YAML files
         releaseYAML=True -> auto adjust back yaml Nλ to match insturment
-        rndIntialGuess=True -> overwrite initial guesses in bckYAMLpath w/ uniformly distributed random values between min & max """
+        rndIntialGuess=True -> overwrite initial guesses in bckYAMLpath w/ uniformly distributed random values between min & max 
+        dryRun -> run foward model and then return noise added graspDB object, without performing the retrievals """
         assert not self.nowPix is None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.' 
         # ADAPT fwdData/RUN THE FOWARD MODEL
         if type(fwdData) == str and fwdData[-3:] == 'yml':
@@ -67,20 +68,25 @@ class simulation(object):
                 self.nowPix.dtObj = self.nowPix.dtObj + dt.timedelta(hours=1) # increment hour otherwise GRASP will whine
             gObjBck.addPix(self.nowPix) # addPix performs a deepcopy on nowPix, won't be impact by next iteration through loopInd
         gDB = rg.graspDB(gObjBck, maxCPU)
-        self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
-        # SAVE RESULTS
-        if savePath:
-            if not os.path.exists(os.path.dirname(savePath)):
-                print('savePath (%s) did not exist, creating it...')
-                os.makedirs(os.path.dirname(savePath))
-            if lightSave:
-                for pmStr in ['p11','p12','p22','p33','p34','p44']:
-                    [rb.pop(pmStr, None) for rb in self.rsltBck]
-                    if len(self.rsltFwd) > 1: [rf.pop(pmStr, None) for rf in self.rsltFwd]
-            with open(savePath, 'wb') as f:
-                pickle.dump(list(self.rsltBck), f, pickle.HIGHEST_PROTOCOL)
-                pickle.dump(list(self.rsltFwd), f, pickle.HIGHEST_PROTOCOL)
-
+        if not dryRun:
+            self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
+            # SAVE RESULTS
+            if savePath:
+                if not os.path.exists(os.path.dirname(savePath)):
+                    print('savePath (%s) did not exist, creating it...')
+                    os.makedirs(os.path.dirname(savePath))
+                if lightSave:
+                    for pmStr in ['p11','p12','p22','p33','p34','p44']:
+                        [rb.pop(pmStr, None) for rb in self.rsltBck]
+                        if len(self.rsltFwd) > 1: [rf.pop(pmStr, None) for rf in self.rsltFwd]
+                with open(savePath, 'wb') as f:
+                    pickle.dump(list(self.rsltBck), f, pickle.HIGHEST_PROTOCOL)
+                    pickle.dump(list(self.rsltFwd), f, pickle.HIGHEST_PROTOCOL)
+        else:
+            if savePath: warnings.warn('This was a dry run. No retrievals were performed and no results were saved.')
+            for gObj in gDB.grObjs: gObj.writeSDATA() 
+        return gObjFwd, gDB.grObjs
+            
     def loadSim(self, picklePath):
         with open(picklePath, 'rb') as f:
             self.rsltBck = np.array(pickle.load(f))
@@ -163,8 +169,8 @@ class simulation(object):
         assert modeCut is None or lgnrmPSD, 'Fine/Coarse errors can only be caluclated from GRASPs lognormal PSD representation! For this data, you must set modeCut=None' 
         hghtInfo = ('βext' in fwdKys or 'aod_PBL' in fwdKys) and 'βext' in self.rsltBck[0]
         assert hghtCut is None or hghtInfo, 'PBL/FT errors can only currently be calculated from LIDAR retrievals! For this retrieval dataset, you must set heghtCut=None' 
-        assert 'aodMode' not in fwdKys or self.rsltFwd[0]['aodMode'].shape[0] > max(fineModesFwd), 'fineModesFwd contains indices that are too high given the number of modes in rsltFwd[aodMode]'
-        assert 'aodMode' not in bckKys or self.rsltBck[0]['aodMode'].shape[0] > max(fineModesBck), 'fineModesBck contains indices that are too high given the number of modes in rsltBck[aodMode]'        
+        assert 'aodMode' not in fwdKys or fineModesFwd is None or self.rsltFwd[0]['aodMode'].shape[0] > max(fineModesFwd), 'fineModesFwd contains indices that are too high given the number of modes in rsltFwd[aodMode]'
+        assert 'aodMode' not in bckKys or fineModesBck is None or self.rsltBck[0]['aodMode'].shape[0] > max(fineModesBck), 'fineModesBck contains indices that are too high given the number of modes in rsltBck[aodMode]'        
         # define functions for calculating RMS and bias
         rmsFun = lambda t,r: np.sqrt(np.median((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r)
         biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output

@@ -332,13 +332,16 @@ class graspRun(object):
     def addPix(self, newPixel): # this is called once for each pixel
         self.pixels.append(copy.deepcopy(newPixel)) # deepcopy need to prevent changing via original pixel object outside of graspRun object
         
-    def writeSDATA(self):
+    def writeSDATA(self, pathSDATA=None):
         if len(self.pixels) == 0:
             warnings.warn('You must call addPix() at least once before writting SDATA!')
             return False
-        assert self.yamlObj.YAMLpath, 'You must initialize graspRun with a YAML file to write SDATA'
-        self.pathSDATA = os.path.join(self.dirGRASP, self.yamlObj.access('sdata_fn'));
-        assert (self.pathSDATA), 'Failed to read SDATA filename from '+self.yamlObj.YAMLpath
+        if pathSDATA:
+            self.pathSDATA = pathSDATA
+        else:
+            assert self.yamlObj.YAMLpath, 'You must initialize graspRun with a YAML file to write SDATA'
+            self.pathSDATA = os.path.join(self.dirGRASP, self.yamlObj.access('sdata_fn'));
+            assert (self.pathSDATA), 'Failed to read SDATA filename from '+self.yamlObj.YAMLpath
         unqTimes = np.unique([pix.dtObj for pix in self.pixels])
         SDATAstr = self.genSDATAHead(unqTimes)
         for unqTime in unqTimes:
