@@ -713,15 +713,23 @@ class graspRun(object):
             i+=1
         return results
     
-    def calcAsymParam(self, results):
-        for rslt in results: # Calculate the total asymmetry parameter
+    def calcAsymParam(self, results): # Calculate the total asymmetry parameter, and lidar ratios while we're at it
+        for rslt in results: # loop over pixels
             if np.all([fld in rslt for fld in ['p11','angle','aod','ssa','aodMode','ssaMode']]):                
-                rslt['g'] = np.empty(rslt['p11'].shape[-1])
-                for i in range(rslt['p11'].shape[-1]):
-                    angRad = rslt['angle'][:,0,i]/180*np.pi # HINT: we assume they are same at every mode
-                    wghtP11 = rslt['p11'][...,i]*rslt['ssaMode'][...,i]*rslt['aodMode'][...,i]
-                    totNormP11 = wghtP11.sum(axis=1)/(rslt['ssa'][i]*rslt['aod'][i])
-                    rslt['g'][i] = np.trapz(totNormP11*np.cos(angRad)*np.sin(angRad),angRad)/2  
+                rslt['g'] = np.empty(rslt['aod'].shape)
+                useLidarRatioFromGRASP = 'LidarRatio' in rslt 
+                if not useLidarRatioFromGRASP: rslt['LidarRatio'] = np.empty(rslt['aod'].shape)
+                rslt['gMode'] = np.empty(rslt['aodMode'].shape)
+                rslt['LidarRatioMode'] = np.empty(rslt['aodMode'].shape)
+                for l in range(rslt['p11'].shape[-1]): # loop over wavelength
+                    for m,ssaMode in enumerate(rslt['ssaMode'][:,l]): # loop over mode
+                        angRad = rslt['angle'][:,m,l]/180*np.pi 
+                        rslt['gMode'][m,l] = np.trapz(rslt['p11'][:,m,l]*np.cos(angRad)*np.sin(angRad),angRad)/2  
+                        rslt['LidarRatioMode'][m,l] =4*np.pi/(ssaMode*rslt['p11'][-1,m,l]) # we assume the last angle is θ=180°
+                    scatWghts = rslt['ssaMode'][:,l]*rslt['aodMode'][:,l]
+                    rslt['g'][l] = np.sum(rslt['gMode'][:,l]*scatWghts)/(rslt['ssa'][l]*rslt['aod'][l])
+                    if not useLidarRatioFromGRASP:
+                        rslt['LidarRatio'][l] = 4*np.pi*rslt['aod'][l]/np.sum(scatWghts*rslt['p11'][-1,:,l]) # we assume the last angle is θ=180°
                 
     def parseOutFit(self, contents, wavelengths):
         results = self.parseOutDateTime(contents)
