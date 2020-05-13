@@ -96,7 +96,7 @@ class simulation(object):
                 self.rsltFwd = [self.rsltBck[-1]] # resltFwd as a array of len==0 (not totaly backward compatible, it used to be straight dict)
                 self.rsltBck = self.rsltBck[:-1]
  
-    def conerganceFilter(self, χthresh=None, σ=None, verbose=False):
+    def conerganceFilter(self, χthresh=None, σ=None, verbose=False): # TODO: LIDAR bins with ~0 concentration are dominating this metric...
         """ Only removes data from resltBck if χthresh is provided, χthresh=1.5 seems to work well """
         if σ is None:
             σ={'I'  :0.03, # relative
@@ -119,15 +119,12 @@ class simulation(object):
                          DFwd = rf[fitKey][~np.isnan(rf[fitKey])]
                     elif measType in ['QoI', 'UoI'] and fitKey[:-2] in rf: # rf has X while rb has XoI
                          DFwd = rf[fitKey[:-2]][~np.isnan(rf[fitKey[:-2]])]/rf['fit_I'][~np.isnan(rf[fitKey[:-2]])]
-                    if measType in ['Q', 'U']: # we need to normalize it by I:
-                        DBck = DBck/rb['fit_I'][~np.isnan(rb[fitKey])]
-                        DFwd = DFwd/rf['fit_I'][~np.isnan(rf[fitKey])]                        
                     if measType in ['I', 'LS', 'VBS']: # relative errors
                         with np.errstate(divide='ignore'): # possible for DBck+DFwd=0, inf's will be removed below
                             χLocal = ((2*(DBck-DFwd)/(DBck+DFwd))/σ[measType])**2
                         χLocal[χLocal>100] = 100 # cap at 10σ (small values may produce huge relative errors)
-                    else: # relative errors
-                        if measType in ['Q', 'U']: # we need to normalize it by I:
+                    else: # absolute errors
+                        if measType in ['Q', 'U']: # we need to normalize by I, all Q[U] errors given in terms of q[u]
                             DBck = DBck/rb['fit_I'][~np.isnan(rb[fitKey])]
                             DFwd = DFwd/rf['fit_I'][~np.isnan(rf[fitKey])]
                         χLocal = ((DBck-DFwd)/σ[measType])**2
