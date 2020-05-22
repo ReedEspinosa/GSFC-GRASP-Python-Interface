@@ -39,7 +39,10 @@ class simulation(object):
             gObjFwd = rg.graspRun(fwdData)
             gObjFwd.addPix(self.nowPix)
             gObjFwd.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=intrnlFileGRASP)
-            self.rsltFwd = np.array([gObjFwd.readOutput()[0]])
+            try:
+                self.rsltFwd = np.array([gObjFwd.readOutput()[0]])
+            except IndexError as e:
+                raise Exception('Forward calucation output could not be read, halting the simulation.') from e
             loopInd = np.zeros(Nsims, int)
         elif type(fwdData) == list:
             self.rsltFwd = fwdData
@@ -70,6 +73,7 @@ class simulation(object):
         gDB = rg.graspDB(gObjBck, maxCPU)
         if not dryRun:
             self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
+            assert len(self.rsltBck)>0, 'Inversion output could not be read, halting the simulation (no data was saved).'
             # SAVE RESULTS
             if savePath: self.saveSim(savePath, lightSave)
         else:

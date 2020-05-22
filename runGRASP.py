@@ -43,6 +43,10 @@ class graspDB(object):
                 endInd = min(strtInd+grspChnkSz, Npix)
                 for ind in range(strtInd, endInd):
                     gObj.addPix(graspRunObjs.pixels[ind])
+#                 HACK to test RT accuracy 
+#                 valueMap = np.r_[23:51]
+#                 fieldTest = 'retrieval.radiative_transfer.simulating_observation.number_of_guassian_quadratures_for_fourier_expansion_coefficients'
+#                 gObj.yamlObj.access(fieldTest, valueMap[strtInd])
                 self.grObjs.append(gObj)
         else:
             assert not graspRunObjs, 'graspRunObj must be either a list or graspRun object!'
@@ -381,7 +385,7 @@ class graspRun(object):
             with open(outputFN) as fid:
                 contents = fid.readlines()
         except:
-            warnings.warn('Could not open %s\n   Returning empty list in place of output data...' % outputFN)
+            warnings.warn('Likely as a result of GRASP crashing, %s could not be opened.\n   Returning empty list in place of output data...' % outputFN)
             return []
         rsltAeroDict, wavelengths = self.parseOutAerosol(contents)
         if not rsltAeroDict:
@@ -959,6 +963,8 @@ class graspYAML(object):
         elif isinstance(newVal, list): # check for regular list with numpy values
             for i,val in enumerate(newVal):
                 if type(val).__module__ == np.__name__: newVal[i] = val.item()
+        elif type(newVal).__module__ == np.__name__: # just a single value of a numpy type
+            newVal = newVal.item()
         self.loadYAML()
         fldPath = self.exapndFldPath(fldPath)
         prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal)
