@@ -71,22 +71,24 @@ class simulation(object):
         if not dryRun:
             self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
             # SAVE RESULTS
-            if savePath:
-                if not os.path.exists(os.path.dirname(savePath)):
-                    print('savePath (%s) did not exist, creating it...')
-                    os.makedirs(os.path.dirname(savePath))
-                if lightSave:
-                    for pmStr in ['p11','p12','p22','p33','p34','p44']:
-                        [rb.pop(pmStr, None) for rb in self.rsltBck]
-                        if len(self.rsltFwd) > 1: [rf.pop(pmStr, None) for rf in self.rsltFwd]
-                with open(savePath, 'wb') as f:
-                    pickle.dump(list(self.rsltBck), f, pickle.HIGHEST_PROTOCOL)
-                    pickle.dump(list(self.rsltFwd), f, pickle.HIGHEST_PROTOCOL)
+            if savePath: self.saveSim(savePath, lightSave)
         else:
             if savePath: warnings.warn('This was a dry run. No retrievals were performed and no results were saved.')
             for gObj in gDB.grObjs: gObj.writeSDATA() 
         return gObjFwd, gDB.grObjs
-            
+
+    def saveSim(self, savePath, lightSave=False):
+        if not os.path.exists(os.path.dirname(savePath)):
+            print('savePath (%s) did not exist, creating it...')
+            os.makedirs(os.path.dirname(savePath))
+        if lightSave:
+            for pmStr in ['p11','p12','p22','p33','p34','p44']:
+                [rb.pop(pmStr, None) for rb in self.rsltBck]
+                if len(self.rsltFwd) > 1: [rf.pop(pmStr, None) for rf in self.rsltFwd]
+        with open(savePath, 'wb') as f:
+            pickle.dump(list(self.rsltBck), f, pickle.HIGHEST_PROTOCOL)
+            pickle.dump(list(self.rsltFwd), f, pickle.HIGHEST_PROTOCOL)
+    
     def loadSim(self, picklePath):
         with open(picklePath, 'rb') as f:
             self.rsltBck = np.array(pickle.load(f))

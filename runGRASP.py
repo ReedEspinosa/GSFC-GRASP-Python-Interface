@@ -644,14 +644,16 @@ class graspRun(object):
         if 'aodMode' in results[0]:
             Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]
             nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
-            for rs in results: # seperate aerosol modes 
+            for rs in results: # seperate aerosol modes
                 rs['r'] = rs['r'].reshape(nsd,-1)
                 rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
                 if 'βext' in rs:
                     rs['range'] = rs['range'].reshape(nsd,-1)
                     rs['βext'] = rs['βext'].reshape(nsd,-1)
-                rs['aodMode'] = rs['aodMode'].reshape(nsd,-1)
-                rs['ssaMode'] = rs['ssaMode'].reshape(nsd,-1)
+                for key in [k for k in ['aodMode','ssaMode','n','k'] if k in rs]:
+                    if rs[key].shape[-1] == nsd*Nwvlth: 
+                        rs[key] = rs[key].reshape(nsd,-1) # we double check that -1 -> Nwvlth on next line
+                    assert rs[key].shape[-1]==Nwvlth, 'Length of the last dimension of %s was %d, not matching Nλ=%d' % (key,rs[key].shape[-1],Nwvlth)
                 for λflatKey in [k for k in ['n','k'] if k in rs.keys()]: # check if spectrally flat RI values used
                     for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value
         if ('r' in results[0]) and np.all(results[0]['r'][0]==results[0]['r']): # check if all r value are same at all lambda, may remove this condition later but makes logic much more complicated
