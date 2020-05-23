@@ -4,6 +4,7 @@
 import numpy as np
 import copy
 import pickle
+import shutil 
 import os
 import warnings
 import datetime as dt
@@ -21,21 +22,25 @@ class simulation(object):
         self.rsltBck = None
         self.rsltFwd = None
 
-    def runSim(self, fwdData, bckYAMLpath, Nsims=1, maxCPU=4, binPathGRASP=None, savePath=None, lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False, dryRun=False):
+    def runSim(self, fwdData, bckYAMLpath, Nsims=1, maxCPU=4, binPathGRASP=None, savePath=None, \
+               lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False, \
+               dryRun=False, workingFileSave=False, verbose=False):
         """ <> runs the simulation for given set of simulated and inversion conditions <>
         fwdData -> yml file path for GRASP fwd model OR "results style" list of dicts
         bckYAMLpath -> yml file path for GRASP inversion
         Nsims -> number of noise pertbations applied to fwd model, must be 1 if fwdData is a list of results dicts
         maxCPU -> the retrieval load will be spread accross maxCPU processes
         binPathGRASP -> path to GRASP binary, if None default from graspRun is used
-        savePath -> path to save pickle w/ simulated retrieval results, lightSave -> remove PM data
+        savePath -> path to save pickle w/ simulated retrieval results, lightSave -> remove PM data to save space
         intrnlFileGRASP -> alternative path to GRASP kernels, overwrites value in YAML files
-        releaseYAML=True -> auto adjust back yaml Nλ to match insturment
+        releaseYAML=True -> auto adjust back yaml Nλ to match the number of wavelenth of this insturment
         rndIntialGuess=True -> overwrite initial guesses in bckYAMLpath w/ uniformly distributed random values between min & max 
-        dryRun -> run foward model and then return noise added graspDB object, without performing the retrievals """
+        dryRun -> run foward model and then return noise added graspDB object, without performing the retrievals 
+        workingFileSave -> create ZIP with the GRASP SDATA, YAML and Output files used in the run, saved to savePath + .zip """
         assert not self.nowPix is None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.' 
         # ADAPT fwdData/RUN THE FOWARD MODEL
         if type(fwdData) == str and fwdData[-3:] == 'yml':
+            if verbose: print('Calculating forward model "truth"...')
             gObjFwd = rg.graspRun(fwdData)
             gObjFwd.addPix(self.nowPix)
             gObjFwd.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=intrnlFileGRASP)
@@ -51,7 +56,9 @@ class simulation(object):
             loopInd = range(len(self.rsltFwd))
         else:
             assert False, 'Unrecognized data type, fwdModelYAMLpath should be path to YAML file or a DICT!'
+        if verbose: print('Forward model "truth" obtained')
         # ADD NOISE AND PERFORM RETRIEVALS
+        if verbose: print('Inverting noised-up measurements...')
         gObjBck = rg.graspRun(bckYAMLpath, releaseYAML=releaseYAML, quietStart=True) # quietStart=True -> we won't see path of temp, pre-gDB graspRun
         for i in loopInd:
             for l, msDct in enumerate(self.nowPix.measVals):
@@ -75,13 +82,23 @@ class simulation(object):
             self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
             assert len(self.rsltBck)>0, 'Inversion output could not be read, halting the simulation (no data was saved).'
             # SAVE RESULTS
-            if savePath: self.saveSim(savePath, lightSave)
+            if savePath: self.saveSim(savePath, lightSave, verbose)
         else:
             if savePath: warnings.warn('This was a dry run. No retrievals were performed and no results were saved.')
-            for gObj in gDB.grObjs: gObj.writeSDATA() 
+            for gObj in gDB.grObjs: gObj.writeSDATA()
+        if workingFileSave and savePath: # TODO: build zip from original tmp folders without making extra copies to disk, see first answer here: https://stackoverflow.com/questions/458436/adding-folders-to-a-zip-file-using-python
+            fullSaveDir = savePath[0:-4]
+            if verbose: print('Packing GRASP working files up into %s' %  fullSaveDir)
+            if os.path.exists(fullSaveDir): shutil.rmtree(fullSaveDir)
+            os.mkdir(fullSaveDir)
+            shutil.copytree(gObjFwd.dirGRASP, os.path.join(fullSaveDir,'forwardCalculation'))
+            for i, gb in enumerate(gDB.grObjs):
+                shutil.copytree(gb.dirGRASP, os.path.join(fullSaveDir,'inversion%02d' % i))
+            shutil.make_archive(fullSaveDir, 'zip', fullSaveDir)
+            shutil.rmtree(fullSaveDir) 
         return gObjFwd, gDB.grObjs
 
-    def saveSim(self, savePath, lightSave=False):
+    def saveSim(self, savePath, lightSave=False, verbose=False):
         if not os.path.exists(os.path.dirname(savePath)):
             print('savePath (%s) did not exist, creating it...')
             os.makedirs(os.path.dirname(savePath))
@@ -89,6 +106,7 @@ class simulation(object):
             for pmStr in ['p11','p12','p22','p33','p34','p44']:
                 [rb.pop(pmStr, None) for rb in self.rsltBck]
                 if len(self.rsltFwd) > 1: [rf.pop(pmStr, None) for rf in self.rsltFwd]
+        if verbose: print('Saving simulation results to %s' %  savePath)
         with open(savePath, 'wb') as f:
             pickle.dump(list(self.rsltBck), f, pickle.HIGHEST_PROTOCOL)
             pickle.dump(list(self.rsltFwd), f, pickle.HIGHEST_PROTOCOL)

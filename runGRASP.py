@@ -516,8 +516,9 @@ class graspRun(object):
                         for λi in range(len(varHnds[λName])): # loop over wavelengths
                             for θi,θ in enumerate(varHnds[visName][:]): # loop over viewing zeniths
                                 for φi,φ in enumerate(varHnds[fisName][:]): # loop over realtive azimuths
-                                    ind = np.logical_and(rslt['vis'][:,λi]==θ, rslt['fis'][:,λi]==φ).nonzero()[0]
-                                    assert ind.shape[0] == 1, "%d values were found for %s at pixel# %d, λind=%d, θ=%4.1f, φ=%4.1f!" % (ind.shape[0],key,ti,λi,θ,φ)
+                                    ind = np.logical_and(np.isclose(rslt['vis'][:,λi], θ), \
+                                                         np.isclose(rslt['fis'][:,λi], φ)).nonzero()[0]
+                                    assert ind.shape[0] == 1, "%d values were found for %s at pixel# %d, λind=%d, θv=%4.1f, φ=%4.1f!" % (ind.shape[0],key,ti,λi,θ,φ)
                                     varHnds[var][ti,λi,θi,φi] = rslt[key][ind[0],λi]
                 elif 'brdf'==key and rsltDict[0]['brdf'].shape[0]==3: # probably RTLS parameters
                     for i,var in enumerate(['RTLS_ISO', 'RTLS_VOL', 'RTLS_GEO']): # loop over the three RTLS kernels
