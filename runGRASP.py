@@ -752,10 +752,17 @@ class graspRun(object):
         ptrnPIX = re.compile('^[ ]*pixel[ ]*#[ ]*([0-9]+)[ ]*wavelength[ ]*#[ ]*([0-9]+)[ ]*([0-9\.]+)[ ]*\(um\)')
         numericLn = re.compile('^[ ]*[0-9]+')
         ptrnHeader = re.compile('^[ ]*#[ ]*(sza[ ]*vis|Range_\[m\][ ]*meas_)')
+        ptrnResid = re.compile('[ ]*noise[ ]*abs[ ]*rel[ ]*')
         i = 0
         skipFlds = 1 # the 1st field is just the measurement number
         FITfnd = False
         while i<len(contents):
+            if not ptrnResid.match(contents[i]) is None: # next line is final value of the cost function
+                pixInd = 0    
+                while numericLn.match(contents[i+1]):
+                    results[pixInd]['costVal'] = float(re.search('^[ ]*[0-9\.]+', contents[i+1]).group())
+                    i+=1
+                    pixInd+=1
             if not ptrnFIT.match(contents[i]) is None: # We found fitting data
                 FITfnd = True
             pixMatch = ptrnPIX.match(contents[i]) if FITfnd else None
