@@ -24,7 +24,7 @@ class simulation(object):
 
     def runSim(self, fwdData, bckYAMLpath, Nsims=1, maxCPU=4, binPathGRASP=None, savePath=None, \
                lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False, \
-               dryRun=False, workingFileSave=False, verbose=False):
+               dryRun=False, workingFileSave=False, fixRndmSeed=False, verbose=False):
         """ <> runs the simulation for given set of simulated and inversion conditions <>
         fwdData -> yml file path for GRASP fwd model OR "results style" list of dicts
         bckYAMLpath -> yml file path for GRASP inversion
@@ -36,8 +36,12 @@ class simulation(object):
         releaseYAML=True -> auto adjust back yaml Nλ to match the number of wavelenth of this insturment
         rndIntialGuess=True -> overwrite initial guesses in bckYAMLpath w/ uniformly distributed random values between min & max 
         dryRun -> run foward model and then return noise added graspDB object, without performing the retrievals 
-        workingFileSave -> create ZIP with the GRASP SDATA, YAML and Output files used in the run, saved to savePath + .zip """
+        workingFileSave -> create ZIP with the GRASP SDATA, YAML and Output files used in the run, saved to savePath + .zip 
+        fixRndmSeed -> Use same random seed for the measurement noise added (each pixel will have identical noise values) 
+                            Only works if nowPix.measVals[n]['errorModel'] uses the `random` module to generate noise for all n """
         assert not self.nowPix is None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.' 
+        if fixRndmSeed and not rndIntialGuess: 
+            warnings.warn('Identical noise values and initial guess used in each pixel, repeating EXACT same retrieval %d times!' % Nsims)
         # ADAPT fwdData/RUN THE FOWARD MODEL
         if type(fwdData) == str and fwdData[-3:] == 'yml':
             if verbose: print('Calculating forward model "truth"...')
@@ -60,8 +64,10 @@ class simulation(object):
         # ADD NOISE AND PERFORM RETRIEVALS
         if verbose: print('Inverting noised-up measurements...')
         gObjBck = rg.graspRun(bckYAMLpath, releaseYAML=releaseYAML, quietStart=True) # quietStart=True -> we won't see path of temp, pre-gDB graspRun
-        for i in loopInd:
-            for l, msDct in enumerate(self.nowPix.measVals):
+        if fixRndmSeed: strtSeed = np.random.randint(low=0, high=2**32-1)
+        for i in loopInd: # loop over each simulated pixel, later split up into maxCPU calls to GRASP
+            if fixRndmSeed: np.random.seed(strtSeed) # reset to same seed, adding same noise to every pixel
+            for l, msDct in enumerate(self.nowPix.measVals): # loop over wavelength
                 edgInd = np.r_[0, np.cumsum(self.nbvm[l])]
                 msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd[i], edgInd)
                 if Nsims == 0:
@@ -88,7 +94,7 @@ class simulation(object):
             for gObj in gDB.grObjs: gObj.writeSDATA()
         if workingFileSave and savePath: # TODO: build zip from original tmp folders without making extra copies to disk, see first answer here: https://stackoverflow.com/questions/458436/adding-folders-to-a-zip-file-using-python
             fullSaveDir = savePath[0:-4]
-            if verbose: print('Packing GRASP working files up into %s' %  fullSaveDir)
+            if verbose: print('Packing GRASP working files up into %s' %  fullSaveDir + '.zip')
             if os.path.exists(fullSaveDir): shutil.rmtree(fullSaveDir)
             os.mkdir(fullSaveDir)
             shutil.copytree(gObjFwd.dirGRASP, os.path.join(fullSaveDir,'forwardCalculation'))
