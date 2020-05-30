@@ -1021,7 +1021,7 @@ class graspYAML(object):
             with open(self.YAMLpath, 'r') as stream:
                 try:
                     self.dl = yaml.load(stream, Loader=yaml.FullLoader)
-                except:
+                except AttributeError:
                     warnings.warn('Could not call yaml with FullLoader option. Is your conda up to date?')
                     self.dl = yaml.load(stream)
         
