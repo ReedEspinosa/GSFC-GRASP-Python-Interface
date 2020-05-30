@@ -63,13 +63,14 @@ class simulation(object):
         if verbose: print('Forward model "truth" obtained')
         # ADD NOISE AND PERFORM RETRIEVALS
         if verbose: print('Inverting noised-up measurements...')
-        gObjBck = rg.graspRun(bckYAMLpath, releaseYAML=releaseYAML, quietStart=True) # quietStart=True -> we won't see path of temp, pre-gDB graspRun
+        gObjBck = rg.graspRun(bckYAMLpath, releaseYAML=releaseYAML, quietStart=verbose) # quietStart=True -> we won't see path of temp, pre-gDB graspRun
         if fixRndmSeed: strtSeed = np.random.randint(low=0, high=2**32-1)
+        localVerbose = verbose
         for i in loopInd: # loop over each simulated pixel, later split up into maxCPU calls to GRASP
             if fixRndmSeed: np.random.seed(strtSeed) # reset to same seed, adding same noise to every pixel
             for l, msDct in enumerate(self.nowPix.measVals): # loop over wavelength
                 edgInd = np.r_[0, np.cumsum(self.nbvm[l])]
-                msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd[i], edgInd)
+                msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd[i], edgInd, verbose=localVerbose)
                 if Nsims == 0:
                     msDct['sza'] = self.rsltFwd[i]['sza'][0,l]
                     msDct['thtv'] = self.rsltFwd[i]['vis'][:,l]
@@ -83,6 +84,7 @@ class simulation(object):
             else:
                 self.nowPix.dtObj = self.nowPix.dtObj + dt.timedelta(hours=1) # increment hour otherwise GRASP will whine
             gObjBck.addPix(self.nowPix) # addPix performs a deepcopy on nowPix, won't be impact by next iteration through loopInd
+            localVerbose = False # verbose output for just one pixel should be sufficient 
         gDB = rg.graspDB(gObjBck, maxCPU)
         if not dryRun:
             self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
