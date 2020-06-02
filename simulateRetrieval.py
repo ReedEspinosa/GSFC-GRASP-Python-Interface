@@ -128,8 +128,11 @@ class simulation(object):
                 self.rsltFwd = [self.rsltBck[-1]] # resltFwd as a array of len==0 (not totaly backward compatible, it used to be straight dict)
                 self.rsltBck = self.rsltBck[:-1]
  
-    def conerganceFilter(self, χthresh=None, σ=None, verbose=False): # TODO: LIDAR bins with ~0 concentration are dominating this metric...
-        """ Only removes data from resltBck if χthresh is provided, χthresh=1.5 seems to work well """
+    def conerganceFilter(self, χthresh=None, σ=None, forceχ2Calc=False, verbose=False): # TODO: LIDAR bins with ~0 concentration are dominating this metric...
+        """ Only removes data from resltBck if χthresh is provided, χthresh=1.5 seems to work well 
+        Now we use costVal from GRASP if available (or if forceχ2Calc==True), χthresh≈2.5 is probably better
+        NOTE: if forceχ2Calc==True or χthresh~=None this will permanatly alter the values of rsltBck/rsltFwd
+        """
         if σ is None:
             σ={'I'  :0.03, # relative
               'QoI' :0.005, # absolute 
@@ -140,37 +143,39 @@ class simulation(object):
               'VBS' :0.05, # relative
               'VExt':17e-6, # absolute
               }
-        for i,rb in enumerate(self.rsltBck):
-            rf = self.rsltFwd[0] if len(self.rsltFwd)==1 else self.rsltFwd[i]
-            χΤοtal = np.array([])
-            for measType in ['VExt', 'VBS', 'LS', 'I', 'QoI', 'UoI', 'Q', 'U']:
-                fitKey = 'fit_'+measType
-                if fitKey in rb:
-                    DBck = rb[fitKey][~np.isnan(rb[fitKey])] 
-                    if fitKey in rf: 
-                         DFwd = rf[fitKey][~np.isnan(rf[fitKey])]
-                    elif measType in ['QoI', 'UoI'] and fitKey[:-2] in rf: # rf has X while rb has XoI
-                         DFwd = rf[fitKey[:-2]][~np.isnan(rf[fitKey[:-2]])]/rf['fit_I'][~np.isnan(rf[fitKey[:-2]])]
-                    if measType in ['I', 'LS', 'VBS']: # relative errors
-                        with np.errstate(divide='ignore'): # possible for DBck+DFwd=0, inf's will be removed below
-                            χLocal = ((2*(DBck-DFwd)/(DBck+DFwd))/σ[measType])**2
-                        χLocal[χLocal>100] = 100 # cap at 10σ (small values may produce huge relative errors)
-                    else: # absolute errors
-                        if measType in ['Q', 'U']: # we need to normalize by I, all Q[U] errors given in terms of q[u]
-                            DBck = DBck/rb['fit_I'][~np.isnan(rb[fitKey])]
-                            DFwd = DFwd/rf['fit_I'][~np.isnan(rf[fitKey])]
-                        χLocal = ((DBck-DFwd)/σ[measType])**2
-                    χΤοtal = np.r_[χΤοtal, χLocal]   
-            rb['χ2'] = np.sqrt(np.mean(χΤοtal))
+        if not 'costVal' in self.rsltBck[0] or forceχ2Calc:
+            for i,rb in enumerate(self.rsltBck):
+                rf = self.rsltFwd[0] if len(self.rsltFwd)==1 else self.rsltFwd[i]
+                χΤοtal = np.array([])
+                for measType in ['VExt', 'VBS', 'LS', 'I', 'QoI', 'UoI', 'Q', 'U']:
+                    fitKey = 'fit_'+measType
+                    if fitKey in rb:
+                        DBck = rb[fitKey][~np.isnan(rb[fitKey])] 
+                        if fitKey in rf: 
+                             DFwd = rf[fitKey][~np.isnan(rf[fitKey])]
+                        elif measType in ['QoI', 'UoI'] and fitKey[:-2] in rf: # rf has X while rb has XoI
+                             DFwd = rf[fitKey[:-2]][~np.isnan(rf[fitKey[:-2]])]/rf['fit_I'][~np.isnan(rf[fitKey[:-2]])]
+                        if measType in ['I', 'LS', 'VBS']: # relative errors
+                            with np.errstate(divide='ignore'): # possible for DBck+DFwd=0, inf's will be removed below
+                                χLocal = ((2*(DBck-DFwd)/(DBck+DFwd))/σ[measType])**2
+                            χLocal[χLocal>100] = 100 # cap at 10σ (small values may produce huge relative errors)
+                        else: # absolute errors
+                            if measType in ['Q', 'U']: # we need to normalize by I, all Q[U] errors given in terms of q[u]
+                                DBck = DBck/rb['fit_I'][~np.isnan(rb[fitKey])]
+                                DFwd = DFwd/rf['fit_I'][~np.isnan(rf[fitKey])]
+                            χLocal = ((DBck-DFwd)/σ[measType])**2
+                        χΤοtal = np.r_[χΤοtal, χLocal]   
+                rb['costVal'] = np.sqrt(np.mean(χΤοtal))
         if χthresh and len(self.rsltBck) > 2: # we will always keep at least 2 entries
-            validInd = np.array([rb['χ2']<=χthresh for rb in self.rsltBck])
+            validInd = np.array([rb['costVal']<=χthresh for rb in self.rsltBck])
             if verbose: print('%d/%d met χthresh' % (validInd.sum(), len(self.rsltBck)))
             if validInd.sum() < 2:
-                validInd = np.argsort([rb['χ2'] for rb in self.rsltBck])[0:2] # note validInd went from bool to array of ints
+                validInd = np.argsort([rb['costVal'] for rb in self.rsltBck])[0:2] # note validInd went from bool to array of ints
                 if verbose:
                     print('Preserving the two rsltBck elements with lowest χ scores, even though they did not meet χthresh.')
+            if len(self.rsltFwd)==len(self.rsltBck): self.rsltFwd = self.rsltFwd[validInd]
             self.rsltBck = self.rsltBck[validInd]
-        elif χthresh and np.sum([rb['χ2']<=χthresh for rb in self.rsltBck])<2 and verbose:
+        elif χthresh and np.sum([rb['costVal']<=χthresh for rb in self.rsltBck])<2 and verbose:
             print('rsltBck only has two or fewer elements, no χthresh screening will be perofmed.')
                     
     def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None, fineModesFwd=None, fineModesBck=None): 
@@ -201,6 +206,7 @@ class simulation(object):
         assert 'aodMode' not in fwdKys or fineModesFwd is None or self.rsltFwd[0]['aodMode'].shape[0] > max(fineModesFwd), 'fineModesFwd contains indices that are too high given the number of modes in rsltFwd[aodMode]'
         assert 'aodMode' not in bckKys or fineModesBck is None or self.rsltBck[0]['aodMode'].shape[0] > max(fineModesBck), 'fineModesBck contains indices that are too high given the number of modes in rsltBck[aodMode]'        
         # define functions for calculating RMS and bias
+        # rmsFun = lambda t,r: np.mean(r-t, axis=0) # formula for RMS output (true->t, retrieved->r)
         rmsFun = lambda t,r: np.sqrt(np.median((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r)
         biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output
         # variables we expect to see
