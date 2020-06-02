@@ -177,7 +177,11 @@ class simulation(object):
             self.rsltBck = self.rsltBck[validInd]
         elif χthresh and np.sum([rb['costVal']<=χthresh for rb in self.rsltBck])<2 and verbose:
             print('rsltBck only has two or fewer elements, no χthresh screening will be perofmed.')
-                    
+          
+    def analyzeSimProfile(self, wvlnthInd=0, hghtCut=None):
+        assert False, "NOT DONE"
+          # S=τ/F11[180] & F11h[180]=τh/Sh => S=Στh/Σ(τh/Sh)
+          
     def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None, fineModesFwd=None, fineModesBck=None): 
         """ Returns the RMSE and bias (defined below) from the simulation results
                 wvlngthInd - the index of the wavelength to calculate stats for
@@ -186,12 +190,11 @@ class simulation(object):
                 fineModesFwd - [array-like] the indices of the fine modes in the foward calculation, set to None to use OSSE ..._Fine variables instead 
                 fineModesBck -  [array-like] the indices of the fine modes in the retrieval
                 NOTE: this method generally assumes configuration (e.g. # of modes) is the same across all pixels
-                TODO: we can do a lot better than we do here in terms of modeCut and hghtCut...
-                    - rEff needs to include seperate errors for PBL and column/FT, if it comes out now it is probably just AOD weighted (which isn't exact)
+                TODO: we can do better than we do here in terms of fine mode parameters...
+                    - we generally (always) use AOD weighting, which is not exact in many cases
                     - modeCut should be applied to more variables (e.g. spherical fraction)
-                    - we can also do pbl/FT g and LidarRatio exactly (instead of just AOD weighted)
-                        - formulas are less trivial but see/merge with rtrvdDataSetPixels() in readOSSEnetCDF
-                        - note that these are only exact for a single species (i.e. one CRI, PSD, etc.), ultimatly we need to save modal g and lidarRatio
+                    - we should add saving of modal g and lidarRatio to run GRASP and/or calculate them here
+                    - the PBL/FT variables should all be exact (formula taken from rtrvdDataSetPixels() in readOSSEnetCDF)
                 """
         # check on input and available variables
         assert (not self.rsltBck is None) and (not self.rsltFwd is None), 'You must call loadSim() or runSim() before you can calculate statistics!'
@@ -211,9 +214,14 @@ class simulation(object):
         biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output
         # variables we expect to see
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
-        varsMorph = ['rv', 'sigma', 'sph', 'rEffCalc', 'height']
+        varsMorph = ['rv', 'sigma', 'sph', 'rEffMode', 'rEffCalc', 'height']
         varsAodAvg = ['n', 'k'] # modal variables for which we will append aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
-        modalVars = ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode'] + varsAodAvg # variables for which we find fine/coarse or FT/PBL errors seperately  
+        modalVars = ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode','rEffMode', 'n', 'k'] # variables for which we find fine/coarse or FT/PBL errors seperately  
+        # calculate variables that weren't loaded (rEffMode)
+        if 'rEffMode' not in self.rsltFwd[0] and 'rv' in self.rsltFwd[0]: 
+            for rf in self.rsltFwd: rf['rEffMode'] = self.ReffMode(rf)
+        if 'rEffMode' not in self.rsltBck[0] and 'rv' in self.rsltBck[0]: 
+            for rb in self.rsltBck: rb['rEffMode'] = self.ReffMode(rb)        
         varsSpctrl = [z for z in varsSpctrl if z in fwdKys and z in bckKys] # check that the variable is used in current configuration
         varsMorph = [z for z in varsMorph if z in fwdKys and z in bckKys]
         # loop through varsSpctrl and varsMorph calcualted RMS and bias
@@ -230,10 +238,10 @@ class simulation(object):
             if hghtCut and av in modalVars and (av+'_PBL' in fwdKys or 'aodMode' in fwdKys): # calculate vertical dependent RMS/BIAS [PBL, FT*]
                 if av+'_PBL' in fwdKys: # TODO: we have foward model PBL height... we should use it
                     trueBilayer = self.getStateVals(av+'_PBL', self.rsltFwd, varsSpctrl, wvlnthInd)
-                    rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut, pblOnly=True)
+                    rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut, av, pblOnly=True)
                 else: # 'aodMode' in self.rsltFwd[0]
-                    trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd, wvlnthInd, hghtCut)
-                    rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut)
+                    trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd, wvlnthInd, hghtCut, av)
+                    rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut, av)
                 rmsErr[av+'_PBLFT'] = rmsFun(trueBilayer, rtrvdBilayer) # PBL is 1st ind, FT (not total column!) is 2nd
                 bias[av+'_PBLFT'] =  biasFun(trueBilayer, rtrvdBilayer)
             if not fineModesBck is None and av in modalVars: # calculate fine mode dependent RMS/BIAS
@@ -289,25 +297,46 @@ class simulation(object):
             avgVal[i] = ttlSum/normDenom
         return np.expand_dims(avgVal, 1)
     
-    def hghtWghtedAvg(self, val, rslts, wvlnthInd, hghtCut, pblOnly=False): 
+    def hghtWghtedAvg(self, val, rslts, wvlnthInd, hghtCut, av , pblOnly=False): 
+        """ quantities in val could correspond to: av { ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode','n','k']
+            ω=Σβh/Σαh => ω=Σωh*αh/Σαh, i.e. aod weighting below is exact for SSA
+            sph is vol weighted and also exact
+            there is no write answer for rv,σ,n and k so they are AOD weighted
+            lidar ratio is exact, calculated by: S=τ/F11[180] & F11h[180]=τh/Sh => S=Στh/Σ(τh/Sh)
+            --- reff vertical averaging (reff_h=Rh, # conc.=Nh, vol_conc.=Vh, height_ind=h) --- 
+            reff = ∫ ΣNh*r^3*dr/∫ ΣNh*r^2*dr = 3/4/π*ΣVh/∫ Σnh*r^2*dr
+            Rh = (3/4/π*Vh)/∫ nh*r^2*dr -> reff = 3/4/π*ΣVh/(Σ(3/4/π*Vh)/Rh) = ΣVh/Σ(Vh/Rh)
+        """
+        if av in ['rEffMode', 'sph']:
+            extWghtVar = 'vol'  
+        if av in ['gMode']: # This will work once we fill in a key for scattering (i.e. ssaMode*aodMode)
+            assert False, 'This should be total scattering of each mode, no gMode now so not bothering to calculate yet.'
+        else: 
+            extWghtVar = 'aodMode'
+        if av in ['aod']:
+            wghtFun = lambda v,w: np.sum(w)
+        elif av in ['rEffMode', 'LidarRatio']:
+            wghtFun = lambda v,w: np.sum(w)/np.sum(w/v)
+        else: # SSA, rv, σ, n, k, gMode
+            wghtFun = lambda v,w: np.sum(v*w)/np.sum(w)
         Bilayer = np.full([len(rslts), 2-pblOnly], np.nan)
         if np.any(rslts[0]['range']==hghtCut): warnings.warn('hghtCut fell exactly on one of the vertical bins, this bin will be excluded from the weighting.')
         for i,rslt in enumerate(rslts): 
             wghtsPBL = []
-            for β,h,τ in zip(rslt['βext'], rslt['range'], rslt['aodMode'][:,wvlnthInd]): # loop over modes
-                wghtsPBL.append(β[h < hghtCut].sum()/β.sum()*τ)
-            valPBL = np.sum(val*wghtsPBL)/np.sum(wghtsPBL)
+            for β,h,τ in zip(rslt['βext'], rslt['range'], rslt[extWghtVar][:,wvlnthInd]): # loop over modes
+                wghtsPBL.append(β[h < hghtCut].sum()/β.sum()*τ) # this is τ contribution of each mode below hghtCut
+            valPBL = wghtFun(val[i], wghtsPBL)
             if not pblOnly:
                 wghtsFT = []
-                for β,h,τ in zip(rslt['βext'], rslt['range'], rslt['aodMode'][:,wvlnthInd]):
+                for β,h,τ in zip(rslt['βext'], rslt['range'], rslt[extWghtVar][:,wvlnthInd]):
                     wghtsFT.append(β[h > hghtCut].sum()/β.sum()*τ)
-                    valFT = np.sum(val*wghtsFT)/np.sum(wghtsFT)
+                valFT = wghtFun(val[i], wghtsFT)
                 Bilayer[i] = [valPBL, valFT]
             else:
                 Bilayer[i] = [valPBL]
         return Bilayer
 
-    def ReffMode(self, rs, modeCut):
+    def ReffMode(self, rs, modeCut=None):
         if not modeCut: 
             rv_dndr = rs['rv']/np.exp(3*rs['sigma']**2)
             return rv_dndr*np.exp(5/2*rs['sigma']**2) # eq. 60 from Grainger's "Useful Formulae for Aerosol Size Distributions"
