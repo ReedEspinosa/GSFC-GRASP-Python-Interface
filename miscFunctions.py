@@ -18,6 +18,18 @@ except ImportError:
 def checkDiscover(): # right now this just checks for a remote connection...
     return "SSH_CONNECTION" in os.environ
 
+def norm2absExtProf(normalizedProfile, heights, AOD):
+    """
+    normalizedProfile -> 1xN array like; normalized profile
+    heights -> 1xN array like;; altitude bins, must be sorted (both descending and ascending are fine)
+    AOD -> scalar; AOD values for the M modes
+    """
+    from scipy.integrate import simps
+    C = np.abs(simps(normalizedProfile, heights))
+    return AOD*normalizedProfile/C
+    
+    
+
 def matplotlibX11():
     if checkDiscover():
         import matplotlib

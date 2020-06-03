@@ -178,9 +178,35 @@ class simulation(object):
         elif χthresh and np.sum([rb['costVal']<=χthresh for rb in self.rsltBck])<2 and verbose:
             print('rsltBck only has two or fewer elements, no χthresh screening will be perofmed.')
           
-    def analyzeSimProfile(self, wvlnthInd=0, hghtCut=None):
-        assert False, "NOT DONE"
-          # S=τ/F11[180] & F11h[180]=τh/Sh => S=Στh/Σ(τh/Sh)
+    def analyzeSimProfile(self, wvlnthInd=0, FineModes=[0,2], PBLModes=[2,3]):
+        """ We will assume:
+            len(rsltFwd)==len(rsltBck) << CHECKED BELOW
+            finemodes and pbl modes are same index in fwd and bck data
+        
+            We need error/bias estimats for:
+            extinction FT/PBL resolved and fineMode/total resoloved
+            number concentration FT/PBL resolved
+            effective radius FT/PBL resolved
+            ssa FT/PBL resolved
+            lidar ratio FT/PBL resolved  # S=τ/F11[180] & F11h[180]=τh/Sh => S=Στh/Σ(τh/Sh)
+            PM25 """
+
+        assert len(self.rsltFwd)==len(self.rsltBck), 'This method only works with sims where fwd and bck pair one-to-one'
+        biasExt = []
+        for rf,rb in zip(self.rsltFwd, self.rsltBck):
+            Nmodes = len(rf['aodMode'][:,0])
+            assert Nmodes==len(rb['aodMode'][:,0]), 'Fwd and bck should pair one-to-one but they had different lengths!'
+            rng = rf['range'][0,:]
+            Nrange = len(rng)            
+            extFwd = np.empty([Nmodes, Nrange])
+            extBck = np.empty([Nmodes, Nrange])
+            for i in range(Nmodes):
+                extFwd[i,:] = ms.norm2absExtProf(rf['βext'][i,:], rng, rf['aodMode'][i,wvlnthInd])
+                extBck[i,:] = ms.norm2absExtProf(rb['βext'][i,:], rng, rb['aodMode'][i,wvlnthInd])
+            biasExt.append(np.sum(extBck - extFwd, axis=0)) # Σa-b = Σa - Σb
+        bias = {'βext':np.array(biasExt)}
+        rmse = {'βext':np.sqrt(np.mean(bias['βext']**2, axis=0))}
+        return rmse, bias
           
     def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None, fineModesFwd=None, fineModesBck=None): 
         """ Returns the RMSE and bias (defined below) from the simulation results
