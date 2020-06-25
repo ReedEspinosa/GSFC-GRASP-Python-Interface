@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+from scipy.stats import norm
 import copy
 import pickle
 import shutil 
@@ -128,7 +129,7 @@ class simulation(object):
                 self.rsltFwd = [self.rsltBck[-1]] # resltFwd as a array of len==0 (not totaly backward compatible, it used to be straight dict)
                 self.rsltBck = self.rsltBck[:-1]
  
-    def conerganceFilter(self, χthresh=None, σ=None, forceχ2Calc=False, verbose=False): # TODO: LIDAR bins with ~0 concentration are dominating this metric...
+    def conerganceFilter(self, χthresh=None, σ=None, forceχ2Calc=False, verbose=False, minSaved=2): # TODO: LIDAR bins with ~0 concentration are dominating this metric...
         """ Only removes data from resltBck if χthresh is provided, χthresh=1.5 seems to work well 
         Now we use costVal from GRASP if available (or if forceχ2Calc==True), χthresh≈2.5 is probably better
         NOTE: if forceχ2Calc==True or χthresh~=None this will permanatly alter the values of rsltBck/rsltFwd
@@ -169,30 +170,34 @@ class simulation(object):
         if χthresh and len(self.rsltBck) > 2: # we will always keep at least 2 entries
             validInd = np.array([rb['costVal']<=χthresh for rb in self.rsltBck])
             if verbose: print('%d/%d met χthresh' % (validInd.sum(), len(self.rsltBck)))
-            if validInd.sum() < 2:
-                validInd = np.argsort([rb['costVal'] for rb in self.rsltBck])[0:2] # note validInd went from bool to array of ints
+            if validInd.sum() < minSaved:
+                validInd = np.argsort([rb['costVal'] for rb in self.rsltBck])[0:minSaved] # note validInd went from bool to array of ints
                 if verbose:
-                    print('Preserving the two rsltBck elements with lowest χ scores, even though they did not meet χthresh.')
+                    print('Preserving the %d rsltBck elements with lowest χ scores, even though they did not meet χthresh.' % minSaved)
             if len(self.rsltFwd)==len(self.rsltBck): self.rsltFwd = self.rsltFwd[validInd]
             self.rsltBck = self.rsltBck[validInd]
-        elif χthresh and np.sum([rb['costVal']<=χthresh for rb in self.rsltBck])<2 and verbose:
-            print('rsltBck only has two or fewer elements, no χthresh screening will be perofmed.')
+        elif χthresh and np.sum([rb['costVal']<=χthresh for rb in self.rsltBck])<minSaved and verbose:
+            print('rsltBck only has %d or fewer elements, no χthresh screening will be perofmed.' % minSaved)
           
-    def analyzeSimProfile(self, wvlnthInd=0, FineModes=[0,2], PBLModes=[2,3]):
+    def analyzeSimProfile(self, wvlnthInd=0, FineModes=[0,2]):
         """ We will assume:
-            len(rsltFwd)==len(rsltBck) << CHECKED BELOW
-            finemodes and pbl modes are same index in fwd and bck data
-        
-            We need error/bias estimats for:
-            extinction FT/PBL resolved and fineMode/total resoloved
-            number concentration FT/PBL resolved
-            effective radius FT/PBL resolved
-            ssa FT/PBL resolved
-            lidar ratio FT/PBL resolved  # S=τ/F11[180] & F11h[180]=τh/Sh => S=Στh/Σ(τh/Sh)
-            PM25 """
-
+        len(rsltFwd)==len(rsltBck) << CHECKED BELOW
+        finemodes and pbl modes are same index in fwd and bck data
+    
+        We need error/bias estimats for:
+        number concentration FT/PBL resolved
+        effective radius FT/PBL resolved
+            --- reff vertical averaging (reff_h=Rh, # conc.=Nh, vol_conc.=Vh, height_ind=h) --- 
+            reff = ∫ ΣNh*r^3*dr/∫ ΣNh*r^2*dr = 3/4/π*ΣVh/∫ Σnh*r^2*dr
+            Rh = (3/4/π*Vh)/∫ nh*r^2*dr -> reff = 3/4/π*ΣVh/(Σ(3/4/π*Vh)/Rh) = ΣVh/Σ(Vh/Rh) = Σβh/Σ(βh/Rh)
+        ssa FT/PBL resolved # ω=Σβh/Σαh & ωh*αh=βh => ω=Σωh*αh/Σαh
+        lidar ratio FT/PBL resolved  # S=τ/F11[180] & F11h[180]=τh/Sh => S=Στh/Σ(τh/Sh) <<< not implemented yet
+        """
         assert len(self.rsltFwd)==len(self.rsltBck), 'This method only works with sims where fwd and bck pair one-to-one'
-        biasExt = []
+        if not 'βext' in self.rsltFwd[0] or not len(self.rsltFwd[0]['aodMode'][:,0])==len(self.rsltBck[0]['aodMode'][:,0]): # return empty dicts if this is polarimeter only run
+            return dict(), dict(), dict()
+        pxKy = ['biasExt','trueExt','biasExtFine','trueExtFine', 'biasSSA', 'trueSSA']
+        pxDct = {k: [] for k in pxKy}
         for rf,rb in zip(self.rsltFwd, self.rsltBck):
             Nmodes = len(rf['aodMode'][:,0])
             assert Nmodes==len(rb['aodMode'][:,0]), 'Fwd and bck should pair one-to-one but they had different lengths!'
@@ -200,13 +205,29 @@ class simulation(object):
             Nrange = len(rng)            
             extFwd = np.empty([Nmodes, Nrange])
             extBck = np.empty([Nmodes, Nrange])
+            scaFwd = np.empty([Nmodes, Nrange])
+            scaBck = np.empty([Nmodes, Nrange])
             for i in range(Nmodes):
                 extFwd[i,:] = ms.norm2absExtProf(rf['βext'][i,:], rng, rf['aodMode'][i,wvlnthInd])
                 extBck[i,:] = ms.norm2absExtProf(rb['βext'][i,:], rng, rb['aodMode'][i,wvlnthInd])
-            biasExt.append(np.sum(extBck - extFwd, axis=0)) # Σa-b = Σa - Σb
-        bias = {'βext':np.array(biasExt)}
-        rmse = {'βext':np.sqrt(np.mean(bias['βext']**2, axis=0))}
-        return rmse, bias
+                scaFwd[i,:] = extFwd[i,:]*rf['ssaMode'][i,wvlnthInd]
+                scaBck[i,:] = extBck[i,:]*rb['ssaMode'][i,wvlnthInd]
+            pxDct['biasExt'].append(np.sum(extBck - extFwd, axis=0)) # Σa-b = Σa - Σb
+            pxDct['trueExt'].append(np.sum(extFwd, axis=0)) # sum over all modes
+            pxDct['biasExtFine'].append(np.sum(extBck[FineModes,:] - extFwd[FineModes,:], axis=0)) # Σa-b = Σa - Σb
+            pxDct['trueExtFine'].append(np.sum(extFwd[FineModes,:], axis=0)) # sum over all modes  
+            ssaTr = np.sum(scaFwd, axis=0)/np.sum(extFwd, axis=0)
+            ssaBck = np.sum(scaBck, axis=0)/np.sum(extBck, axis=0)
+            pxDct['biasSSA'].append(ssaBck - ssaTr) # Σa-b = Σa - Σb
+            pxDct['trueSSA'].append(ssaTr) 
+        bias = {'βext':np.array(pxDct['biasExt']), 'βextFine':np.array(pxDct['biasExtFine']), \
+                'ssa':np.array(pxDct['biasSSA'])}
+        rmse = {'βext':np.sqrt(np.mean(bias['βext']**2, axis=0)), \
+                'βextFine':np.sqrt(np.mean(bias['βextFine']**2, axis=0)), \
+                'ssa':np.sqrt(np.mean(bias['ssa']**2, axis=0))} # THIS IS MISSING FINE AND SSA
+        true = {'βext':np.array(pxDct['trueExt']), 'βextFine':np.array(pxDct['trueExtFine']), \
+                'ssa':np.array(pxDct['trueSSA'])}
+        return rmse, bias, true # each w/ keys: βext, βextFine, ssa
           
     def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None, fineModesFwd=None, fineModesBck=None): 
         """ Returns the RMSE and bias (defined below) from the simulation results
@@ -230,8 +251,8 @@ class simulation(object):
         bckKys = self.rsltBck[0].keys()
         lgnrmPSD = ('rv' in fwdKys or 'aod_Fine' in fwdKys) and 'rv' in self.rsltBck[0]
         assert modeCut is None or lgnrmPSD, 'Fine/Coarse errors can only be caluclated from GRASPs lognormal PSD representation! For this data, you must set modeCut=None' 
-        hghtInfo = ('βext' in fwdKys or 'aod_PBL' in fwdKys) and 'βext' in self.rsltBck[0]
-        assert hghtCut is None or hghtInfo, 'PBL/FT errors can only currently be calculated from LIDAR retrievals! For this retrieval dataset, you must set heghtCut=None' 
+        # hghtInfo = ('βext' in fwdKys or 'aod_PBL' in fwdKys) and 'βext' in self.rsltBck[0]
+        # assert hghtCut is None or hghtInfo, 'PBL/FT errors can only currently be calculated from LIDAR retrievals! For this retrieval dataset, you must set heghtCut=None' 
         assert 'aodMode' not in fwdKys or fineModesFwd is None or self.rsltFwd[0]['aodMode'].shape[0] > max(fineModesFwd), 'fineModesFwd contains indices that are too high given the number of modes in rsltFwd[aodMode]'
         assert 'aodMode' not in bckKys or fineModesBck is None or self.rsltBck[0]['aodMode'].shape[0] > max(fineModesBck), 'fineModesBck contains indices that are too high given the number of modes in rsltBck[aodMode]'        
         # define functions for calculating RMS and bias
@@ -253,6 +274,7 @@ class simulation(object):
         # loop through varsSpctrl and varsMorph calcualted RMS and bias
         rmsErr = dict()
         bias = dict()
+        trueOut = dict()
         for av in varsSpctrl+varsMorph:
             rtrvd = np.array([rb[av] for rb in self.rsltBck])
             true = np.array([rf[av] for rf in self.rsltFwd])
@@ -270,6 +292,7 @@ class simulation(object):
                     rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut, av)
                 rmsErr[av+'_PBLFT'] = rmsFun(trueBilayer, rtrvdBilayer) # PBL is 1st ind, FT (not total column!) is 2nd
                 bias[av+'_PBLFT'] =  biasFun(trueBilayer, rtrvdBilayer)
+                trueOut[av+'_PBLFT'] =  trueBilayer
             if not fineModesBck is None and av in modalVars: # calculate fine mode dependent RMS/BIAS
                 fineCalculated = False
                 if av+'_Fine' in fwdKys and fineModesFwd is None and 'aodMode' in bckKys: # we have OSSE outputs, currently user provided fineModesFwd trumps this though
@@ -285,22 +308,27 @@ class simulation(object):
                 if fineCalculated:
                     rmsErr[av+'_fine'] = rmsFun(trueFine, rtrvdFine) # PBL is 1st ind, FT (not total column!) is 2nd
                     bias[av+'_fine'] =  biasFun(trueFine, rtrvdFine)
+                    trueOut[av+'_fine'] =  trueFine
             if av in varsAodAvg: # calculate the total, mode AOD weighted value of the variable (likely just CRI) -> [total, mode1, mode2,...]
                 rtrvd = np.hstack([self.τWghtedAvg(rtrvd, self.rsltBck, wvlnthInd), rtrvd])
                 true = np.hstack([self.τWghtedAvg(true, self.rsltFwd, wvlnthInd), true])                    
             if true.shape[1] == rtrvd.shape[1]: # truth and retrieved modes can be paired one-to-one    
                 rmsErr[av] = rmsFun(true, rtrvd) # BUG: fineModesFwd and fineModesBck and not taken into accoutn here, really we just shouldn't return n or k with more than one mode (we have n(k)_fine now)
                 bias[av] = biasFun(true, rtrvd)
+                trueOut[av] = true
             elif av in varsAodAvg and 'aodMode' in fwdKys and 'aodMode' in bckKys: # we at least know the first, total elements of CRI correspond to each other
                 rmsErr[av] = rmsFun(true[:,0], rtrvd[:,0])
                 bias[av] = biasFun(true[:,0], rtrvd[:,0])
+                trueOut[av] = true[:,0]
             if modeCut: # calculate rEff, could be abstracted into above code but tricky b/c volume weighted mean will not give exactly correct results (code below is exact)
                 rtrvd = np.array([self.ReffMode(rb, modeCut) for rb in self.rsltBck])
                 true = np.array([self.ReffMode(rf, modeCut) for rf in self.rsltFwd])
                 rmsErr['rEff_sub%dnm' % 1000*modeCut] = rmsFun(true, rtrvd)
                 bias['rEff_sub%dnm' % 1000*modeCut] = biasFun(true, rtrvd)
+                trueOut['rEff_sub%dnm' % 1000*modeCut] = true
                 # TODO: add sph fraction here? It would use volWghtedAvg, I think in its exact current form
-        return rmsErr, bias
+            if av in rmsErr: rmsErr[av] = np.atleast_1d(rmsErr[av]) # HACK: n was coming back as scalar in some cases, we should do this right though
+        return rmsErr, bias, trueOut
     
     def getStateVals(self, av, rslts, varsSpctrl, wvlnthInd, modeInd=None):
         assert av in rslts[0], 'Variable %s was not found in the rslts dictionary!' % av
@@ -323,6 +351,17 @@ class simulation(object):
             avgVal[i] = ttlSum/normDenom
         return np.expand_dims(avgVal, 1)
     
+    def addProfFromGuassian(self, rslts):
+        rsltRange = np.linspace(1, 2e4, 1e3)
+        for rslt in rslts:
+            Nmodes = len(rslt['height'])
+            rslt['range'] = np.empty([Nmodes,len(rsltRange)])
+            rslt['βext'] = np.empty([Nmodes,len(rsltRange)])
+            for i, (μ,σ) in enumerate(zip(rslt['height'], rslt['heightStd'])): # loop over modes
+                rslt['range'][i,:] = rsltRange    
+                guasDist = norm(loc = μ, scale = σ)
+                rslt['βext'][i,:] = guasDist.pdf(rsltRange)          
+    
     def hghtWghtedAvg(self, val, rslts, wvlnthInd, hghtCut, av , pblOnly=False): 
         """ quantities in val could correspond to: av { ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode','n','k']
             ω=Σβh/Σαh => ω=Σωh*αh/Σαh, i.e. aod weighting below is exact for SSA
@@ -333,12 +372,9 @@ class simulation(object):
             reff = ∫ ΣNh*r^3*dr/∫ ΣNh*r^2*dr = 3/4/π*ΣVh/∫ Σnh*r^2*dr
             Rh = (3/4/π*Vh)/∫ nh*r^2*dr -> reff = 3/4/π*ΣVh/(Σ(3/4/π*Vh)/Rh) = ΣVh/Σ(Vh/Rh)
         """
-        if av in ['rEffMode', 'sph']:
-            extWghtVar = 'vol'  
-        if av in ['gMode']: # This will work once we fill in a key for scattering (i.e. ssaMode*aodMode)
-            assert False, 'This should be total scattering of each mode, no gMode now so not bothering to calculate yet.'
-        else: 
-            extWghtVar = 'aodMode'
+        assert not av in 'gMode', 'We dont have a wghtVals setting for asymetry parameter (i.e. ssaMode*aodMode)!'
+        if not 'range' in rslts[0]: # this isn't lidar, we need to calucate the profiles
+            self.addProfFromGuassian(rslts)
         if av in ['aod']:
             wghtFun = lambda v,w: np.sum(w)
         elif av in ['rEffMode', 'LidarRatio']:
@@ -347,14 +383,18 @@ class simulation(object):
             wghtFun = lambda v,w: np.sum(v*w)/np.sum(w)
         Bilayer = np.full([len(rslts), 2-pblOnly], np.nan)
         if np.any(rslts[0]['range']==hghtCut): warnings.warn('hghtCut fell exactly on one of the vertical bins, this bin will be excluded from the weighting.')
-        for i,rslt in enumerate(rslts): 
+        for i,rslt in enumerate(rslts):
+            if av in ['rEffMode', 'sph']: # weighting based on volume
+                wghtVals = rslt['vol']
+            else:  # weighting based on optical thickness
+                wghtVals = rslt['aodMode'][:,wvlnthInd]         
             wghtsPBL = []
-            for β,h,τ in zip(rslt['βext'], rslt['range'], rslt[extWghtVar][:,wvlnthInd]): # loop over modes
+            for β,h,τ in zip(rslt['βext'], rslt['range'], wghtVals): # loop over modes
                 wghtsPBL.append(β[h < hghtCut].sum()/β.sum()*τ) # this is τ contribution of each mode below hghtCut
             valPBL = wghtFun(val[i], wghtsPBL)
             if not pblOnly:
                 wghtsFT = []
-                for β,h,τ in zip(rslt['βext'], rslt['range'], rslt[extWghtVar][:,wvlnthInd]):
+                for β,h,τ in zip(rslt['βext'], rslt['range'], wghtVals):
                     wghtsFT.append(β[h > hghtCut].sum()/β.sum()*τ)
                 valFT = wghtFun(val[i], wghtsFT)
                 Bilayer[i] = [valPBL, valFT]

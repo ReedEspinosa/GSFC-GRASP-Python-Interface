@@ -22,7 +22,7 @@ def norm2absExtProf(normalizedProfile, heights, AOD):
     """
     normalizedProfile -> 1xN array like; normalized profile
     heights -> 1xN array like;; altitude bins, must be sorted (both descending and ascending are fine)
-    AOD -> scalar; AOD values for the M modes
+    AOD -> scalar; AOD value for the mode
     """
     from scipy.integrate import simps
     C = np.abs(simps(normalizedProfile, heights))
