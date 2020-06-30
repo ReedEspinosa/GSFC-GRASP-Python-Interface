@@ -19,7 +19,6 @@ class simulation(object):
         if nowPix is None: return
         assert np.all([np.all(np.diff(mv['meas_type'])>0) for mv in nowPix.measVals]), 'nowPix.measVals[l][\'meas_type\'] must be in ascending order at each l'
         self.nowPix = copy.deepcopy(nowPix) # we will change this, bad form not to make our own copy
-        self.nbvm = np.array([mv['nbvm'] for mv in nowPix.measVals])
         self.rsltBck = None
         self.rsltFwd = None
 
@@ -70,8 +69,7 @@ class simulation(object):
         for i in loopInd: # loop over each simulated pixel, later split up into maxCPU calls to GRASP
             if fixRndmSeed: np.random.seed(strtSeed) # reset to same seed, adding same noise to every pixel
             for l, msDct in enumerate(self.nowPix.measVals): # loop over wavelength
-                edgInd = np.r_[0, np.cumsum(self.nbvm[l])]
-                msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd[i], edgInd, verbose=localVerbose)
+                msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd[i], verbose=localVerbose)
                 if Nsims == 0:
                     msDct['sza'] = self.rsltFwd[i]['sza'][0,l]
                     msDct['thtv'] = self.rsltFwd[i]['vis'][:,l]

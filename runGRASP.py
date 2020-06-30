@@ -837,7 +837,7 @@ class graspRun():
 
 
 class pixel():
-    def __init__(self, dtObj, ix, iy, lon, lat, masl, land_prct):
+    def __init__(self, dtObj=None, ix=1, iy=1, lon=0, lat=0, masl=0, land_prct=100):
         """ dtObj - a datetime object corresponding to measurement time
             masl - surface altitude in meters
             land_prct - % of land, in the range [0(sea)...100(land)] (matches format GRASP takes) """
@@ -863,7 +863,35 @@ class pixel():
             self.measVals.insert(insertInd[0], newMeas)
         self.nwl += 1
 
-    def formatMeas(self, newMeas):
+    def populateFromRslt(self, rslt, dataStage='fit'):
+        """ This method will overwrite any previously existing data in the pixel """
+        wvls = rslt['lambda']
+        self.nwl = 0 # we know it, but addMeas is going to increment on its own
+        self.measVals = [] # TODO: this isn't going to work because we need errorModel later...
+        msTyps = np.array([key.replace(dataStage+'_','') for key in rslt.keys() if dataStage in key])
+        msTypMap = {'I':41, 'Q':42, 'U':43, 'LS':31, 'DP':35, 'VBS':39, 'VEXT':36}
+        for l, wvl in wvls:
+            msTypInd = np.nonzero([not np.isnan(rslt[dataStage+'_'+mt][:,l]).any() for mt in msTyps])[0]
+            msTyp = [msTypMap[mt] for mt in msTyps[msTypInd]]
+            msTypInd = msTypInd[np.argsort(msTyp)] # need measurement types to be in ascending order
+            nbvm = [len(rslt[dataStage+'_'+mt][:,l]) for mt in msTyps[msTypInd]]
+            msTyp.sort() # standard python list – can sort in place
+            # STOPPED HERE (but see todo above)
+        for l, msDct in enumerate(self.nowPix.measVals): # loop over wavelength
+            msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd[i], verbose=localVerbose)
+            if Nsims == 0: # OSSE run
+                msDct['sza'] = self.rsltFwd[i]['sza'][0,l]
+                msDct['thetav'] = self.rsltFwd[i]['vis'][:,l]
+                msDct['phi'] = self.rsltFwd[i]['fis'][:,l]
+                msDct = self.nowPix.formatMeas(msDct) # this will tile the above msTyp times
+        if Nsims == 0:
+            self.nowPix.dtObj = self.rsltFwd[i]['datetime'] # ΤΟDO: this produces an integer & only keeps the date part... Should we just ditch this ordinal crap?
+            self.nowPix.lat = self.rsltFwd[i]['latitude']
+            self.nowPix.lon = self.rsltFwd[i]['longitude']
+            if 'land_prct' in self.rsltFwd[i]: self.nowPix.land_prct = self.rsltFwd[i]['land_prct']
+
+
+    def formatMeas(self, newMeas, lowThresh=1e-10):
         frmtMsg = '\n\
             For more than one measurement type or viewing geometry pass msTyp, nbvm, thtv, phi and msrments as vectors: \n\
             len(msrments)=len(thtv)=len(phi)=sum(nbvm); len(msTyp)=len(nbvm) \n\
@@ -873,15 +901,18 @@ class pixel():
         newMeas['thetav'] = np.atleast_1d(newMeas['thetav'])
         newMeas['phi'] = np.atleast_1d(newMeas['phi'])
         newMeas['measurements'] = np.atleast_1d(newMeas['measurements'])
-        newMeas['measurements'][np.abs(newMeas['measurements'])<1e-10] = 1e-10 # TODO: clean this up, can change sign, not flexible, etc.
+        newMeas['measurements'][np.abs(newMeas['measurements']) < lowThresh] = lowThresh
         if len(newMeas['thetav']) == len(newMeas['measurements'])/newMeas['nip']: # viewing zenith not provided for each measurement type
-            newMeas['thetav'] = np.tile(newMeas['thetav'],newMeas['nip'])
-        if len(newMeas['phi']) == len(newMeas['measurements'])/newMeas['nip']: # viewing zenith not provided for each measurement type
-            newMeas['phi'] = np.tile(newMeas['phi'],newMeas['nip'])
+            newMeas['thetav'] = np.tile(newMeas['thetav'], newMeas['nip'])
+        if len(newMeas['phi']) == len(newMeas['measurements'])/newMeas['nip']: # relative azimuth not provided for each measurement type
+            newMeas['phi'] = np.tile(newMeas['phi'], newMeas['nip'])
         newMeas['phi'] = newMeas['phi'] + 180*(np.array(newMeas['thetav'])<0) # GRASP doesn't like thetav < 0
         newMeas['thetav'] = np.abs(newMeas['thetav'])
         if np.any(newMeas['phi'] < 0): warnings.warn('GRASP RT performance is hindered when phi < 0, values in the range 0 < phi < 360 are preferred.')
-        assert newMeas['thetav'].shape[0]==newMeas['phi'].shape[0] and newMeas['meas_type'].shape[0]==newMeas['nbvm'].shape[0] and newMeas['nbvm'].sum()==newMeas['thetav'].shape[0], 'Each measurement must conform to the following format:' + frmtMsg
+        assert newMeas['thetav'].shape[0]==newMeas['phi'].shape[0] and \
+            newMeas['meas_type'].shape[0]==newMeas['nbvm'].shape[0] and \
+            newMeas['nbvm'].sum()==newMeas['thetav'].shape[0], \
+            'Each measurement must conform to the following format:' + frmtMsg
         return newMeas
 
     def genString(self):
