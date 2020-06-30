@@ -4,27 +4,28 @@
 import tempfile
 import os.path
 import warnings
-import yaml # may require `conda install pyyaml`
 import re
 import time
 import pickle
 import copy
-import numpy as np
-import pandas as pd
-import miscFunctions as mf
-from netCDF4 import Dataset
 from csv import writer as csv_writer
 from datetime import datetime as dt # we want datetime.datetime
 from shutil import copyfile
 from subprocess import Popen,PIPE
+import pandas as pd
+from netCDF4 import Dataset
 from scipy.stats import gaussian_kde
+import numpy as np
+import yaml # may require `conda install pyyaml`
+import miscFunctions as mf
+
 try:
     import matplotlib.pyplot as plt
-    pltLoad = True
+    PLOT_LOADED = True
 except ImportError:
-    pltLoad = False
+    PLOT_LOADED = False
 
-class graspDB(object):
+class graspDB():
     def __init__(self, graspRunObjs=[], maxCPU=None, maxT=None):
         self.maxCPU = maxCPU
         if type(graspRunObjs) is list:
@@ -43,14 +44,14 @@ class graspDB(object):
                 endInd = min(strtInd+grspChnkSz, Npix)
                 for ind in range(strtInd, endInd):
                     gObj.addPix(graspRunObjs.pixels[ind])
-#                 HACK to test RT accuracy 
+#                 HACK to test RT accuracy
 #                 valueMap = np.r_[23:51]
 #                 fieldTest = 'retrieval.radiative_transfer.simulating_observation.number_of_guassian_quadratures_for_fourier_expansion_coefficients'
 #                 gObj.yamlObj.access(fieldTest, valueMap[strtInd])
                 self.grObjs.append(gObj)
         else:
             assert not graspRunObjs, 'graspRunObj must be either a list or graspRun object!'
-        
+
     def processData(self, maxCPUs=None, binPathGRASP=None, savePath=False, krnlPathGRASP=None, nodesSLURM=0, rndGuess=False):
         if not maxCPUs:
             maxCPUs = self.maxCPU if self.maxCPU else 2
@@ -67,10 +68,10 @@ class graspDB(object):
             pObjs = []
             while i < Nobjs:
                 if sum([pObj.poll() is None for pObj in pObjs]) < maxCPUs:
-                    print('Starting a new thread for graspRun index %d/%d' % (i+1,Nobjs))
+                    print('Starting a new thread for graspRun index %d/%d' % (i+1, Nobjs))
                     if rndGuess: self.grObjs[i].yamlObj.scrambleInitialGuess()
                     pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP, krnlPathGRASP))
-                    i+=1
+                    i += 1
                 time.sleep(0.1)
             while any([pObj.poll() is None for pObj in pObjs]): time.sleep(0.1)
             failedRuns = np.array([pObj.returncode for pObj in pObjs])>0
@@ -85,20 +86,20 @@ class graspDB(object):
             # write runGRASP_N.sh using new dryRun option on runGRASP foreach maxCPU self.grObjs
             #   (dry run option would just return the command grasp settings...yml)
             # edit slurmTest2.sh to call runGRASP_N.sh with --array=1-N
-            # set approriate flags so that grObj.readOutput() can be called without error  
+            # set approriate flags so that grObj.readOutput() can be called without error
             # failedRuns = [bool with true for grObjs that failed to run with exit code 0]
             assert False, 'DIRECT USE OF SLURM IS NOT YET SUPPORTED'
         self.rslts = []
 #        [self.rslts.extend(grObj.readOutput()) for grObj in self.grObjs[~failedRuns]]
         [self.rslts.extend(self.grObjs[i].readOutput()) for i in np.nonzero(~failedRuns)[0]]
-        dt = time.time() - t0
-        print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dt, len(self.rslts)/dt)) 
-        if savePath: 
+        dtSec = time.time() - t0
+        print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dtSec, len(self.rslts)/dt))
+        if savePath:
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
         self.rslts = np.array(self.rslts) # numpy lists indexed w/ only assignment (no copy) but prior code built for std. list
         return self.rslts
-    
+
     def loadResults(self, loadPath):
         try:
             with open(loadPath, 'rb') as f:
@@ -107,23 +108,23 @@ class graspDB(object):
         except EnvironmentError:
             warnings.warn('Could not load valid pickle data from %s.' % loadPath)
             return []
-    
-    def histPlot(self, VarNm, Ind=0, customAx=False, FS=14, rsltInds=slice(None), 
+
+    def histPlot(self, VarNm, Ind=0, customAx=False, FS=14, rsltInds=slice(None),
                  pltLabel=False, clnLayout=True): #clnLayout==False produces some speed up
-        assert pltLoad, 'matplotlib could not be loaded, plotting features unavailable.'
+        assert PLOT_LOADED, 'matplotlib could not be loaded, plotting features unavailable.'
         VarVal = self.getVarValues(VarNm, Ind, rsltInds)
-        VarVal = VarVal[~pd.isnull(VarVal)] 
-        assert VarVal.shape[0]>0, 'Zero valid matchups were found!'
+        VarVal = VarVal[~pd.isnull(VarVal)]
+        assert VarVal.shape[0] > 0, 'Zero valid matchups were found!'
         if customAx: plt.sca(customAx)
         plt.hist(VarVal, bins='auto')
         plt.xlabel(self.getLabelStr(VarNm, Ind))
         plt.ylabel('frequency')
         self.plotCleanUp(pltLabel, clnLayout)
-        
+
     def scatterPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, cVarNm=False, cInd=0, customAx=False,
                     logScl=False, Rstats=False, one2oneScale=False, FS=14, rsltInds=slice(None),
                     pltLabel=False, clnLayout=True): #clnLayout==False produces some speed up
-        assert pltLoad, 'matplotlib could not be loaded, plotting features unavailable.'
+        assert PLOT_LOADED, 'matplotlib could not be loaded, plotting features unavailable.'
         xVarVal = self.getVarValues(xVarNm, xInd, rsltInds)
         yVarVal = self.getVarValues(yVarNm, yInd, rsltInds)
         zeroErrStr = 'Values must be greater than zero for log scale!'
@@ -131,9 +132,9 @@ class graspDB(object):
         if not cVarNm: #color by density
             vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal)), axis=0)
             assert np.any(vldInd), noValPntsErrstr
-            xVarVal = xVarVal[vldInd] 
-            yVarVal = yVarVal[vldInd] 
-            assert (not logScl) or ((xVarVal>0).all() and (yVarVal>0).all()), zeroErrStr
+            xVarVal = xVarVal[vldInd]
+            yVarVal = yVarVal[vldInd]
+            assert (not logScl) or ((xVarVal > 0).all() and (yVarVal > 0).all()), zeroErrStr
             if type(xVarVal[0])==dt or type(yVarVal[0])==dt: # don't color datetimes by density
                 clrVar = np.zeros(xVarVal.shape[0])
             else:
@@ -145,13 +146,13 @@ class graspDB(object):
             vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal),pd.isnull(clrVar)), axis=0)
 #            vldInd = np.logical_and(vldInd, np.abs(clrVar)<np.nanpercentile(np.abs(clrVar),20.0)) # HACK to stretch color scale
             assert np.any(vldInd), noValPntsErrstr
-            xVarVal = xVarVal[vldInd] 
-            yVarVal = yVarVal[vldInd] 
+            xVarVal = xVarVal[vldInd]
+            yVarVal = yVarVal[vldInd]
             clrVar = clrVar[vldInd]
-            assert (not logScl) or ((xVarVal>0).all() and (yVarVal>0).all()), zeroErrStr
+            assert (not logScl) or ((xVarVal > 0).all() and (yVarVal > 0).all()), zeroErrStr
         # GENERATE PLOTS
         if customAx: plt.sca(customAx)
-        MS = 2 if xVarVal.shape[0]<5000 else 1
+        MS = 2 if xVarVal.shape[0] < 5000 else 1
         plt.scatter(xVarVal, yVarVal, c=clrVar, marker='.', s=MS, cmap='inferno')
         plt.xlabel(self.getLabelStr(xVarNm, xInd))
         plt.ylabel(self.getLabelStr(yVarNm, yInd))
@@ -183,7 +184,7 @@ class graspDB(object):
             else:
                 plt.plot(np.r_[-1, maxVal], np.r_[-1, maxVal], 'k')
                 plt.xlim([-0.01, maxVal])
-                plt.ylim([-0.01, maxVal])           
+                plt.ylim([-0.01, maxVal])
         elif logScl: # there is a bug in matplotlib that screws up scale
             plt.xlim([xVarVal.min(), xVarVal.max()])
             plt.ylim([yVarVal.min(), yVarVal.max()])
@@ -191,27 +192,27 @@ class graspDB(object):
             clrHnd = plt.colorbar()
             clrHnd.set_label(self.getLabelStr(cVarNm, cInd))
         self.plotCleanUp(pltLabel, clnLayout)
-        
+
     def diffPlot(self, xVarNm, yVarNm, xInd=0, yInd=0, customAx=False,
                  rsltInds=slice(None), FS=14, logSpaceBins=True, lambdaFuncEE=False, # lambdaFuncEE = lambda x: 0.03+0.1*x (DT C6 Ocean EE)
                  pltLabel=False, clnLayout=True): #clnLayout==False produces moderate speed up
-        assert pltLoad, 'matplotlib could not be loaded, plotting features unavailable.'
+        assert PLOT_LOADED, 'matplotlib could not be loaded, plotting features unavailable.'
         xVarVal = self.getVarValues(xVarNm, xInd, rsltInds)
         yVarVal = self.getVarValues(yVarNm, yInd, rsltInds)
         vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal)), axis=0)
         assert np.any(vldInd), 'Zero valid matchups were found!'
-        xVarVal = xVarVal[vldInd] 
-        yVarVal = yVarVal[vldInd] 
+        xVarVal = xVarVal[vldInd]
+        yVarVal = yVarVal[vldInd]
         if logSpaceBins:
             binEdge = np.exp(np.histogram(np.log(xVarVal),bins='sturges')[1])
             binMid = np.sqrt(binEdge[1:]*binEdge[:-1])
         else:
-            binEdge = np.histogram(xVarVal,bins='sturges')[1]
+            binEdge = np.histogram(xVarVal, bins='sturges')[1]
             binMid = (binEdge[1:]+binEdge[:-1])/2
         if 'aod' in xVarNm:
-            binEdge = np.delete(binEdge,np.nonzero(binMid<0.005)[0]+1)
+            binEdge = np.delete(binEdge, np.nonzero(binMid < 0.005)[0]+1)
             binMid = binMid[binMid>=0.005]
-            binEdge = np.delete(binEdge,np.nonzero(binMid>2.5)[0])
+            binEdge = np.delete(binEdge, np.nonzero(binMid > 2.5)[0])
             binMid = binMid[binMid<=2.5]
         varDif = yVarVal-xVarVal
         varRng = np.zeros([binMid.shape[0],3]) # lower (16%), mean, upper (84%)
@@ -229,7 +230,7 @@ class graspDB(object):
         if logSpaceBins: plt.xscale('log')
         plt.plot([binEdge[0],binEdge[-1]], [0,0], 'k')
         if lambdaFuncEE:
-            if logSpaceBins: 
+            if logSpaceBins:
                 x = np.logspace(np.log10(binEdge[0]), np.log10(binEdge[-1]), 1000)
             else:
                 x = np.linspace(binEdge[0], binEdge[-1], 1000)
@@ -245,30 +246,30 @@ class graspDB(object):
             Nval = xVarVal.shape[0]
             inEE = 100*np.sum(np.abs(varDif) < lambdaFuncEE(xVarVal))/Nval
             in2EE = 100*np.sum(np.abs(varDif) < 2*lambdaFuncEE(xVarVal))/Nval
-            txtStr = 'N=%d\nwithin 1xEE: %4.1f%%\nwithin 2xEE: %4.1f%%' % (Nval,inEE,in2EE)
+            txtStr = 'N=%d\nwithin 1xEE: %4.1f%%\nwithin 2xEE: %4.1f%%' % (Nval, inEE, in2EE)
             b = lambdaFuncEE(0)
             m = lambdaFuncEE(1) - b
             if np.all(y==m*x+b): # safe to assume EE function is linear
-                txtStr = txtStr + '\nEE=%.2g+%.2gτ' % (b,m)
+                txtStr = txtStr + '\nEE=%.2g+%.2gτ' % (b, m)
             plt.annotate(txtStr, xy=(0, 1), xytext=(4.5, -4.5), va='top', xycoords='axes fraction',
                          textcoords='offset points', FontSize=FS, color='b')
             plt.ylim([np.min([pltY, 2*y.max()]) for pltY in plt.ylim()]) # confine ylim to twice max(EE)
         plt.ylim([-np.abs(plt.ylim()).max(), np.abs(plt.ylim()).max()]) # force zero line to middle
         self.plotCleanUp(pltLabel, clnLayout)
-            
+
     def getVarValues(self, VarNm, fldIndRaw, rsltInds=slice(None)):
         assert hasattr(self, 'rslts'), 'You must run GRASP or load existing results before plotting.'
         fldInd = self.standardizeInd(VarNm, fldIndRaw)
         if np.any(fldInd==-1): # datetimes and lat/lons are scalars and not indexable
             if fldIndRaw!=0:
-                warnings.warn('Ignoring index value %d for scalar %s' % (fldIndRaw,VarNm))
+                warnings.warn('Ignoring index value %d for scalar %s' % (fldIndRaw, VarNm))
             return np.array([rslt[VarNm] for rslt in self.rslts[rsltInds]])
-        return np.array([rslt[VarNm][tuple(fldInd)] for rslt in self.rslts[rsltInds]]) 
-    
+        return np.array([rslt[VarNm][tuple(fldInd)] for rslt in self.rslts[rsltInds]])
+
     def getLabelStr(self, VarNm, IndRaw):
         fldInd = self.standardizeInd(VarNm, IndRaw)
         adTxt = ''
-        if type(self.rslts[0][VarNm]) == dt:            
+        if type(self.rslts[0][VarNm]) == dt:
             adTxt = 'year, '
         elif np.all(fldInd!=-1):
             wvl = 0
@@ -278,45 +279,45 @@ class graspDB(object):
                 wvl = self.rslts[0]['lambdaDB'][fldInd[-1]]
             elif np.isin(self.rslts[0]['lambda'].shape[0], self.rslts[0][VarNm].shape): # may trigger false label for some variables if Nwvl matches Nmodes or Nparams
                 wvl = self.rslts[0]['lambda'][fldInd[-1]] # wvl is last ind; assume wavelengths are constant
-            if wvl>0: adTxt = adTxt + '%5.2g μm, ' % wvl
+            if wvl > 0: adTxt = adTxt + '%5.2g μm, ' % wvl
             if VarNm=='wtrSurf' or VarNm=='brdf' or VarNm=='bpdf':
                 adTxt = adTxt + 'Param%d, ' % fldInd[0]
-            elif not np.isscalar(self.rslts[0]['vol']) and self.rslts[0][VarNm].shape[0] == self.rslts[0]['vol'].shape[0]: 
+            elif not np.isscalar(self.rslts[0]['vol']) and self.rslts[0][VarNm].shape[0] == self.rslts[0]['vol'].shape[0]:
                 adTxt = adTxt + 'Mode%d, ' % fldInd[0]
         if len(adTxt)==0:
             return VarNm
         else:
             return VarNm + ' (' + adTxt[0:-2] + ')'
-    
+
     def standardizeInd(self, VarNm, IndRaw):
         assert (VarNm in self.rslts[0]), '%s not found in retrieval results dict' % VarNm
         if type(self.rslts[0][VarNm]) != np.ndarray: # no indexing for these...
             return np.r_[-1]
         Ind = np.array(IndRaw, ndmin=1)
         if self.rslts[0][VarNm].ndim < len(Ind):
-            Ind = np.r_[0] if np.all(Ind==0) else Ind[Ind!=0] 
+            Ind = np.r_[0] if np.all(Ind==0) else Ind[Ind!=0]
         elif self.rslts[0][VarNm].ndim > len(Ind):
             if self.rslts[0][VarNm].shape[0]==1: Ind = np.r_[0, Ind]
             if self.rslts[0][VarNm].shape[-1]==1: Ind = np.r_[Ind, 0]
         assert self.rslts[0][VarNm].ndim==len(Ind), 'Number of indices (%d) does not match diminsions of %s (%d)' % (len(Ind),VarNm,self.rslts[0][VarNm].ndim)
-        assert self.rslts[0][VarNm].shape[0]>Ind[0], '1st index %d is out of bounds for variable %s' % (Ind[0],VarNm)
+        assert self.rslts[0][VarNm].shape[0] > Ind[0], '1st index %d is out of bounds for variable %s' % (Ind[0], VarNm)
         if len(Ind)==2:
-            assert self.rslts[0][VarNm].shape[1]>Ind[1], '2nd index %d is out of bounds for variable %s' % (Ind[1],VarNm)
+            assert self.rslts[0][VarNm].shape[1] > Ind[1], '2nd index %d is out of bounds for variable %s' % (Ind[1], VarNm)
         return np.array(Ind)
 
     def plotCleanUp(self, pltLabel=False, clnLayout=True):
-        assert pltLoad, 'matplotlib could not be loaded, plotting features unavailable.'
+        assert PLOT_LOADED, 'matplotlib could not be loaded, plotting features unavailable.'
         if pltLabel:
             plt.suptitle(pltLabel)
             if clnLayout: plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        elif clnLayout: 
+        elif clnLayout:
             plt.tight_layout()
 
 # can add self.AUX_dict[Npixel] dictionary list to instance w/ additional fields to port into rslts
-class graspRun(object):
+class graspRun():
     def __init__(self, pathYAML=None, orbHghtKM=700, dirGRASP=None, releaseYAML=False, quietStart=False):
         self.releaseYAML = releaseYAML # allow automated modification of YAML, all index of wavelength involved fields MUST cover every wavelength
-        self.pathSDATA = False;
+        self.pathSDATA = False
         if pathYAML:
             self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP
             if not quietStart: print('Working in %s' % self.dirGRASP)
@@ -330,12 +331,13 @@ class graspRun(object):
             self.dirGRASP = None
             self.yamlObj = graspYAML()
         self.orbHght = orbHghtKM*1000
-        self.pixels = [];
+        self.pixels = []
         self.pObj = False
-    
+        self.invRslt = dict()
+
     def addPix(self, newPixel): # this is called once for each pixel
         self.pixels.append(copy.deepcopy(newPixel)) # deepcopy need to prevent changing via original pixel object outside of graspRun object
-        
+
     def writeSDATA(self, pathSDATA=None):
         if len(self.pixels) == 0:
             warnings.warn('You must call addPix() at least once before writting SDATA!')
@@ -344,7 +346,7 @@ class graspRun(object):
             self.pathSDATA = pathSDATA
         else:
             assert self.yamlObj.YAMLpath, 'You must initialize graspRun with a YAML file to write SDATA'
-            self.pathSDATA = os.path.join(self.dirGRASP, self.yamlObj.access('sdata_fn'));
+            self.pathSDATA = os.path.join(self.dirGRASP, self.yamlObj.access('sdata_fn'))
             assert (self.pathSDATA), 'Failed to read SDATA filename from '+self.yamlObj.YAMLpath
         unqTimes = np.unique([pix.dtObj for pix in self.pixels])
         SDATAstr = self.genSDATAHead(unqTimes)
@@ -369,9 +371,9 @@ class graspRun(object):
 #            self.pObj.wait()
             self.pObj.communicate() # This seems to keep things from hanging if there is a lot of output...
             self.pObj.stdout.close()
-            self.invRslt = self.readOutput()          
-        return self.pObj # returns Popen object, (PopenObj.poll() is not None) == True when complete    
-        
+            self.invRslt = self.readOutput()
+        return self.pObj # returns Popen object, (PopenObj.poll() is not None) == True when complete
+
     def readOutput(self, customOUT=None): # customOUT is full path of unrelated SDATA file to read
         if not customOUT and not self.pObj:
             warnings.warn('You must call runGRASP() before reading the output!')
@@ -403,17 +405,17 @@ class graspRun(object):
                 rsltDict.append({**aero, **surf, **fit, **pm})
         self.calcAsymParam(rsltDict)
         return rsltDict
-    
+
     def _findRslts(self, rsltDict=None, customOUT=None):
         assert not (rsltDict is not None and customOUT is not None), 'Only one of rsltDict or customOUT should be provided, not both!'
-        if not customOUT is None: 
+        if not customOUT is None:
             return self.readOutput(customOUT)
         elif rsltDict:
             return rsltDict
         else:
             return self.readOutput()
-        
-    
+
+
     def singleScat2CSV(self, csvPath, pixInd=0, rsltDict=None, customOUT=None):
         """ This function will take grasp output and dump it in a netCDF file
             PM of pixInd (defualt 0) will be saved (only one pixel saved at a time)
@@ -444,7 +446,7 @@ class graspRun(object):
                     dataVect.append(rslt['aodMode'][mode,λind]/rslt['vol'][mode]) # bext_vol
                     dataVect.append(rslt['aodMode'][mode,λind]*rslt['ssaMode'][mode,λind]/rslt['vol'][mode]) # bsca_vol
                     dataVect.extend(extndVect)
-            dataWriter.writerow(dataVect)            
+            dataWriter.writerow(dataVect)
             # write PM data
             dataWriter.writerow(np.r_[['angle'], np.tile(pmΚeys[0:Npm], Nmodes*Nλ)])
             for angInd, ang in enumerate(rslt['angle'][:,0,0]):
@@ -454,7 +456,7 @@ class graspRun(object):
                         for key in pmΚeys[0:Npm]:
                             dataVect.append(rslt[key][angInd,mode,λind]) # painfully inefficient, but surprisingly fast
                 dataWriter.writerow(dataVect)
-            
+
     def output2netCDF(self, nc4Path, rsltDict=None, customOUT=None, seaLevel=False):
         """ This function will take grasp output and dump it in a netCDF file
             If resultDict is provided, this data will be written to netCDF.
@@ -463,10 +465,10 @@ class graspRun(object):
             seaLevel=True should be used with caution, see assumed ROD and depol. below. """
         rsltDict = self._findRslts(rsltDict, customOUT)
         Nvis = np.unique(rsltDict[0]['vis'][:,0]).shape[0]
-        Nfis = np.unique(rsltDict[0]['fis'][:,0]).shape[0]        
+        Nfis = np.unique(rsltDict[0]['fis'][:,0]).shape[0]
         for vis,fis in zip(rsltDict[0]['vis'].T, rsltDict[0]['fis'].T):
             msg = 'All wavelengths must have the same number of %s angles!'
-            assert Nvis == np.unique(vis).shape[0], msg % 'viewing zenith' 
+            assert Nvis == np.unique(vis).shape[0], msg % 'viewing zenith'
             assert Nfis == np.unique(fis).shape[0], msg % 'relative azimuth'
         # create netCDF4 data file
         with Dataset(nc4Path, 'w', format='NETCDF4') as root_grp:
@@ -509,7 +511,7 @@ class graspRun(object):
                         var = key
                         varHnds[var] = root_grp.createVariable(var, 'f4', (tName, λName, visName, fisName))
                         varHnds[var].units = 'degree'
-                        varHnds[var].long_name = 'scattering angle'    
+                        varHnds[var].long_name = 'scattering angle'
                     else:
                         assert False, 'This function does not know how to handle the variable %s' % key
                     for ti, rslt in enumerate(rsltDict): # loop over pixels
@@ -520,7 +522,7 @@ class graspRun(object):
                                                          np.isclose(rslt['fis'][:,λi], φ)).nonzero()[0]
                                     assert ind.shape[0] == 1, "%d values were found for %s at pixel# %d, λind=%d, θv=%4.1f, φ=%4.1f!" % (ind.shape[0],key,ti,λi,θ,φ)
                                     varHnds[var][ti,λi,θi,φi] = rslt[key][ind[0],λi]
-                elif 'brdf'==key and rsltDict[0]['brdf'].shape[0]==3: # probably RTLS parameters
+                elif key=='brdf' and rsltDict[0]['brdf'].shape[0]==3: # probably RTLS parameters
                     for i,var in enumerate(['RTLS_ISO', 'RTLS_VOL', 'RTLS_GEO']): # loop over the three RTLS kernels
                         varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName))
                         varHnds[var].units = 'none'
@@ -528,36 +530,36 @@ class graspRun(object):
                     varHnds['RTLS_ISO'].long_name = 'Isotropic kernel of the RTLS model'
                     varHnds['RTLS_VOL'].long_name = 'Volume kernel of the RTLS model (MAIAC_vol/MAIAC_iso)'
                     varHnds['RTLS_GEO'].long_name = 'Geometric kernel of the RTLS model (MAIAC_geo/MAIAC_iso)'
-                elif 'bpdf'==key and rsltDict[0]['brdf'].ndim==1: # probably Maignan parameters
+                elif key=='brdf' and rsltDict[0]['brdf'].ndim==1: # probably Maignan parameters
                     var = 'maignan_parameter'
                     varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName))
                     varHnds[var].units = 'none'
                     varHnds[var][:,:] = np.array([rslt['bpdf'] for rslt in rsltDict]) # loop over times, select all λ
                     varHnds[var].long_name = 'Value of the Maignan model (exp(-NDVI)*C_maignan)'
-                elif 'aod'==key:
+                elif key=='aod':
                     var = 'aod'
                     varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName))
                     varHnds[var].units = 'none'
                     varHnds[var][:,:] = np.array([rslt['aod'] for rslt in rsltDict]) # loop over times, select all λ
-                    varHnds[var].long_name = 'aerosol optical depth'        
-            if seaLevel: # This is a little nasty, need to double check numbers below before using                  
-                    var = 'ROD'
-                    varHnds[var] = root_grp.createVariable(var, 'f8', (λName))
-                    varHnds[var].units = 'none'
-                    varHnds[var][:] = self.seaLevelROD(varHnds[λName][:])
-                    varHnds[var].long_name = 'Rayleigh Optical Depth'                                
-                    var = 'rayleigh_depol'
-                    varHnds[var] = root_grp.createVariable(var, 'f8', (λName))
-                    varHnds[var].units = 'none'
-                    varHnds[var][:] = 0.0295*np.ones(len(varHnds[λName][:]))
-                    varHnds[var].long_name = 'Rayleigh Depolarization Ratio'                                
+                    varHnds[var].long_name = 'aerosol optical depth'
+            if seaLevel: # This is a little nasty, need to double check numbers below before using
+                var = 'ROD'
+                varHnds[var] = root_grp.createVariable(var, 'f8', (λName))
+                varHnds[var].units = 'none'
+                varHnds[var][:] = self.seaLevelROD(varHnds[λName][:])
+                varHnds[var].long_name = 'Rayleigh Optical Depth'
+                var = 'rayleigh_depol'
+                varHnds[var] = root_grp.createVariable(var, 'f8', (λName))
+                varHnds[var].units = 'none'
+                varHnds[var][:] = 0.0295*np.ones(len(varHnds[λName][:]))
+                varHnds[var].long_name = 'Rayleigh Depolarization Ratio'
 
     def seaLevelROD(self, λtarget):
         λ =   np.r_[0.3600,	0.3800,	0.4100,	0.5500,	0.6700,	0.8700,	1.5500,	1.6500]
         rod = np.r_[0.5612,	0.4474,	0.3259,	0.0973,	0.0436,	0.0152,	0.0015,	0.0012]
         assert λ.min()<=λtarget.min() and λ.max()>=λtarget.max(), 'λtarget falls outside the range of pre-programed values!'
         return np.interp(λtarget, λ, rod**-0.25)**-4
-                    
+
     def parseOutDateTime(self, contents):
         results = []
         ptrnDate = re.compile('^[ ]*Date[ ]*:[ ]+')
@@ -566,7 +568,7 @@ class graspRun(object):
         ptrnLat = re.compile('^[ ]*Latitude[ ]*:[ ]+')
         i = 0
         LatLonLinesFnd = 0 # GRASP prints these twice, assume lat/lon are last lines
-        while i<len(contents) and LatLonLinesFnd<2:
+        while i < len(contents) and LatLonLinesFnd < 2:
             line = contents[i]
             if not ptrnDate.match(line) is None: # Date
                 dtStrCln = line[ptrnDate.match(line).end():-1].split()
@@ -574,7 +576,7 @@ class graspRun(object):
             if not ptrnTime.match(line) is None: # Time (should come after Date in output)
                 dtStrCln = line[ptrnTime.match(line).end():-1].split()
                 times_list = [dt.strptime(time, '%H:%M:%S').time() for time in dtStrCln]
-                for j in range(len(times_list)): 
+                for j in range(len(times_list)):
                     dtNow = dt.combine(dates_list[j], times_list[j])
                     results.append(dict(datetime=dtNow))
             if not ptrnLon.match(line) is None: # longitude
@@ -587,7 +589,7 @@ class graspRun(object):
                 for k,lat in enumerate(latVals):
                     results[k]['latitude'] = lat
                 LatLonLinesFnd += 1
-            i+=1
+            i += 1
         if not len(results[-1].keys())==3:
             warnings.warn('Failure reading date/lat/lon from GRASP output!')
             return []
@@ -614,7 +616,7 @@ class graspRun(object):
         ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
         i = 0
         nsd = 0
-        while i<len(contents):
+        while i < len(contents):
             if not ptrnLN.match(contents[i]) is None: # lognormal PSD, these fields have unique form
                 mtch = re.search('[ ]*rv \(um\):[ ]*', contents[i+1])
                 rvArr = np.array(contents[i+1][mtch.end():-1].split(), dtype='float64')
@@ -623,25 +625,25 @@ class graspRun(object):
                 for k in range(len(results)):
                     results[k]['rv'] = np.append(results[k]['rv'], rvArr[k]) if 'rv' in results[k] else rvArr[k]
                     results[k]['sigma'] = np.append(results[k]['sigma'], sigArr[k]) if 'sigma' in results[k] else sigArr[k]
-                i+=2
+                i += 2
             if not ptrnReff.match(contents[i]) is None: # Reff, field has unique form
                 Reffs = np.array(ptrnReff.match(contents[i]).group(1).split(), dtype='float64')
                 for k,Reff in enumerate(Reffs):
-                    results[k]['rEff'] = Reff     
+                    results[k]['rEff'] = Reff
             self.parseMultiParamFld(contents, i, results, ptrnAOD, 'aod', 'lambda')
             self.parseMultiParamFld(contents, i, results, ptrnPSD, 'dVdlnr', 'r')
             self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
             self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
             self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
-            self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')   
-            self.parseMultiParamFld(contents, i, results, ptrnHGNTSTD, 'heightStd')   
+            self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
+            self.parseMultiParamFld(contents, i, results, ptrnHGNTSTD, 'heightStd')
             self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode')
             self.parseMultiParamFld(contents, i, results, ptrnSSA, 'ssa')
-            self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')            
+            self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')
             self.parseMultiParamFld(contents, i, results, ptrnSSAmode, 'ssaMode')
             self.parseMultiParamFld(contents, i, results, ptrnRRI, 'n')
             self.parseMultiParamFld(contents, i, results, ptrnIRI, 'k')
-            i+=1
+            i += 1
         if not results or not 'lambda' in results[0]:
             warnings.warn('Limited or no aerosol data found, returning incomplete dictionary...')
             return results
@@ -656,9 +658,9 @@ class graspRun(object):
                     rs['range'] = rs['range'].reshape(nsd,-1)
                     rs['βext'] = rs['βext'].reshape(nsd,-1)
                 for key in [k for k in ['aodMode','ssaMode','n','k'] if k in rs]:
-                    if rs[key].shape[-1] == nsd*Nwvlth: 
+                    if rs[key].shape[-1] == nsd*Nwvlth:
                         rs[key] = rs[key].reshape(nsd,-1) # we double check that -1 -> Nwvlth on next line
-                    assert rs[key].shape[-1]==Nwvlth, 'Length of the last dimension of %s was %d, not matching Nλ=%d' % (key,rs[key].shape[-1],Nwvlth)
+                    assert rs[key].shape[-1]==Nwvlth, 'Length of the last dimension of %s was %d, not matching Nλ=%d' % (key, rs[key].shape[-1], Nwvlth)
                 for λflatKey in [k for k in ['n','k'] if k in rs.keys()]: # check if spectrally flat RI values used
                     for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value
         if ('r' in results[0]) and np.all(results[0]['r'][0]==results[0]['r']): # check if all r value are same at all lambda, may remove this condition later but makes logic much more complicated
@@ -669,9 +671,9 @@ class graspRun(object):
             for rs in results:
                 βprfl = rs['βext'].sum(axis=0)
                 rng = rs['range'][0]
-                rs['height'] = np.trapz(βprfl*rng,rng)/np.trapz(βprfl,rng) # mean height
+                rs['height'] = np.trapz(βprfl*rng, rng)/np.trapz(βprfl, rng) # mean height
         return results, wavelengths
-    
+
     def parseOutSurface(self, contents, Nλ=None):
         results = self.parseOutDateTime(contents)
         ptrnALB = re.compile('^[ ]*Wavelength \(um\),[ ]+Surface ALBEDO')
@@ -679,12 +681,12 @@ class graspRun(object):
         ptrnBPDF = re.compile('^[ ]*Wavelength \(um\),[ ]+BPDF parameters')
         ptrnWater = re.compile('^[ ]*Wavelength \(um\),[ ]+Water surface parameters')
         i = 0
-        while i<len(contents):
+        while i < len(contents):
             self.parseMultiParamFld(contents, i, results, ptrnALB, 'albedo')
             self.parseMultiParamFld(contents, i, results, ptrnBRDF, 'brdf', Nλ=Nλ) #  GRASP cox-munk doens't require 2nd & 3rd parameters to be retrieved at all λ, not tested for BRDFs
             self.parseMultiParamFld(contents, i, results, ptrnBPDF, 'bpdf')
-            self.parseMultiParamFld(contents, i, results, ptrnWater, 'wtrSurf', Nλ=Nλ)            
-            i+=1
+            self.parseMultiParamFld(contents, i, results, ptrnWater, 'wtrSurf', Nλ=Nλ)
+            i += 1
         return results
 
     def parsePhaseMatrix(self, contents, wavelengths): # wavelengths is need here specificly b/c PM elements don't give index (only value in um)
@@ -693,11 +695,11 @@ class graspRun(object):
         ptrnPMfit = re.compile('^[ ]*ipix=([0-9]+)[ ]+yymmdd = [0-9]+-[0-9]+-[0-9]+[ ]+hhmmss[ ]*=[ ]*[0-9][0-9]:[0-9][0-9]:[0-9][0-9][ ]*$')
         ptrnPMfitWave = re.compile('^[ ]*wl=[ ]*([0-9]+.[0-9]+)[ ]+isd=([0-9]+)[ ]+sca=')
         FITfnd = False
-        Nang=181
+        Nang = 181
         skipFlds = 1 # first field is just angle number
         pixInd = -1
-        i=0
-        while i<len(contents):
+        i = 0
+        while i < len(contents):
             if not ptrnPMall.match(contents[i]) is None: # We found fitting data
                 FITfnd = True
             pixMatch = ptrnPMfit.match(contents[i]) if FITfnd else None
@@ -708,23 +710,23 @@ class graspRun(object):
                 isd = int(pixMatchWv.group(2))-1# this is isdGRASP-1, ie. indexed at zero)
                 flds = [s.replace('/','o') for s in contents[i+1].split()[skipFlds:]]
                 PMdata = np.array([ln.split() for ln in contents[i+2:i+2+Nang]], np.float64)
-                for j,fld in enumerate(flds): 
-                    if fld not in results[pixInd] : results[pixInd][fld] = np.zeros([Nang,0,0]) # OR JUST MAKE THIS A 3D ARRAY
+                for j,fld in enumerate(flds):
+                    if fld not in results[pixInd]: results[pixInd][fld] = np.zeros([Nang,0,0]) # OR JUST MAKE THIS A 3D ARRAY
                     if results[pixInd][fld].shape[1] == isd: # make bigger along isd dim
                         shp = results[pixInd][fld].shape
-                        results[pixInd][fld] = np.concatenate((results[pixInd][fld], np.full([shp[0],1,shp[2]], np.nan)), axis=1)
+                        results[pixInd][fld] = np.concatenate((results[pixInd][fld], np.full([shp[0], 1, shp[2]], np.nan)), axis=1)
                     if results[pixInd][fld].shape[2] == l: # make one larger along lambda dim
                         shp = results[pixInd][fld].shape
-                        results[pixInd][fld] = np.concatenate((results[pixInd][fld], np.full([shp[0],shp[1],1], np.nan)), axis=2)
+                        results[pixInd][fld] = np.concatenate((results[pixInd][fld], np.full([shp[0], shp[1], 1], np.nan)), axis=2)
                     results[pixInd][fld][:,isd,l] = PMdata[:,j+skipFlds]
-            i+=1
+            i += 1
         return results
-    
+
     def calcAsymParam(self, results): # Calculate the total asymmetry parameter, and lidar ratios while we're at it
         for rslt in results: # loop over pixels
-            if np.all([fld in rslt for fld in ['p11', 'angle','aod','ssa','aodMode','ssaMode']]):                
+            if np.all([fld in rslt for fld in ['p11', 'angle','aod','ssa','aodMode','ssaMode']]):
                 rslt['g'] = np.empty(rslt['aod'].shape)
-                useLidarRatioFromGRASP = 'LidarRatio' in rslt 
+                useLidarRatioFromGRASP = 'LidarRatio' in rslt
                 if not useLidarRatioFromGRASP: rslt['LidarRatio'] = np.empty(rslt['aod'].shape)
                 if 'p22' in rslt: rslt['LidarDepol'] = np.empty(rslt['aod'].shape)
                 rslt['gMode'] = np.empty(rslt['aodMode'].shape)
@@ -732,20 +734,20 @@ class graspRun(object):
                 if 'p22' in rslt: rslt['LidarDepolMode'] = np.empty(rslt['aodMode'].shape)
                 for l in range(rslt['p11'].shape[-1]): # loop over wavelength
                     for m,ssaMode in enumerate(rslt['ssaMode'][:,l]): # loop over mode
-                        angRad = rslt['angle'][:,m,l]/180*np.pi 
-                        rslt['gMode'][m,l] = np.trapz(rslt['p11'][:,m,l]*np.cos(angRad)*np.sin(angRad),angRad)/2  
+                        angRad = rslt['angle'][:,m,l]/180*np.pi
+                        rslt['gMode'][m,l] = np.trapz(rslt['p11'][:,m,l]*np.cos(angRad)*np.sin(angRad), angRad)/2
                         rslt['LidarRatioMode'][m,l] =4*np.pi/(ssaMode*rslt['p11'][-1,m,l]) # we assume the last angle is θ=180°
                         rslt['LidarDepolMode'][m,l] = (rslt['p11'][-1,m,l] - rslt['p22'][-1,m,l])/(rslt['p11'][-1,m,l] + rslt['p22'][-1,m,l]) # we assume the last angle is θ=180°
                     scatWghts = rslt['ssaMode'][:,l]*rslt['aodMode'][:,l]
                     rslt['g'][l] = np.sum(rslt['gMode'][:,l]*scatWghts)/(rslt['ssa'][l]*rslt['aod'][l])
-                    if 'p22' in rslt or not useLidarRatioFromGRASP: 
+                    if 'p22' in rslt or not useLidarRatioFromGRASP:
                         F11bck = np.sum(scatWghts*rslt['p11'][-1,:,l])
                     if 'p22' in rslt:
                         F22bck = np.sum(scatWghts*rslt['p22'][-1,:,l])
                         rslt['LidarDepol'][l] = (F11bck-F22bck)/(F11bck+F22bck)
                     if not useLidarRatioFromGRASP:
                         rslt['LidarRatio'][l] = 4*np.pi*rslt['aod'][l]/F11bck # we assume the last angle is θ=180°
-                
+
     def parseOutFit(self, contents, wavelengths):
         results = self.parseOutDateTime(contents)
         ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING[ ]*[\*]+[ ]*$')
@@ -756,13 +758,13 @@ class graspRun(object):
         i = 0
         skipFlds = 1 # the 1st field is just the measurement number
         FITfnd = False
-        while i<len(contents):
+        while i < len(contents):
             if not ptrnResid.match(contents[i]) is None: # next line is final value of the cost function
-                pixInd = 0    
+                pixInd = 0
                 while numericLn.match(contents[i+1]):
                     results[pixInd]['costVal'] = float(re.search('^[ ]*[0-9\.]+', contents[i+1]).group())
-                    i+=1
-                    pixInd+=1
+                    i += 1
+                    pixInd += 1
             if not ptrnFIT.match(contents[i]) is None: # We found fitting data
                 FITfnd = True
             pixMatch = ptrnPIX.match(contents[i]) if FITfnd else None
@@ -771,33 +773,33 @@ class graspRun(object):
         #        wvlInd = int(pixMatch.group(2))-1
                 wvlVal = float(pixMatch.group(3))
                 try:
-                    wvlInd = np.nonzero(np.isclose(wavelengths,wvlVal, rtol=1e-3))[0][0]
+                    wvlInd = np.nonzero(np.isclose(wavelengths, wvlVal, rtol=1e-3))[0][0]
                 except IndexError:
                     msg = 'λ = %5.3f μm on line %d of GRASP output contents was not found in wavelengths!' % (wvlVal, i)
                     print('\x1b[1;31m'+msg+'\x1b[0m')
                 while not ptrnHeader.match(contents[i+2]) is None: # loop over measurement types
                     flds = [s.replace('/','o').replace('_[m]','Lidar') for s in contents[i+2].split()[skipFlds:]]
-                    lastLine = i+3 
-                    while (lastLine < len(contents)) and not (numericLn.match(contents[lastLine]) is None): 
-                        lastLine+=1 # lastNumericInd+1
+                    lastLine = i+3
+                    while lastLine < len(contents) and not numericLn.match(contents[lastLine]) is None:
+                        lastLine += 1 # lastNumericInd+1
                     for ang,dataRow in enumerate(contents[i+3:lastLine]): # loop over angles
                         dArr = np.array(dataRow.split(), dtype='float64')[skipFlds:]
                         for j,fld in enumerate(flds):
-                            if fld not in results[pixInd]: results[pixInd][fld] = np.array([]).reshape(0,len(wavelengths))
+                            if fld not in results[pixInd]: results[pixInd][fld] = np.array([]).reshape(0, len(wavelengths))
                             if results[pixInd][fld].shape[0] == ang: # need another angle row
-                                nanRow = np.full((1,results[pixInd][fld].shape[1]),np.nan)
-                                results[pixInd][fld] = np.block([[results[pixInd][fld]],[nanRow]])
-                            results[pixInd][fld][ang,wvlInd] = dArr[j]
-                    i=min(lastLine-2, len(contents)-3)
-            i+=1        
+                                nanRow = np.full((1, results[pixInd][fld].shape[1]), np.nan)
+                                results[pixInd][fld] = np.block([[results[pixInd][fld]], [nanRow]])
+                            results[pixInd][fld][ang, wvlInd] = dArr[j]
+                    i = min(lastLine-2, len(contents)-3)
+            i += 1
         return results
-    
+
     def parseMultiParamFld(self, contents, i, results, ptrn, fdlName, fldName0=False, colOffset=0, Nλ=None):
         if not ptrn.match(contents[i]) is None: # RRI by aersol size mode
             singNumeric = re.compile('^[ ]*[0-9]+[ ]*$')
             numericLn = re.compile('^[ ]*[0-9]+')
             lastLine = i+1
-            while not numericLn.match(contents[lastLine]) is None: lastLine+=1
+            while not numericLn.match(contents[lastLine]) is None: lastLine += 1
             Nparams = 0
             for dataRow in contents[i+1:lastLine]:
                 if not singNumeric.match(dataRow):
@@ -810,34 +812,34 @@ class graspRun(object):
                     Nparams += 1
             if Nparams > 1:
                 for k in range(len(results)): # seperate parameters from wavelengths
-                    if Nλ is None or len(results[k][fdlName]) == Nλ*Nparams: 
+                    if Nλ is None or len(results[k][fdlName]) == Nλ*Nparams:
                         results[k][fdlName] = results[k][fdlName].reshape(Nparams,-1)
                     elif Nλ and len(results[k][fdlName]) == (Nλ+Nparams-1): # we take 1st parameter to contain spectrum, single value for 2nd, 3rd,...
                         top = results[k][fdlName][0:Nλ]
-                        bot = [np.repeat(val,Nλ) for val in results[k][fdlName][Nλ:]]                      
+                        bot = [np.repeat(val, Nλ) for val in results[k][fdlName][Nλ:]]
                         results[k][fdlName] = np.vstack([top, bot])
                     elif k==0: # only show warning once
                         msg = 'Could not divide %s (len=%d) in Nparam=%d modes! Returning 1D array instead.'
                         warnings.warn(msg % (fdlName, len(results[k][fdlName]), Nparams))
             i = lastLine - 1
-            
+
     def genSDATAHead(self, unqTimes):
         nx = max([pix.ix for pix in self.pixels])
         ny = max([pix.iy for pix in self.pixels])
         Nstr = ' %d %d %d : NX NY NT' % (nx, ny, len(unqTimes))
         return 'SDATA version 2.0\n%s\n' % Nstr
-        
+
     def genCellHead(self, pixInd):
         nStr = '\n  %d   ' % len(pixInd)
         dtStr = self.pixels[pixInd[0]].dtObj.strftime('%Y-%m-%dT%H:%M:%SZ')
         endstr = ' %10.2f   0   0\n' % self.orbHght
         return nStr+dtStr+endstr
-        
-   
-class pixel(object):
+
+
+class pixel():
     def __init__(self, dtObj, ix, iy, lon, lat, masl, land_prct):
         """ dtObj - a datetime object corresponding to measurement time
-            masl - surface altitude in meters 
+            masl - surface altitude in meters
             land_prct - % of land, in the range [0(sea)...100(land)] (matches format GRASP takes) """
         self.dtObj = dtObj
         self.ix = ix
@@ -848,19 +850,19 @@ class pixel(object):
         self.land_prct = land_prct
         self.nwl = 0
         self.measVals = []
-         
+
     def addMeas(self, wl, msTyp, nbvm, sza, thtv, phi, msrmnts, errModel=None): # this is called once for each wavelength of data (see frmtMsg below)
         """Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)"""
         assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!'
         newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts, errorModel=errModel)
         newMeas = self.formatMeas(newMeas)
-        insertInd = np.nonzero([z['wl']>newMeas['wl'] for z in self.measVals])[0] # we want to insert in order
+        insertInd = np.nonzero([z['wl'] > newMeas['wl'] for z in self.measVals])[0] # we want to insert in order
         if len(insertInd)==0: # this is the longest wavelength so far, including the case w/ no measurements so far
             self.measVals.append(newMeas)
         else:
             self.measVals.insert(insertInd[0], newMeas)
         self.nwl += 1
-        
+
     def formatMeas(self, newMeas):
         frmtMsg = '\n\
             For more than one measurement type or viewing geometry pass msTyp, nbvm, thtv, phi and msrments as vectors: \n\
@@ -878,22 +880,22 @@ class pixel(object):
             newMeas['phi'] = np.tile(newMeas['phi'],newMeas['nip'])
         newMeas['phi'] = newMeas['phi'] + 180*(np.array(newMeas['thetav'])<0) # GRASP doesn't like thetav < 0
         newMeas['thetav'] = np.abs(newMeas['thetav'])
-        if np.any(newMeas['phi']<0): warnings.warn('GRASP RT performance is hindered when phi<0, values in the range 0<phi<360 are preferred.')
+        if np.any(newMeas['phi'] < 0): warnings.warn('GRASP RT performance is hindered when phi < 0, values in the range 0 < phi < 360 are preferred.')
         assert newMeas['thetav'].shape[0]==newMeas['phi'].shape[0] and newMeas['meas_type'].shape[0]==newMeas['nbvm'].shape[0] and newMeas['nbvm'].sum()==newMeas['thetav'].shape[0], 'Each measurement must conform to the following format:' + frmtMsg
         return newMeas
-        
+
     def genString(self):
         baseStrFrmt = '%2d %2d 1 0 0 %10.5f %10.5f %7.2f %6.2f %d' # everything up to meas fields
         baseStr = baseStrFrmt % (self.ix, self.iy, self.lon, self.lat, self.masl, self.land_prct, self.nwl)
         wlStr = " ".join(['%6.4f' % obj['wl'] for obj in self.measVals])
-        nipStr = " ".join(['%d' % obj['nip'] for obj in self.measVals])        
+        nipStr = " ".join(['%d' % obj['nip'] for obj in self.measVals])
         allVals = np.block([obj['meas_type'] for obj in self.measVals])
-        meas_typeStr = " ".join(['%d' % n for n in allVals])        
+        meas_typeStr = " ".join(['%d' % n for n in allVals])
         allVals = np.block([obj['nbvm'] for obj in self.measVals])
-        nbvmStr = " ".join(['%d' % n for n in allVals])        
-        szaStr = " ".join(['%7.3f' % obj['sza'] for obj in self.measVals])        
+        nbvmStr = " ".join(['%d' % n for n in allVals])
+        szaStr = " ".join(['%7.3f' % obj['sza'] for obj in self.measVals])
         allVals = np.block([obj['thetav'] for obj in self.measVals])
-        thetavStr = " ".join(['%7.3f' % n for n in allVals])        
+        thetavStr = " ".join(['%7.3f' % n for n in allVals])
         allVals = np.block([obj['phi'] for obj in self.measVals])
         phiStr = " ".join(['%7.3f' % n for n in allVals])
         allVals = np.block([obj['measurements'] for obj in self.measVals])
@@ -901,14 +903,14 @@ class pixel(object):
         settingStr = '0 '*2*len(meas_typeStr.split(" "))
         measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr))
         return " ".join((baseStr, measStrAll, settingStr, '\n'))
-    
-class graspYAML(object):
+
+class graspYAML():
     """Load, modify and/or store the contents of a YAML settings file."""
 
     def __init__(self, baseYAMLpath=None, workingYAMLpath=None):
         """Create new instance from YAML settings baseYAMLpath; updates written to workingYAMLpath if probided, otherwise baseYAMLpath."""
         assert not (workingYAMLpath and not baseYAMLpath), 'baseYAMLpath must be provided to create a new YAML file at workingYAMLpath!'
-        if workingYAMLpath: 
+        if workingYAMLpath:
             copyfile(baseYAMLpath, workingYAMLpath)
             self.YAMLpath = workingYAMLpath
         else:
@@ -916,11 +918,11 @@ class graspYAML(object):
         self.dl = None
         self.lambdaTypes = ['surface_water_CxMnk_iso_noPol',
                'surface_water_cox_munk_iso',
-               'surface_land_brdf_ross_li', 
-               'surface_land_polarized_maignan_breon', 
+               'surface_land_brdf_ross_li',
+               'surface_land_polarized_maignan_breon',
                'real_part_of_refractive_index_spectral_dependent',
-               'imaginary_part_of_refractive_index_spectral_dependent']      
-    
+               'imaginary_part_of_refractive_index_spectral_dependent']
+
     def scrambleInitialGuess(self, skipTypes=['aerosol_concentration']):
         """Set a random initial guess for all types (excluding skipTypes), uniformly choosen from the range between min and max."""
         self.loadYAML()
@@ -931,45 +933,45 @@ class graspYAML(object):
                     rngBnd = np.array(mode['initial_guess']['max'], dtype=float) - lowBnd
                     newGuess = (np.random.random()*rngBnd+lowBnd).tolist() # guess is spectrally flat relative to rng
                     mode['initial_guess']['value'] = newGuess
-        self.writeYAML()        
-        
+        self.writeYAML()
+
     def adjustLambda(self, Nlambda):
         """Change YAML settings to match a specific number of wavelenths, cutting and adding from the longest wavelength."""
         for lt in self.lambdaTypes: # loop over constraint types
-            m = 1;
-            while self.access('%s.%d' % (lt,m)): # loop over each mode
-                if self.access('%s.%d.index_of_wavelength_involved' % (lt,m))[0] > 0: # otherwise yaml specified [0] implying the parameter should be spectrally invarient
+            m = 1
+            while self.access('%s.%d' % (lt, m)): # loop over each mode
+                if self.access('%s.%d.index_of_wavelength_involved' % (lt, m))[0] > 0: # otherwise yaml specified [0] implying the parameter should be spectrally invarient
                     for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
-                            orgVal = self.access('%s.%d.%s' % (lt,m,f))
-                            if len(orgVal) >= Nlambda:
-                                self.access('%s.%d.%s' % (lt,m,f), orgVal[0:Nlambda], write2disk=False)
+                        orgVal = self.access('%s.%d.%s' % (lt, m, f))
+                        if len(orgVal) >= Nlambda:
+                            self.access('%s.%d.%s' % (lt, m, f), orgVal[0:Nlambda], write2disk=False)
+                        else:
+                            rpts = Nlambda - len(orgVal)
+                            if f == 'index_of_wavelength_involved':
+                                newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
                             else:
-                                rpts = Nlambda - len(orgVal)
-                                if f=='index_of_wavelength_involved':
-                                    newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
-                                else:
-                                    newVal = orgVal + np.repeat(orgVal[-1],rpts).tolist()
-                                self.access('%s.%d.%s' % (lt,m,f), newVal, write2disk=False)
-                m+=1
+                                newVal = orgVal + np.repeat(orgVal[-1], rpts).tolist()
+                            self.access('%s.%d.%s' % (lt, m, f), newVal, write2disk=False)
+                m += 1
         for n in range(len(self.access('retrieval.noises'))): # adjust the noise lambda as well
             m = 1
-            while self.access('retrieval.noises.noise[%d].measurement_type[%d]' % (n+1,m)):
-                fldNm = 'retrieval.noises.noise[%d].measurement_type[%d].index_of_wavelength_involved' % (n+1,m)
+            while self.access('retrieval.noises.noise[%d].measurement_type[%d]' % (n+1, m)):
+                fldNm = 'retrieval.noises.noise[%d].measurement_type[%d].index_of_wavelength_involved' % (n+1, m)
                 orgVal = self.access(fldNm)
                 if len(orgVal) >= Nlambda:
                     newVal = orgVal[0:Nlambda]
                 else:
-                    rpts = Nlambda - len(orgVal)                
+                    rpts = Nlambda - len(orgVal)
                     newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
                 self.access(fldNm, newVal, write2disk=False)
-                m+=1
+                m += 1
         self.writeYAML()
-    
+
     def access(self, fldPath, newVal=None, write2disk=True, verbose=True): # will also return fldPath value if newVal=None
-        if isinstance(newVal, np.ndarray):  # yaml module doesn't handle numby array gracefully 
+        if isinstance(newVal, np.ndarray):  # yaml module doesn't handle numby array gracefully
             newVal = newVal.tolist()
         elif isinstance(newVal, list): # check for regular list with numpy values
-            for i,val in enumerate(newVal):
+            for i, val in enumerate(newVal):
                 if type(val).__module__ == np.__name__: newVal[i] = val.item()
         elif type(newVal).__module__ == np.__name__: # just a single value of a numpy type
             newVal = newVal.item()
@@ -991,29 +993,29 @@ class graspYAML(object):
                         self.dl['retrieval']['phase_matrix']['radius']['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lstModeRadius)
         if newVal and write2disk: self.writeYAML() # if no change was made no need to re-write the file
         return prsntVal
-            
+
     def exapndFldPath(self, fldPath):
         self.loadYAML()
         if fldPath == 'path_to_internal_files': # <-SHORTCUT: fldPath='path_to_internal_files'
             return 'retrieval.general.path_to_internal_files'
-        elif fldPath == 'stop_before_performing_retrieval': # <-SHORTCUT:
+        if fldPath == 'stop_before_performing_retrieval': # <-SHORTCUT:
             return 'retrieval.convergence.stop_before_performing_retrieval'
-        elif fldPath == 'stream_fn': # <-SHORTCUT:
+        if fldPath == 'stream_fn': # <-SHORTCUT:
             return 'output.segment.stream'
-        elif fldPath == 'sdata_fn': # <-SHORTCUT:
+        if fldPath == 'sdata_fn': # <-SHORTCUT:
             return 'input.file'
         charN = np.nonzero([val['type'] in fldPath for val in self.dl['retrieval']['constraints'].values()])[0]
-        if charN.size>0: # <-SHORTCUT: any type, ex. fldPath='aerosol_concentration' (set mode 1, value)
+        if charN.size > 0: # <-SHORTCUT: any type, ex. fldPath='aerosol_concentration' (set mode 1, value)
             fPvct = fldPath.split('.') #  OR fldPath='aerosol_concentration.2' (mode 2, value)
             mode = fPvct[1] if len(fPvct) > 1 else 1 # OR fldPath='aerosol_concentration.2.min' (mode 3, min)
             fld = fPvct[2] if len(fPvct) > 2 else 'value'
             return 'retrieval.constraints.characteristic[%d].mode[%s].initial_guess.%s' % (charN[0]+1, mode, fld)
         return fldPath
-        
+
     def writeYAML(self):
         with open(self.YAMLpath, 'w') as outfile:
-                yaml.dump(self.dl, outfile, default_flow_style=None, indent=4, width=1000)
-                
+            yaml.dump(self.dl, outfile, default_flow_style=None, indent=4, width=1000)
+
     def loadYAML(self):
         assert self.YAMLpath, 'You must provide a YAML file path to perform a task utilizing a YAML file!'
         if not self.dl:
@@ -1024,14 +1026,10 @@ class graspYAML(object):
                 except AttributeError:
                     warnings.warn('Could not call yaml with FullLoader option. Is your conda up to date?')
                     self.dl = yaml.load(stream)
-        
+
     def YAMLrecursion(self, yamlDict, fldPath, newVal=None):
         if not fldPath[0] in yamlDict: return None
         if fldPath.shape[0] > 1:
             return self.YAMLrecursion(yamlDict[fldPath[0]], fldPath[1::], newVal)
-        else:
-            if not newVal is None: yamlDict[fldPath[0]] = newVal
-            return yamlDict[fldPath[0]]
-
-
-
+        if not newVal is None: yamlDict[fldPath[0]] = newVal
+        return yamlDict[fldPath[0]]

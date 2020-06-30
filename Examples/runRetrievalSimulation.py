@@ -17,10 +17,10 @@ sys.path.append(os.path.join(grandParentDir, "MADCAP_Analysis/ACCP_ArchitectureA
 # import top level class that peforms the retrieval simulation, defined in THIS_FILE_PATH/../simulateRetrieval.py
 import simulateRetrieval as rs
 
-# import returnPixel function with instrument definitions from .../MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/architectureMap.py 
+# import returnPixel function with instrument definitions from .../MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/architectureMap.py
 from architectureMap import returnPixel
 
-# import setupConCaseYAML function with simulated scene definitions from .../MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/canonicalCaseMap.py 
+# import setupConCaseYAML function with simulated scene definitions from .../MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/canonicalCaseMap.py
 from canonicalCaseMap import setupConCaseYAML
 
 

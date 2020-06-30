@@ -59,7 +59,7 @@ rBnds = [0.08, 0.5] # PSD integration bounds in μm
 # rBnds = [0.08, 20.0] # PSD integration bounds in μm
 
 # DUMMY VALUES
-msTyp = [12] 
+msTyp = [12]
 nbvm = np.ones(len(msTyp))
 thtv = np.zeros(len(msTyp))
 phi = np.zeros(len(msTyp)) 
@@ -181,7 +181,7 @@ for i,rslt in enumerate(rslts):
         rEff[binInd] = np.atleast_1d(rslt['rEffCalc'])[0]
     lInd = np.r_[lEdg[lEdgInd]:min(lEdg[lEdgInd]+maxL,Nlambda)]
     vol = scipy.integrate.simps(rslt['vol'][0]*rslt['dVdlnr'][0,:]/rslt['r'][0,:], rslt['r'][0,:]) # vol is volume of full lognormal! Need to integrate ourselves b/c some of the volume may be truncated.
-    bext_vol[binInd, lInd] = rslt['aod']/vol 
+    bext_vol[binInd, lInd] = rslt['aod']/vol
     bsca_vol[binInd, lInd] = rslt['ssa']*rslt['aod']/vol
     refreal[binInd, lInd] = rslt['n']  # HINT: WE DID NOT HAVE MODE SPECIFIC REF IND IN YAML
     refimag[binInd, lInd] = rslt['k']

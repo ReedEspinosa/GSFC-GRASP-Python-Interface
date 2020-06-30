@@ -6,7 +6,7 @@ Created on Tue May 21 13:36:12 2019
 @author: wrespino
 """
 
-import PyMieScatt as ps 
+import PyMieScatt as ps
 import numpy as np
 import matplotlib.pyplot as plt
 

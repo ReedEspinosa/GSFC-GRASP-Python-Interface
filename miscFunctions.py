@@ -75,7 +75,7 @@ def logNormal(mu, sig, r=None):
     Parameters:
         mu: median radius (this is exp(mu) at https://en.wikipedia.org/wiki/Log-normal_distribution)
         sig: regular (not geometric) sigma
-        r: optional array of radii at which to return dX/dr 
+        r: optional array of radii at which to return dX/dr
     Returns tupple with two arrays (dX/dr, r) 
     """
     if r is None:
