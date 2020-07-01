@@ -851,7 +851,7 @@ class pixel():
         self.nwl = 0
         self.measVals = []
 
-    def addMeas(self, wl, msTyp, nbvm, sza, thtv, phi, msrmnts, errModel=None): # this is called once for each wavelength of data (see frmtMsg below)
+    def addMeas(self, wl, msTyp=[], nbvm=[], sza=[], thtv=[], phi=[], msrmnts=[], errModel=None): # this is called once for each wavelength of data (see frmtMsg below)
         """Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)"""
         assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!'
         newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts, errorModel=errModel)
@@ -863,33 +863,37 @@ class pixel():
             self.measVals.insert(insertInd[0], newMeas)
         self.nwl += 1
 
-    def populateFromRslt(self, rslt, dataStage='fit'):
+    def populateFromRslt(self, rslt, dataStage='fit', verbose=False):
         """ This method will overwrite any previously existing data in the pixel """
-        wvls = rslt['lambda']
-        self.nwl = 0 # we know it, but addMeas is going to increment on its own
-        self.measVals = [] # TODO: this isn't going to work because we need errorModel later...
-        msTyps = np.array([key.replace(dataStage+'_','') for key in rslt.keys() if dataStage in key])
         msTypMap = {'I':41, 'Q':42, 'U':43, 'LS':31, 'DP':35, 'VBS':39, 'VEXT':36}
-        for l, wvl in wvls:
-            msTypInd = np.nonzero([not np.isnan(rslt[dataStage+'_'+mt][:,l]).any() for mt in msTyps])[0]
-            msTyp = [msTypMap[mt] for mt in msTyps[msTypInd]]
-            msTypInd = msTypInd[np.argsort(msTyp)] # need measurement types to be in ascending order
-            nbvm = [len(rslt[dataStage+'_'+mt][:,l]) for mt in msTyps[msTypInd]]
-            msTyp.sort() # standard python list – can sort in place
-            # STOPPED HERE (but see todo above)
-        for l, msDct in enumerate(self.nowPix.measVals): # loop over wavelength
-            msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd[i], verbose=localVerbose)
-            if Nsims == 0: # OSSE run
-                msDct['sza'] = self.rsltFwd[i]['sza'][0,l]
-                msDct['thetav'] = self.rsltFwd[i]['vis'][:,l]
-                msDct['phi'] = self.rsltFwd[i]['fis'][:,l]
-                msDct = self.nowPix.formatMeas(msDct) # this will tile the above msTyp times
-        if Nsims == 0:
-            self.nowPix.dtObj = self.rsltFwd[i]['datetime'] # ΤΟDO: this produces an integer & only keeps the date part... Should we just ditch this ordinal crap?
-            self.nowPix.lat = self.rsltFwd[i]['latitude']
-            self.nowPix.lon = self.rsltFwd[i]['longitude']
-            if 'land_prct' in self.rsltFwd[i]: self.nowPix.land_prct = self.rsltFwd[i]['land_prct']
-
+        msTyps = np.array([key.replace(dataStage+'_','') for key in rslt.keys() if dataStage in key]) # names of all keys with dataStage (e.g. "fit_")
+        wvls = rslt['lambda']
+        if self.nwl == 0: [self.addMeas(λ) for λ in wvls]
+        for l, msDct in enumerate(self.measVals): # loop over wavelength
+            msTypInd = np.nonzero([not np.isnan(rslt[dataStage+'_'+mt][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
+            msDict['meas_type'] = [msTypMap[mt] for mt in msTyps[msTypInd]] # this is numberic key for measurements avaiable at current λ
+            msTypsNowSorted = msTyps[msTypInd[np.argsort(msDict['meas_type'])]] # need msType names at this λ, sorted by above numeric measurement type keys
+            msDict['nbvm'] = [len(rslt[dataStage+'_'+mt][:,l]) for mt in msTypsNowSorted ] # number of measurement for each type (e.g. [10, 10, 10])
+            msDict['meas_type'].sort() # standard python list – can sort in place
+            if msDct['errModel'] is None:
+                msDct['measurements'] = msDct['errorModel'](l, rslt, verbose=localVerbose)
+            else:
+                msDct['measurements'] = np.reshape([rslt[dataStage+'_'+msStr][:,l] for mtStr in msTypsNowSorted], -1)
+            if np.all(msDict['meas_type'] < 40): # lidar data
+                msDct['sza'] = 0.01 # we assume vertical lidar
+                msDct['thetav'] = rslt['RangeLidar'][:,l]
+                msDct['phi'] = np.repeat(0, len(msDct['thetav']))
+            elif np.all(msDict['meas_type'] > 40): # polarimeter data    
+                msDct['sza'] = rslt['sza'][0,l] # GRASP/rslt dictionary return seperate SZA for every view, even though SDATA doesn't support it
+                msDct['thetav'] = rslt['vis'][:,l]
+                msDct['phi'] = rslt['fis'][:,l]
+            else:
+                assert False, 'Both polarimeter and lidar data at the same wavelength is not supported.'
+            msDct = self.formatMeas(msDct) # this will tile the above msTyp times
+        if 'datetime' in rslt: self.dtObj = rslt['datetime'] 
+        if 'latitude' in rslt: self.lat = rslt['latitude']
+        if 'longitude' in rslt: self.lon = rslt['longitude']
+        if 'land_prct' in rslt: self.land_prct = rslt['land_prct']
 
     def formatMeas(self, newMeas, lowThresh=1e-10):
         frmtMsg = '\n\

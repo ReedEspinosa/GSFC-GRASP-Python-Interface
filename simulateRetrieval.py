@@ -56,7 +56,6 @@ class simulation(object):
         elif type(fwdData) == list:
             self.rsltFwd = fwdData
             assert Nsims <= 1, 'Running multiple noise perturbations on more than one foward simulation is not supported.' 
-            Nsims = 0 # Nsims really has no meaning here so we will use this as a flag
             loopInd = range(len(self.rsltFwd))
         else:
             assert False, 'Unrecognized data type, fwdModelYAMLpath should be path to YAML file or a DICT!'
@@ -66,22 +65,11 @@ class simulation(object):
         gObjBck = rg.graspRun(bckYAMLpath, releaseYAML=releaseYAML, quietStart=verbose) # quietStart=True -> we won't see path of temp, pre-gDB graspRun
         if fixRndmSeed: strtSeed = np.random.randint(low=0, high=2**32-1)
         localVerbose = verbose
-        for i in loopInd: # loop over each simulated pixel, later split up into maxCPU calls to GRASP
+        for tOffset, i in enumerate(loopInd): # loop over each simulated pixel, later split up into maxCPU calls to GRASP
             if fixRndmSeed: np.random.seed(strtSeed) # reset to same seed, adding same noise to every pixel
-            for l, msDct in enumerate(self.nowPix.measVals): # loop over wavelength
-                msDct['measurements'] = msDct['errorModel'](l, self.rsltFwd[i], verbose=localVerbose)
-                if Nsims == 0:
-                    msDct['sza'] = self.rsltFwd[i]['sza'][0,l]
-                    msDct['thtv'] = self.rsltFwd[i]['vis'][:,l]
-                    msDct['phi'] = self.rsltFwd[i]['fis'][:,l]
-                    msDct = self.nowPix.formatMeas(msDct) # this will tile the above msTyp times
-            if Nsims == 0:
-                self.nowPix.dtObj = self.rsltFwd[i]['datetime'] # ΤΟDO: this produces an integer & only keeps the date part... Should we just ditch this ordinal crap?
-                self.nowPix.lat = self.rsltFwd[i]['latitude']
-                self.nowPix.lon = self.rsltFwd[i]['longitude']
-                if 'land_prct' in self.rsltFwd[i]: self.nowPix.land_prct = self.rsltFwd[i]['land_prct']
-            else:
-                self.nowPix.dtObj = self.nowPix.dtObj + dt.timedelta(hours=1) # increment hour otherwise GRASP will whine
+            self.nowPix.populateFromRslt(self.rsltFwd[i], verbose=localVerbose)
+            if len(np.unique(loopInd)) != len(loopInd): # we are using the same rsltFwd dictionary more than once
+                self.nowPix.dtObj = self.nowPix.dtObj + dt.timedelta(seconds=tOffset) # increment hour otherwise GRASP will whine
             gObjBck.addPix(self.nowPix) # addPix performs a deepcopy on nowPix, won't be impact by next iteration through loopInd
             localVerbose = False # verbose output for just one pixel should be sufficient
         gDB = rg.graspDB(gObjBck, maxCPU)
