@@ -94,7 +94,7 @@ class graspDB():
 #        [self.rslts.extend(grObj.readOutput()) for grObj in self.grObjs[~failedRuns]]
         [self.rslts.extend(self.grObjs[i].readOutput()) for i in np.nonzero(~failedRuns)[0]]
         dtSec = time.time() - t0
-        print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dtSec, len(self.rslts)/dt))
+        print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dtSec, len(self.rslts)/dtSec))
         if savePath:
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
