@@ -12,6 +12,7 @@ from scipy.stats import norm
 import runGRASP as rg
 import miscFunctions as ms
 
+
 class simulation(object):
     def __init__(self, nowPix=None, picklePath=None):
         assert not (nowPix and picklePath), 'Either nowPix or picklePath should be provided, but not both.'
@@ -22,8 +23,8 @@ class simulation(object):
         self.rsltBck = None
         self.rsltFwd = None
 
-    def runSim(self, fwdData, bckYAMLpath, Nsims=1, maxCPU=4, binPathGRASP=None, savePath=None, \
-               lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False, \
+    def runSim(self, fwdData, bckYAMLpath, Nsims=1, maxCPU=4, maxT=None, binPathGRASP=None, savePath=None,
+               lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False,
                dryRun=False, workingFileSave=False, fixRndmSeed=False, verbose=False):
         """ <> runs the simulation for given set of simulated and inversion conditions <>
         fwdData -> yml file path for GRASP fwd model OR "results style" list of dicts
@@ -37,9 +38,9 @@ class simulation(object):
         rndIntialGuess=True -> overwrite initial guesses in bckYAMLpath w/ uniformly distributed random values between min & max
         dryRun -> run foward model and then return noise added graspDB object, without performing the retrievals
         workingFileSave -> create ZIP with the GRASP SDATA, YAML and Output files used in the run, saved to savePath + .zip
-        fixRndmSeed -> Use same random seed for the measurement noise added (each pixel will have identical noise values) 
+        fixRndmSeed -> Use same random seed for the measurement noise added (each pixel will have identical noise values)
                             Only works if nowPix.measVals[n]['errorModel'] uses the `random` module to generate noise for all n """
-        assert not self.nowPix is None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.' 
+        assert self.nowPix is not None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.'
         if fixRndmSeed and not rndIntialGuess: 
             warnings.warn('Identical noise values and initial guess used in each pixel, repeating EXACT same retrieval %d times!' % Nsims)
         # ADAPT fwdData/RUN THE FOWARD MODEL
@@ -55,7 +56,9 @@ class simulation(object):
             loopInd = np.zeros(Nsims, int)
         elif type(fwdData) == list:
             self.rsltFwd = fwdData
-            assert Nsims <= 1, 'Running multiple noise perturbations on more than one foward simulation is not supported.' 
+            gObjFwd = rg.graspRun()
+            gObjFwd.invRslt = fwdData
+            assert Nsims <= 1, 'Running multiple noise perturbations on more than one foward simulation is not supported.'
             loopInd = range(len(self.rsltFwd))
         else:
             assert False, 'Unrecognized data type, fwdModelYAMLpath should be path to YAML file or a DICT!'
@@ -72,7 +75,7 @@ class simulation(object):
                 self.nowPix.dtObj = self.nowPix.dtObj + dt.timedelta(seconds=tOffset) # increment hour otherwise GRASP will whine
             gObjBck.addPix(self.nowPix) # addPix performs a deepcopy on nowPix, won't be impact by next iteration through loopInd
             localVerbose = False # verbose output for just one pixel should be sufficient
-        gDB = rg.graspDB(gObjBck, maxCPU)
+        gDB = rg.graspDB(gObjBck, maxCPU=maxCPU, maxT=maxT)
         if not dryRun:
             self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
             assert len(self.rsltBck)>0, 'Inversion output could not be read, halting the simulation (no data was saved).'
@@ -86,11 +89,12 @@ class simulation(object):
             if verbose: print('Packing GRASP working files up into %s' %  fullSaveDir + '.zip')
             if os.path.exists(fullSaveDir): shutil.rmtree(fullSaveDir)
             os.mkdir(fullSaveDir)
-            shutil.copytree(gObjFwd.dirGRASP, os.path.join(fullSaveDir,'forwardCalculation'))
+            if self.dirGRASP is not None: # If yes, then this was an OSSE run (no forward calculation folder)
+                shutil.copytree(gObjFwd.dirGRASP, os.path.join(fullSaveDir,'forwardCalculation'))
             for i, gb in enumerate(gDB.grObjs):
                 shutil.copytree(gb.dirGRASP, os.path.join(fullSaveDir,'inversion%02d' % i))
             shutil.make_archive(fullSaveDir, 'zip', fullSaveDir)
-            shutil.rmtree(fullSaveDir) 
+            shutil.rmtree(fullSaveDir)
         return gObjFwd, gDB.grObjs
 
     def saveSim(self, savePath, lightSave=False, verbose=False):
@@ -105,7 +109,7 @@ class simulation(object):
         with open(savePath, 'wb') as f:
             pickle.dump(list(self.rsltBck), f, pickle.HIGHEST_PROTOCOL)
             pickle.dump(list(self.rsltFwd), f, pickle.HIGHEST_PROTOCOL)
-    
+
     def loadSim(self, picklePath):
         with open(picklePath, 'rb') as f:
             self.rsltBck = np.array(pickle.load(f))
@@ -114,7 +118,7 @@ class simulation(object):
             except EOFError: # this was an older file (created before Jan 2020)
                 self.rsltFwd = [self.rsltBck[-1]] # resltFwd as a array of len==0 (not totaly backward compatible, it used to be straight dict)
                 self.rsltBck = self.rsltBck[:-1]
- 
+
     def conerganceFilter(self, χthresh=None, σ=None, forceχ2Calc=False, verbose=False, minSaved=2): # TODO: LIDAR bins with ~0 concentration are dominating this metric...
         """ Only removes data from resltBck if χthresh is provided, χthresh=1.5 seems to work well
         Now we use costVal from GRASP if available (or if forceχ2Calc==True), χthresh≈2.5 is probably better

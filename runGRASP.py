@@ -28,6 +28,13 @@ except ImportError:
 
 class graspDB():
     def __init__(self, graspRunObjs=[], maxCPU=None, maxT=None):
+        """
+        The graspDB class is designed to run many instances of GRASP in parallel/sequence (depending on maxCPU and maxT below).
+        It also contains a variety of (rather old) plotting functions to apply to many grasp results
+        INPUTS: graspRunObjs - what it sounds like, a list of grasp run objects
+                maxCPU - the maximum number of GRASP process to run at any given time (each process consumes one core); None for no max
+                maxT - the maximum number of pixels to include in a single GRASP process; None for no max
+        """
         self.maxCPU = maxCPU
         if type(graspRunObjs) is list:
             self.grObjs = graspRunObjs
