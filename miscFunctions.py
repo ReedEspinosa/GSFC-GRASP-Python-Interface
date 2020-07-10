@@ -13,10 +13,12 @@ try:
     pltLoad = True
 except ImportError:
     pltLoad = False
-#from scipy import integrate
+# from scipy import integrate
+
 
 def checkDiscover(): # right now this just checks for a remote connection...
     return "SSH_CONNECTION" in os.environ
+
 
 def norm2absExtProf(normalizedProfile, heights, AOD):
     """
@@ -27,13 +29,13 @@ def norm2absExtProf(normalizedProfile, heights, AOD):
     from scipy.integrate import simps
     C = np.abs(simps(normalizedProfile, heights))
     return AOD*normalizedProfile/C
-    
-    
+
 
 def matplotlibX11():
     if checkDiscover():
         import matplotlib
         matplotlib.use('TkAgg')
+
 
 def angstrmIntrp(lmbdIn, tau, lmbdTrgt):
     tau = tau[lmbdIn.argsort()]
@@ -48,19 +50,21 @@ def angstrmIntrp(lmbdIn, tau, lmbdTrgt):
     frstInd = np.nonzero((lmbd - lmbdTrgt) < 0)[0][-1]
     alpha = angstrm(lmbd[frstInd:frstInd+2], tau[frstInd:frstInd+2])
     return tau[frstInd]*(lmbd[frstInd]/lmbdTrgt)**alpha
-    
+
+
 def angstrm(lmbd, tau):
     assert (lmbd.shape[0]==2 and tau.shape[0]==2), "Exactly two values must be provided!"
     return -np.log(tau[0]/tau[1])/np.log(lmbd[0]/lmbd[1])
-    
+
+
 def simpsonsRule(f,a,b,N=50):
     """
     simpsonsRule: (func, array, int, int) -> float
     Parameters:
-		f: function that returns the evaluated equation at point x.
+        f: function that returns the evaluated equation at point x.
         a, b: integers representing lower and upper bounds of integral.
-		N: integers number of segments being used to approximate the integral (same n as http://en.wikipedia.org/wiki/Simpson%27s_rule)
-	Returns float equal to the approximate integral of f(x) from bnds[0] to bnds[1] using Simpson's rule.
+        N: integers number of segments being used to approximate the integral (same n as http://en.wikipedia.org/wiki/Simpson%27s_rule)
+    Returns float equal to the approximate integral of f(x) from bnds[0] to bnds[1] using Simpson's rule.
     """
     assert np.mod(N,2)==0, 'n must be even!'
     dx = (b-a)/N
@@ -69,6 +73,7 @@ def simpsonsRule(f,a,b,N=50):
     S = dx/3 * np.sum(y[0:-1:2] + 4*y[1::2] + y[2::2])
     return S
 
+
 def logNormal(mu, sig, r=None):
     """
     logNormal: (float, float, array*) -> (array, array)
@@ -76,7 +81,7 @@ def logNormal(mu, sig, r=None):
         mu: median radius (this is exp(mu) at https://en.wikipedia.org/wiki/Log-normal_distribution)
         sig: regular (not geometric) sigma
         r: optional array of radii at which to return dX/dr
-    Returns tupple with two arrays (dX/dr, r) 
+    Returns tupple with two arrays (dX/dr, r)
     """
     if r is None:
         Nr = int(1e4) # number of radii
@@ -88,11 +93,13 @@ def logNormal(mu, sig, r=None):
     dxdr = nrmFct*(r**-1)*np.exp(-((np.log(r)-np.log(mu))**2)/(2*sig**2))
     return dxdr,r # random note: rEff = mu*np.exp(-sig**2/2)
 
+
 def effRadius(r, dvdlnr):
     vol = np.trapz(dvdlnr/r,r)
     area = np.trapz(dvdlnr/r**2,r)
     return vol/area
-        
+
+
 def phaseMat(r, dvdlnr, n, k, wav=0.550):
     """
     # https://pymiescatt.readthedocs.io
@@ -108,10 +115,10 @@ def phaseMat(r, dvdlnr, n, k, wav=0.550):
         n: real refractive index
         k: imaginary refracrtive index
         wav: wavelength in μm
-    Returns tupple with three arrays: (scattering_angle, normalized_P11, -P12/P11) 
+    Returns tupple with three arrays: (scattering_angle, normalized_P11, -P12/P11)
     """
-    assert PyMieLoaded, "Import errors occured when loading the PyMieScatt module" 
-    m = complex(n, k)   
+    assert PyMieLoaded, "Import errors occured when loading the PyMieScatt module"
+    m = complex(n, k)
     dp = r*2
     ndp = dvdlnr/(r**3) # this should be r^4 but we seem to match with r^3... we _think_ PyMieScatt really wants dn/dr*r, contrary to docs
     theta,sl,sr,su = ps.SF_SD(m, wav, dp, ndp, angularResolution=1)
@@ -119,7 +126,8 @@ def phaseMat(r, dvdlnr, n, k, wav=0.550):
     S12=-0.5*(sl-sr) # minus makes positive S12 polarized in scattering plane
     p11 = 2*S11/np.trapz(S11*np.sin(theta), theta)
     return theta*180/np.pi, p11, -S12/S11
-        
+
+
 def gridPlot(xlabel, ylabel, values):
     assert pltLoad, 'Matplotlib could not be loaded!'
     plt.rcParams.update({'font.size': 10})
@@ -147,7 +155,7 @@ def gridPlot(xlabel, ylabel, values):
             clr = 'w' if np.abs(values[i, j]-1)>0.5 else 'k'
     #        clr = np.min([np.abs(harvest[i, j]-1)**3, 1])*np.ones(3)
             ax.text(j, i, valStr,
-                           ha="center", va="center", color=clr, fontsize=9)
-    fig.tight_layout()   
-        
-#TODO: should make PSD class with r,dNdr and type (dndr,dvdr,etc.)      
+                    ha="center", va="center", color=clr, fontsize=9)
+    fig.tight_layout()
+
+# TODO: should make PSD class with r,dNdr and type (dndr,dvdr,etc.)
