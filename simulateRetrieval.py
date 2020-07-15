@@ -25,8 +25,9 @@ class simulation(object):
 
     def runSim(self, fwdData, bckYAMLpath, Nsims=1, maxCPU=4, maxT=None, binPathGRASP=None, savePath=None,
                lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False,
-               dryRun=False, workingFileSave=False, fixRndmSeed=False, verbose=False):
-        """ <> runs the simulation for given set of simulated and inversion conditions <>
+               dryRun=False, workingFileSave=False, fixRndmSeed=False, radianceNoiseFun=None, verbose=False):
+        """ 
+        <> runs the simulation for given set of simulated and inversion conditions <>
         fwdData -> yml file path for GRASP fwd model OR "results style" list of dicts
         bckYAMLpath -> yml file path for GRASP inversion
         Nsims -> number of noise pertbations applied to fwd model, must be 1 if fwdData is a list of results dicts
@@ -39,12 +40,16 @@ class simulation(object):
         dryRun -> run foward model and then return noise added graspDB object, without performing the retrievals
         workingFileSave -> create ZIP with the GRASP SDATA, YAML and Output files used in the run, saved to savePath + .zip
         fixRndmSeed -> Use same random seed for the measurement noise added (each pixel will have identical noise values)
-                            Only works if nowPix.measVals[n]['errorModel'] uses the `random` module to generate noise for all n """
-        assert self.nowPix is not None, 'A dummy pixel (nowPix) and error function (addError) are needed in order to run the simulation.'
+                            Only works if nowPix.measVals[n]['errorModel'] uses the `random` module to generate noise for all n 
+        radianceNoiseFun -> a function with 1st arg λ (μm), 2nd arg rslt dict & 3rd arg verbose bool to map rslt fit_I/Q/U to retrieval (back) SDATA 
+                                See addError() at bottom of architectureMap in ACCP folding of MADCAP scripts for an example
+                                This option will override an error model in nowPix; set to None add no noise to OSSE polarimeter 
+        """
         if fixRndmSeed and not rndIntialGuess: 
             warnings.warn('Identical noise values and initial guess used in each pixel, repeating EXACT same retrieval %d times!' % Nsims)
         # ADAPT fwdData/RUN THE FOWARD MODEL
-        if type(fwdData) == str and fwdData[-3:] == 'yml':
+        if type(fwdData) == str and fwdData[-3:] == 'yml': # we are using GRASP's fwd model
+            assert self.nowPix is not None, 'A dummy pixel (nowPix) with an error function (addError) is required to run the simulation.'
             if verbose: print('Calculating forward model "truth"...')
             gObjFwd = rg.graspRun(fwdData)
             gObjFwd.addPix(self.nowPix)
@@ -54,12 +59,13 @@ class simulation(object):
             except IndexError as e:
                 raise Exception('Forward calucation output could not be read, halting the simulation.') from e
             loopInd = np.zeros(Nsims, int)
-        elif type(fwdData) == list:
+        elif type(fwdData) == list: # likely OSSE from netCDF
             self.rsltFwd = fwdData
             gObjFwd = rg.graspRun()
             gObjFwd.invRslt = fwdData
             assert Nsims <= 1, 'Running multiple noise perturbations on more than one foward simulation is not supported.'
             loopInd = range(len(self.rsltFwd))
+            if self.nowPix is None: self.nowPix = rg.pixel() # nowPix is optional argument to _init_ in OSSE case
         else:
             assert False, 'Unrecognized data type, fwdModelYAMLpath should be path to YAML file or a DICT!'
         if verbose: print('Forward model "truth" obtained')
@@ -70,7 +76,7 @@ class simulation(object):
         localVerbose = verbose
         for tOffset, i in enumerate(loopInd): # loop over each simulated pixel, later split up into maxCPU calls to GRASP
             if fixRndmSeed: np.random.seed(strtSeed) # reset to same seed, adding same noise to every pixel
-            self.nowPix.populateFromRslt(self.rsltFwd[i], verbose=localVerbose)
+            self.nowPix.populateFromRslt(self.rsltFwd[i], radianceNoiseFun=radianceNoiseFun, verbose=localVerbose)
             if len(np.unique(loopInd)) != len(loopInd): # we are using the same rsltFwd dictionary more than once
                 self.nowPix.dtObj = self.nowPix.dtObj + dt.timedelta(seconds=tOffset) # increment hour otherwise GRASP will whine
             gObjBck.addPix(self.nowPix) # addPix performs a deepcopy on nowPix, won't be impact by next iteration through loopInd

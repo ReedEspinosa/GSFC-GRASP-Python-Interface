@@ -871,8 +871,12 @@ class pixel():
             self.measVals.insert(insertInd[0], newMeas)
         self.nwl += 1
 
-    def populateFromRslt(self, rslt, dataStage='fit', verbose=False):
-        """ This method will overwrite any previously existing data in the pixel """
+    def populateFromRslt(self, rslt, radianceNoiseFun=None, dataStage='fit', verbose=False):
+        """ This method will overwrite any previously existing data in the pixel at the following keys:
+            meas_type, nbvm, nip, measurements, sza, thetav, phi, datetime, latitude, longitude, land_prct
+            if self.meas == [] when called, populateFromRslt will add a measurement for each wvl in rslt
+            radianceNoiseFun will override (and permanently set) self.measVals[n]['errorModel']
+        """
         msTypMap = {'I':41, 'Q':42, 'U':43, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
         msTyps = np.array([key.replace(dataStage+'_','') for key in rslt.keys() if dataStage in key]) # names of all keys with dataStage (e.g. "fit_")
         if 'QoI' in msTyps:
@@ -885,17 +889,11 @@ class pixel():
         if self.nwl == 0: [self.addMeas(λ) for λ in wvls]
         for l, msDct in enumerate(self.measVals): # loop over wavelength
             msTypInd = np.nonzero([not np.isnan(rslt[dataStage+'_'+mt][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
-            if 'QoI' in msTyps[msTypInd]:
-                rslt
             msDct['meas_type'] = [msTypMap[mt] for mt in msTyps[msTypInd]] # this is numberic key for measurements avaiable at current λ
             msTypsNowSorted = msTyps[msTypInd[np.argsort(msDct['meas_type'])]] # need msType names at this λ, sorted by above numeric measurement type keys
             msDct['nbvm'] = [len(rslt[dataStage+'_'+mt][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
             msDct['meas_type'] = np.sort(msDct['meas_type'])
             msDct['nip'] = len(msDct['meas_type'])
-            if msDct['errorModel'] is not None:
-                msDct['measurements'] = msDct['errorModel'](l, rslt, verbose=verbose)
-            else:
-                msDct['measurements'] = np.reshape([rslt[dataStage+'_'+msStr][:,l] for msStr in msTypsNowSorted], -1)
             if np.all(msDct['meas_type'] < 40): # lidar data
                 msDct['sza'] = 0.01 # we assume vertical lidar
                 msDct['thetav'] = rslt['RangeLidar'][:,l]
@@ -904,8 +902,13 @@ class pixel():
                 msDct['sza'] = rslt['sza'][0,l] # GRASP/rslt dictionary return seperate SZA for every view, even though SDATA doesn't support it
                 msDct['thetav'] = rslt['vis'][:,l]
                 msDct['phi'] = rslt['fis'][:,l]
+                if radianceNoiseFun: msDct['errorModel'] = radianceNoiseFun 
             else:
                 assert False, 'Both polarimeter and lidar data at the same wavelength is not supported.'
+            if msDct['errorModel'] is not None:
+                msDct['measurements'] = msDct['errorModel'](l, rslt, verbose=verbose)
+            else:
+                msDct['measurements'] = np.reshape([rslt[dataStage+'_'+msStr][:,l] for msStr in msTypsNowSorted], -1)
             msDct = self.formatMeas(msDct) # this will tile the above msTyp times
         if 'datetime' in rslt: self.dtObj = rslt['datetime']
         if 'latitude' in rslt: self.lat = rslt['latitude']
