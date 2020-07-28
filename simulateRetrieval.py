@@ -230,6 +230,8 @@ class simulation(object):
                 wvlngthInd - the index of the wavelength to calculate stats for
                 modeCut - fine/coarse seperation radius in um, currenltly only applied to rEff (None -> do not calculate error's modal dependence)
                 hghtCut - PBL/FT seperation in meters (None -> do not calculate error's layer dependence)
+                            if VarX_PBL in fwd keys (OSSE case), fwd PBL value for VarX will pulled from VarX_PBL and ignore hghtCut
+                            in back OSSE case hghtCut argument is still used, although it could be pulled from 'pblh' key (see TODO notes below)
                 fineModesFwd - [array-like] the indices of the fine modes in the foward calculation, set to None to use OSSE ..._Fine variables instead
                 fineModesBck -  [array-like] the indices of the fine modes in the retrieval
                 NOTE: this method generally assumes configuration (e.g. # of modes) is the same across all pixels
@@ -245,7 +247,7 @@ class simulation(object):
         assert type(self.rsltFwd) is list or type(self.rsltFwd) is np.ndarray, 'rsltFwd must be a list! Note that it was stored as a dict in older versions of the code.'
         fwdKys = self.rsltFwd[0].keys()
         bckKys = self.rsltBck[0].keys()
-        lgnrmPSD = ('rv' in fwdKys or 'aod_Fine' in fwdKys) and 'rv' in self.rsltBck[0]
+        lgnrmPSD = ('rv' in fwdKys or 'aod_fine' in fwdKys) and 'rv' in self.rsltBck[0]
         assert modeCut is None or lgnrmPSD, 'Fine/Coarse errors can only be caluclated from GRASPs lognormal PSD representation! For this data, you must set modeCut=None' 
         # hghtInfo = ('βext' in fwdKys or 'aod_PBL' in fwdKys) and 'βext' in self.rsltBck[0]
         # assert hghtCut is None or hghtInfo, 'PBL/FT errors can only currently be calculated from LIDAR retrievals! For this retrieval dataset, you must set heghtCut=None' 
@@ -265,6 +267,7 @@ class simulation(object):
             for rf in self.rsltFwd: rf['rEffMode'] = self.ReffMode(rf)
         if 'rEffMode' not in self.rsltBck[0] and 'rv' in self.rsltBck[0]: 
             for rb in self.rsltBck: rb['rEffMode'] = self.ReffMode(rb)        
+#         if hghtCut is None and 'pblh' in self.rsltFwd[0]: hghtCut = [rd['pblh'] for rd in self.rsltFwd] TODO: This won't work until hghtWghtedAvg can take in an array
         varsSpctrl = [z for z in varsSpctrl if z in fwdKys and z in bckKys] # check that the variable is used in current configuration
         varsMorph = [z for z in varsMorph if z in fwdKys and z in bckKys]
         # loop through varsSpctrl and varsMorph calcualted RMS and bias
@@ -280,7 +283,7 @@ class simulation(object):
             if rtrvd.ndim==1: rtrvd = np.expand_dims(rtrvd,1) # we want [ipix, imode], we add a singleton dimension if only one mode/nonmodal
             if true.ndim==1: true = np.expand_dims(true,1) # we want [ipix, imode], we add a singleton dimension if only one mode/nonmodal
             if hghtCut and av in modalVars and (av+'_PBL' in fwdKys or 'aodMode' in fwdKys): # calculate vertical dependent RMS/BIAS [PBL, FT*]
-                if av+'_PBL' in fwdKys: # TODO: we have foward model PBL height... we should use it
+                if av+'_PBL' in fwdKys: # TODO: Now this just calculates for PBL but av+'_FT' exist in OSSE data
                     trueBilayer = self.getStateVals(av+'_PBL', self.rsltFwd, varsSpctrl, wvlnthInd)
                     rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut, av, pblOnly=True)
                 else: # 'aodMode' in self.rsltFwd[0]
@@ -291,8 +294,8 @@ class simulation(object):
                 trueOut[av+'_PBLFT'] =  trueBilayer
             if not fineModesBck is None and av in modalVars: # calculate fine mode dependent RMS/BIAS
                 fineCalculated = False
-                if av+'_Fine' in fwdKys and fineModesFwd is None and 'aodMode' in bckKys: # we have OSSE outputs, currently user provided fineModesFwd trumps this though
-                    trueFine = self.getStateVals(av+'_Fine', self.rsltFwd, varsSpctrl, wvlnthInd)
+                if av+'_fine' in fwdKys and fineModesFwd is None and 'aodMode' in bckKys: # we have OSSE outputs, currently user provided fineModesFwd trumps this though
+                    trueFine = self.getStateVals(av+'_fine', self.rsltFwd, varsSpctrl, wvlnthInd)
                     rtrvdFine = self.getStateVals(av, self.rsltBck, varsSpctrl, wvlnthInd, fineModesBck)
                     fineCalculated = True
                 elif not fineModesFwd is None and 'aodMode' in fwdKys and 'aodMode' in bckKys: # user provided fwd and bck fine mode indices

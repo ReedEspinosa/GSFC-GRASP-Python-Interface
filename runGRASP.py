@@ -914,6 +914,7 @@ class pixel():
         if 'latitude' in rslt: self.lat = rslt['latitude']
         if 'longitude' in rslt: self.lon = rslt['longitude']
         if 'land_prct' in rslt: self.land_prct = rslt['land_prct']
+        if 'masl' in rslt: self.masl = rslt['masl']
 
     def formatMeas(self, newMeas, lowThresh=1e-10):
         frmtMsg = '\n\
