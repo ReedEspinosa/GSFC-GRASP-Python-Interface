@@ -16,8 +16,10 @@ import miscFunctions as ms
 class simulation(object):
     def __init__(self, nowPix=None, picklePath=None):
         assert not (nowPix and picklePath), 'Either nowPix or picklePath should be provided, but not both.'
-        if picklePath: self.loadSim(picklePath)
-        if nowPix is None: return
+        if picklePath: self.loadSim(picklePath)        
+        if nowPix is None: 
+            self.nowPix = None
+            return
         assert np.all([np.all(np.diff(mv['meas_type'])>0) for mv in nowPix.measVals]), 'nowPix.measVals[l][\'meas_type\'] must be in ascending order at each l'
         self.nowPix = copy.deepcopy(nowPix) # we will change this, bad form not to make our own copy
         self.rsltBck = None

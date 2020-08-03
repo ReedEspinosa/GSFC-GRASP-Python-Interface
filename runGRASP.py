@@ -10,6 +10,7 @@ import pickle
 import copy
 from csv import writer as csv_writer
 from datetime import datetime as dt  # we want datetime.datetime
+from datetime import timedelta
 from shutil import copyfile
 from subprocess import Popen,PIPE
 import pandas as pd
@@ -846,9 +847,11 @@ class graspRun():
 
 class pixel():
     def __init__(self, dtObj=None, ix=1, iy=1, lon=0, lat=0, masl=0, land_prct=100):
-        """ dtObj - a datetime object corresponding to measurement time
+        """ dtObj - a datetime object corresponding to measurement time (also accepts matlab style datenum)
             masl - surface altitude in meters
             land_prct - % of land, in the range [0(sea)...100(land)] (matches format GRASP takes) """
+        if type(dtObj) is np.float64: # we probably have a datenum
+            dtObj = dt.fromordinal(int(dtObj)) + timedelta(days=dtObj%1)
         self.dtObj = dtObj
         self.ix = ix
         self.iy = iy
