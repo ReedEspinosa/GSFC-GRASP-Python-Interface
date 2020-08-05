@@ -37,7 +37,7 @@ class simulation(object):
         binPathGRASP -> path to GRASP binary, if None default from graspRun is used
         savePath -> path to save pickle w/ simulated retrieval results, lightSave -> remove PM data to save space
         intrnlFileGRASP -> alternative path to GRASP kernels, overwrites value in YAML files
-        releaseYAML=True -> auto adjust back yaml Nλ to match the number of wavelenth of this insturment
+        releaseYAML=True -> auto adjust back yaml Nλ and number of vertical bins to match the forward simulated data
         rndIntialGuess=True -> overwrite initial guesses in bckYAMLpath w/ uniformly distributed random values between min & max
         dryRun -> run foward model and then return noise added graspDB object, without performing the retrievals
         workingFileSave -> create ZIP with the GRASP SDATA, YAML and Output files used in the run, saved to savePath + .zip

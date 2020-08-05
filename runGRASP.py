@@ -372,7 +372,12 @@ class graspRun():
         if not binPathGRASP: binPathGRASP = '/usr/local/bin/grasp'
         if not self.pathSDATA:
             self.writeSDATA()
-        if self.releaseYAML: self.yamlObj.adjustLambda(np.max([px.nwl for px in self.pixels]))
+        if self.releaseYAML:
+            self.yamlObj.adjustLambda(np.max([px.nwl for px in self.pixels]))
+            Nbins = [len(mv['thetav']) for mv in self.pixels[0].measVals if np.all(mv['meas_type']<40)]
+            if len(Nbins)>0: # we have lidar data
+                assert np.all([Nbins[0]==bn for bn in Nbins]), 'Expected same number of vertical bins at every λ, instead found '+str(Nbins)
+                self.yamlObj.adjustVertBins(Nbins[0])
         if krnlPathGRASP: self.yamlObj.access('path_to_internal_files', krnlPathGRASP)
         self.pObj = Popen([binPathGRASP, self.yamlObj.YAMLpath], stdout=PIPE)
         if not parallel:
@@ -851,7 +856,7 @@ class pixel():
             masl - surface altitude in meters
             land_prct - % of land, in the range [0(sea)...100(land)] (matches format GRASP takes) """
         if type(dtObj) is np.float64: # we probably have a datenum
-            dtObj = dt.fromordinal(int(dtObj)) + timedelta(days=dtObj%1)
+            dtObj = dt.fromordinal(int(dtObj)) + timedelta(days=dtObj % 1)
         self.dtObj = dtObj
         self.ix = ix
         self.iy = iy
@@ -905,7 +910,7 @@ class pixel():
                 msDct['sza'] = rslt['sza'][0,l] # GRASP/rslt dictionary return seperate SZA for every view, even though SDATA doesn't support it
                 msDct['thetav'] = rslt['vis'][:,l]
                 msDct['phi'] = rslt['fis'][:,l]
-                if radianceNoiseFun: msDct['errorModel'] = radianceNoiseFun 
+                if radianceNoiseFun: msDct['errorModel'] = radianceNoiseFun
             else:
                 assert False, 'Both polarimeter and lidar data at the same wavelength is not supported.'
             if msDct['errorModel'] is not None:
@@ -1001,22 +1006,7 @@ class graspYAML():
 
     def adjustLambda(self, Nlambda):
         """Change YAML settings to match a specific number of wavelenths, cutting and adding from the longest wavelength."""
-        for lt in self.lambdaTypes: # loop over constraint types
-            m = 1
-            while self.access('%s.%d' % (lt, m)): # loop over each mode
-                if self.access('%s.%d.index_of_wavelength_involved' % (lt, m))[0] > 0: # otherwise yaml specified [0] implying the parameter should be spectrally invarient
-                    for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
-                        orgVal = self.access('%s.%d.%s' % (lt, m, f))
-                        if len(orgVal) >= Nlambda:
-                            self.access('%s.%d.%s' % (lt, m, f), orgVal[0:Nlambda], write2disk=False)
-                        else:
-                            rpts = Nlambda - len(orgVal)
-                            if f == 'index_of_wavelength_involved':
-                                newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
-                            else:
-                                newVal = orgVal + np.repeat(orgVal[-1], rpts).tolist()
-                            self.access('%s.%d.%s' % (lt, m, f), newVal, write2disk=False)
-                m += 1
+        for lt in self.lambdaTypes: self._repeatElementsInField(fldName=lt, Nrepeats=Nlambda, λonly=True)  # loop over constraint types
         for n in range(len(self.access('retrieval.noises'))): # adjust the noise lambda as well
             m = 1
             while self.access('retrieval.noises.noise[%d].measurement_type[%d]' % (n+1, m)):
@@ -1029,6 +1019,31 @@ class graspYAML():
                     newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
                 self.access(fldNm, newVal, write2disk=False)
                 m += 1
+        self.writeYAML()
+
+    def _repeatElementsInField(self, fldName, Nrepeats, λonly=False):
+        """This will cut/repeat using the last element of characteristic fldName so that the number of entries is Nrepeats
+            NOTE: This is a helper function that DOES NOT WRITE CHANGES TO THE FILE """
+        assert np.issubdtype(type(Nrepeats), np.integer), 'Nrepeats must be an integer!'
+        m = 1
+        while self.access('%s.%d' % (fldName, m)): # loop over each mode
+            λField = self.access('%s.%d.index_of_wavelength_involved' % (fldName, m))[0] > 0 # otherwise yaml specified [0] implying the parameter should be spectrally invarient
+            if not λonly or λField: 
+                for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
+                    orgVal = self.access('%s.%d.%s' % (fldName, m, f))
+                    if len(orgVal) >= Nrepeats:
+                        self.access('%s.%d.%s' % (fldName, m, f), orgVal[0:Nrepeats], write2disk=False)
+                    else:
+                        rpts = Nrepeats - len(orgVal)
+                        if f == 'index_of_wavelength_involved' and λField:
+                            newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
+                        else:
+                            newVal = orgVal + np.repeat(orgVal[-1], rpts).tolist()
+                        self.access('%s.%d.%s' % (fldName, m, f), newVal, write2disk=False)
+            m += 1
+
+    def adjustVertBins(self, Nbins):
+        self._repeatElementsInField(fldName='vertical_profile_normalized', Nrepeats=Nbins)
         self.writeYAML()
 
     def access(self, fldPath, newVal=None, write2disk=True, verbose=True): # will also return fldPath value if newVal=None
