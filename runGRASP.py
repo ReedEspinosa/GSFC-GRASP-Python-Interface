@@ -615,6 +615,7 @@ class graspRun():
             return []
         ptrnPSD = re.compile('^[ ]*(Radius \(um\),)?[ ]*Size Distribution dV\/dlnr \(normalized')
         ptrnProfile = re.compile('^[ ]*Aerosol vertical profile \[1\/m\] for Particle component [0-9]+')
+        ptrnRange = re.compile('^[ ]*Aerosol vertical profile altitudes \[m\] for Particle component [0-9]+')
         ptrnLN = re.compile('^[ ]*Parameters of lognormal SD')
         ptrnVol = re.compile('^[ ]*Aerosol volume concentration')
         ptrnSPH = re.compile('^[ ]*% of spherical particles')
@@ -646,7 +647,11 @@ class graspRun():
                     results[k]['rEff'] = Reff
             self.parseMultiParamFld(contents, i, results, ptrnAOD, 'aod', 'lambda')
             self.parseMultiParamFld(contents, i, results, ptrnPSD, 'dVdlnr', 'r')
-            self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
+            try: # sometimes GRASP adds range column before extinction profile (if not this expects one more column than is present, producing an index error)
+                self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
+            except IndexError: # but other times range is a separate field... no obvious rhyme/reason
+                self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', colOffset=1)
+                self.parseMultiParamFld(contents, i, results, ptrnRange, 'range', colOffset=1)
             self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
             self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
             self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
@@ -685,7 +690,7 @@ class graspRun():
             for rs in results:
                 βprfl = rs['βext'].sum(axis=0)
                 rng = rs['range'][0]
-                rs['height'] = np.trapz(βprfl*rng, rng)/np.trapz(βprfl, rng) # mean height
+                rs['height'] = np.trapz(βprfl*rng, rng)/np.trapz(βprfl, rng) # extinction weighted mean height
         return results, wavelengths
 
     def parseOutSurface(self, contents, Nλ=None):
@@ -762,7 +767,7 @@ class graspRun():
                     if not useLidarRatioFromGRASP:
                         rslt['LidarRatio'][l] = 4*np.pi*rslt['aod'][l]/F11bck # we assume the last angle is θ=180°
 
-    def parseOutFit(self, contents, wavelengths):
+    def parseOutFit(self, contents, wavelengths): 
         results = self.parseOutDateTime(contents)
         ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING[ ]*[\*]+[ ]*$')
         ptrnPIX = re.compile('^[ ]*pixel[ ]*#[ ]*([0-9]+)[ ]*wavelength[ ]*#[ ]*([0-9]+)[ ]*([0-9\.]+)[ ]*\(um\)')
@@ -914,7 +919,10 @@ class pixel():
             else:
                 assert False, 'Both polarimeter and lidar data at the same wavelength is not supported.'
             if msDct['errorModel'] is not None:
-                msDct['measurements'] = msDct['errorModel'](l, rslt, verbose=verbose)
+                try:
+                    msDct['measurements'] = msDct['errorModel'](l, rslt, verbose=verbose)
+                except TypeError:
+                    msDct['measurements'] = msDct['errorModel'](l, rslt)
             else:
                 msDct['measurements'] = np.reshape([rslt[dataStage+'_'+msStr][:,l] for msStr in msTypsNowSorted], -1)
             msDct = self.formatMeas(msDct) # this will tile the above msTyp times

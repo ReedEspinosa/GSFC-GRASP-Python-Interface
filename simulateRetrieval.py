@@ -292,8 +292,8 @@ class simulation(object):
                     trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd, wvlnthInd, hghtCut, av)
                     rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut, av)
                 rmsErr[av+'_PBLFT'] = rmsFun(trueBilayer, rtrvdBilayer) # PBL is 1st ind, FT (not total column!) is 2nd
-                bias[av+'_PBLFT'] =  biasFun(trueBilayer, rtrvdBilayer)
-                trueOut[av+'_PBLFT'] =  trueBilayer
+                bias[av+'_PBLFT'] = biasFun(trueBilayer, rtrvdBilayer)
+                trueOut[av+'_PBLFT'] = trueBilayer
             if not fineModesBck is None and av in modalVars: # calculate fine mode dependent RMS/BIAS
                 fineCalculated = False
                 if av+'_fine' in fwdKys and fineModesFwd is None and 'aodMode' in bckKys: # we have OSSE outputs, currently user provided fineModesFwd trumps this though
