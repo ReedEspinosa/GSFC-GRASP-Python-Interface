@@ -631,7 +631,8 @@ class graspRun():
         ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
         i = 0
         nsd = 0
-        while i < len(contents):
+        rngAndβextUnited = True
+        while i < len(contents): # loop line by line, checking each one against the patterns above
             if not ptrnLN.match(contents[i]) is None: # lognormal PSD, these fields have unique form
                 mtch = re.search('[ ]*rv \(um\):[ ]*', contents[i+1])
                 rvArr = np.array(contents[i+1][mtch.end():-1].split(), dtype='float64')
@@ -647,11 +648,17 @@ class graspRun():
                     results[k]['rEff'] = Reff
             self.parseMultiParamFld(contents, i, results, ptrnAOD, 'aod', 'lambda')
             self.parseMultiParamFld(contents, i, results, ptrnPSD, 'dVdlnr', 'r')
-            try: # sometimes GRASP adds range column before extinction profile (if not this expects one more column than is present, producing an index error)
-                self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
-            except IndexError: # but other times range is a separate field... no obvious rhyme/reason
-                self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', colOffset=1)
-                self.parseMultiParamFld(contents, i, results, ptrnRange, 'range', colOffset=1)
+            if rngAndβextUnited:
+                try: # sometimes GRASP adds range column before extinction profile (if not this expects one more column than is present, producing an index error)
+                    self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
+                except (IndexError, AssertionError): # but other times range is a separate field... no obvious rhyme/reason
+                    del results[0]['βext'] # we should have crashed while setting βext in the first pixel, no need to delete key in others 
+                    for rd in results: del rd['range'] # range should have been set in every pixel before the crash
+                    i -= 1 # we need to parse this line again, using the correct arguments for parseMultiParamFld (below)
+                    rngAndβextUnited = False # we fixed the issues, and we now no better than to try again
+            else:
+                self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext')
+                self.parseMultiParamFld(contents, i, results, ptrnRange, 'range')                                
             self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
             self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
             self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
@@ -814,7 +821,7 @@ class graspRun():
         return results
 
     def parseMultiParamFld(self, contents, i, results, ptrn, fdlName, fldName0=False, colOffset=0, Nλ=None):
-        if not ptrn.match(contents[i]) is None: # RRI by aersol size mode
+        if i<len(contents) and not ptrn.match(contents[i]) is None: # RRI by aersol size mode
             singNumeric = re.compile('^[ ]*[0-9]+[ ]*$')
             numericLn = re.compile('^[ ]*[0-9]+')
             lastLine = i+1
