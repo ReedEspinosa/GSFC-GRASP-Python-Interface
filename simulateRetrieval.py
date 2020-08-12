@@ -230,17 +230,11 @@ class simulation(object):
         """ Returns the RMSE and bias (defined below) from the simulation results
                 wvlngthInd - the index of the wavelength to calculate stats for
                 modeCut - fine/coarse seperation radius in um, currenltly only applied to rEff (None -> do not calculate error's modal dependence)
-                hghtCut - PBL/FT seperation in meters (None -> do not calculate error's layer dependence)
-                            if VarX_PBL in fwd keys (OSSE case), fwd PBL value for VarX will pulled from VarX_PBL and ignore hghtCut
-                            in back OSSE case hghtCut argument is still used, although it could be pulled from 'pblh' key (see TODO notes below)
+                hghtCut - PBL/FT seperation in meters (None -> use rsltFwd['pblh'] if present, otherwise do not vertically resolve error)
+                            if 'pblh' in fwd keys (OSSE case), fwd PBL(FT) value for VarX will pulled from VarX_PBL(FT), ignoring the value of hghtCut
+                            in back OSSE case hghtCut argument is still used if provided, otherwise it is pulled from 'pblh' key
                 fineModesFwd - [array-like] the indices of the fine modes in the foward calculation, set to None to use OSSE ..._Fine variables instead
-                fineModesBck -  [array-like] the indices of the fine modes in the retrieval
-                NOTE: this method generally assumes configuration (e.g. # of modes) is the same across all pixels
-                TODO: we can do better than we do here in terms of fine mode parameters...
-                    - we generally (always) use AOD weighting, which is not exact in many cases
-                    - modeCut should be applied to more variables (e.g. spherical fraction)
-                    - the PBL/FT variables should all be exact (formula taken from rtrvdDataSetPixels() in readOSSEnetCDF)
-                """
+                fineModesBck -  [array-like] the indices of the fine modes in the retrieval """
         # check on input and available variables
         assert (self.rsltBck is not None) and (self.rsltFwd is not None), 'You must call loadSim() or runSim() before you can calculate statistics!'
         if type(self.rsltFwd) is dict: self.rsltFwd = [self.rsltFwd]
@@ -252,8 +246,8 @@ class simulation(object):
         assert 'aodMode' not in bckKys or fineModesBck is None or self.rsltBck[0]['aodMode'].shape[0] > max(fineModesBck), 'fineModesBck'+msg+'rsltBck[aodMode]'
         # define functions for calculating RMS and bias
         # rmsFun = lambda t,r: np.mean(r-t, axis=0) # formula for RMS output (true->t, retrieved->r)
-        rmsFun = lambda t,r: np.sqrt(np.median((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r)
-        biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output
+        rmsFun = lambda t,r: np.sqrt(np.nanmedian((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r) – needs to handle nans! (hghtWghtedAvg returns nan when PBL<lowest_GRASP_bin)
+        biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output – needs to handle nans! (hghtWghtedAvg returns nan when PBL<lowest_GRASP_bin)
         # variables we expect to see
         varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffMode', 'rEffCalc', 'rEff', 'height']
@@ -264,7 +258,10 @@ class simulation(object):
             for rf in self.rsltFwd: rf['rEffMode'] = self.ReffMode(rf)
         if 'rEffMode' not in self.rsltBck[0] and 'rv' in self.rsltBck[0]:
             for rb in self.rsltBck: rb['rEffMode'] = self.ReffMode(rb)
-#         if hghtCut is None and 'pblh' in self.rsltFwd[0]: hghtCut = [rd['pblh'] for rd in self.rsltFwd] TODO: This won't work until hghtWghtedAvg can take in an array
+        if hghtCut is not None:
+            hghtCut = np.full(len(self.rsltBck), hghtCut)
+        elif 'pblh' in fwdKys and len(self.rsltFwd)==len(self.rsltBck):
+            hghtCut = [rd['pblh'] for rd in self.rsltFwd] 
         varsSpctrl = [z for z in varsSpctrl if z in fwdKys and z in bckKys] # check that the variable is used in current configuration
         varsMorph = [z for z in varsMorph if z in fwdKys and z in bckKys]
         # loop through varsSpctrl and varsMorph calcualted RMS and bias
@@ -279,7 +276,7 @@ class simulation(object):
                 true = true[...,wvlnthInd]
             if rtrvd.ndim==1: rtrvd = np.expand_dims(rtrvd,1) # we want [ipix, imode], we add a singleton dimension if only one mode/nonmodal
             if true.ndim==1: true = np.expand_dims(true,1) # we want [ipix, imode], we add a singleton dimension if only one mode/nonmodal
-            if hghtCut and av in modalVars and (av+'_PBL' in fwdKys or 'aodMode' in fwdKys): # calculate vertical dependent RMS/BIAS [PBL, FT*]
+            if hghtCut is not None and av in modalVars and (av+'_PBL' in fwdKys or 'aodMode' in fwdKys): # calculate vertical dependent RMS/BIAS [PBL, FT*]
                 if av+'_PBL' in fwdKys:
                     trueBilayer = self.getStateVals(av+'_PBL', self.rsltFwd, varsSpctrl, wvlnthInd)
                     pblOnly = av+'_FT' not in fwdKys
@@ -290,6 +287,8 @@ class simulation(object):
                 else: # 'aodMode' in self.rsltFwd[0]
                     trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd, wvlnthInd, hghtCut, av)
                     rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut, av)
+                if np.all(np.isnan(rtrvdBilayer[:,0])): 
+                    warnings.warn('Lowest GRASP bin below PBL at every pixel: All-NaN slice encountered -> can not calculate PBL uncertainties')
                 rmsErr[av+'_PBLFT'] = rmsFun(trueBilayer, rtrvdBilayer) # PBL is 1st ind, FT (not total column!) is 2nd
                 bias[av+'_PBLFT'] = biasFun(trueBilayer, rtrvdBilayer)
                 trueOut[av+'_PBLFT'] = trueBilayer
@@ -363,8 +362,10 @@ class simulation(object):
                 guasDist = norm(loc=μ, scale=σ)
                 rslt['βext'][i,:] = guasDist.pdf(rsltRange)
 
-    def hghtWghtedAvg(self, val, rslts, wvlnthInd, hghtCut, av, pblOnly=False):
-        """ quantities in val could correspond to: av { ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode','n','k']
+    def hghtWghtedAvg(self, val, rslts, wvlnthInd, hghtCuts, av, pblOnly=False):
+        """ 
+        If no GRASP bins are at hghtCut or below we return nan for that pixel
+        quantities in val could correspond to: av { ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode','n','k']
             ω=Σβh/Σαh => ω=Σωh*αh/Σαh, i.e. aod weighting below is exact for SSA
             sph is vol weighted and also exact
             there is no write answer for rv,σ,n and k so they are AOD weighted
@@ -381,17 +382,16 @@ class simulation(object):
         elif av in ['rEffMode', 'LidarRatio']:
             wghtFun = lambda v,w: np.sum(w)/np.sum(w/v)
         else: # SSA, rv, σ, n, k, gMode
-            wghtFun = lambda v,w: np.sum(v*w)/np.sum(w)
+            wghtFun = lambda v,w: np.nan if np.all(w)==0 else np.sum(v*w)/np.sum(w)
         Bilayer = np.full([len(rslts), 2-pblOnly], np.nan)
-        if np.any(rslts[0]['range']==hghtCut): warnings.warn('hghtCut fell exactly on one of the vertical bins, this bin will be excluded from the weighting.')
-        for i,rslt in enumerate(rslts):
+        for i,(rslt,hghtCut) in enumerate(zip(rslts, hghtCuts)):
             if av in ['rEffMode', 'sph']: # weighting based on volume
                 wghtVals = rslt['vol']
             else:  # weighting based on optical thickness
                 wghtVals = rslt['aodMode'][:,wvlnthInd]
             wghtsPBL = []
             for β,h,τ in zip(rslt['βext'], rslt['range'], wghtVals): # loop over modes
-                wghtsPBL.append(β[h < hghtCut].sum()/β.sum()*τ) # this is τ contribution of each mode below hghtCut
+                wghtsPBL.append(β[h <= hghtCut].sum()/β.sum()*τ) # this is τ contribution of each mode below hghtCut
             valPBL = wghtFun(val[i], wghtsPBL)
             if not pblOnly:
                 wghtsFT = []
