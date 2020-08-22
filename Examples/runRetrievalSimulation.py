@@ -56,10 +56,7 @@ instrument = 'polar0700' # polar0700 has (almost) no noise, polar07 has ΔI=3%, 
 nowPix = returnPixel(instrument, sza=SZA, relPhi=Phi, nowPix=None)
 
 # generate a YAML file with the forward model "truth" state variable values for this simulated scene
-cstmFwdYAML, landPrct = setupConCaseYAML(conCase, nowPix, fwdModelYAMLpath, caseLoadFctr=τFactor)
-
-# land percentage for the scene is stored in the dummy pixel object, not the YAML file
-nowPix.land_prct = landPrct
+cstmFwdYAML = setupConCaseYAML(conCase, nowPix, fwdModelYAMLpath, caseLoadFctr=τFactor)
 
 # Define a new instance of the simulation class for the instrument defined by nowPix (an instance of the pixel class)
 simA = rs.simulation(nowPix) 

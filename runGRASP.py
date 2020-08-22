@@ -374,8 +374,8 @@ class graspRun():
             self.writeSDATA()
         if self.releaseYAML:
             self.yamlObj.adjustLambda(np.max([px.nwl for px in self.pixels]))
-            Nbins = [len(mv['thetav']) for mv in self.pixels[0].measVals if np.all(mv['meas_type']<40)]
-            if len(Nbins)>0: # we have lidar data
+            Nbins = [len(np.unique(mv['thetav'])) for mv in self.pixels[0].measVals if np.all(mv['meas_type']<40)]
+            if np.greater(Nbins,0).any(): # we have lidar data
                 assert np.all([Nbins[0]==bn for bn in Nbins]), 'Expected same number of vertical bins at every λ, instead found '+str(Nbins)
                 self.yamlObj.adjustVertBins(Nbins[0])
         if krnlPathGRASP: self.yamlObj.access('path_to_internal_files', krnlPathGRASP)
@@ -680,24 +680,26 @@ class graspRun():
             for rs in results: # seperate aerosol modes
                 rs['r'] = rs['r'].reshape(nsd,-1)
                 rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
-                if 'βext' in rs:
-                    rs['range'] = rs['range'].reshape(nsd,-1)
-                    rs['βext'] = rs['βext'].reshape(nsd,-1)
                 for key in [k for k in ['aodMode','ssaMode','n','k'] if k in rs]:
                     if rs[key].shape[-1] == nsd*Nwvlth:
                         rs[key] = rs[key].reshape(nsd,-1) # we double check that -1 -> Nwvlth on next line
                     assert rs[key].shape[-1]==Nwvlth, 'Length of the last dimension of %s was %d, not matching Nλ=%d' % (key, rs[key].shape[-1], Nwvlth)
                 for λflatKey in [k for k in ['n','k'] if k in rs.keys()]: # check if spectrally flat RI values used
                     for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value
+                if 'βext' in rs:
+                    rs['range'] = rs['range'].reshape(nsd,-1)
+                    rs['βext'] = rs['βext'].reshape(nsd,-1)
+                    βprfl = rs['βext'].sum(axis=0)
+                    rng = rs['range'][0]
+                    rs['height'] = np.trapz(βprfl*rng, rng)/np.trapz(βprfl, rng) # extinction weighted mean height
+                    λ550Ind = np.argmin(np.abs(rs['lambda']-0.55))
+                    for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
+                        AOD = rs['aodMode'][mode, λ550Ind]
+                        rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
         if ('r' in results[0]) and np.all(results[0]['r'][0]==results[0]['r']): # check if all r value are same at all lambda, may remove this condition later but makes logic much more complicated
             for rs in results:
                 dvdlnr = (rs['dVdlnr']*np.atleast_2d(rs['vol']).T).sum(axis=0)
                 rs['rEffCalc'] = (mf.effRadius(rs['r'][0], dvdlnr))
-        if 'βext' in results[0]:
-            for rs in results:
-                βprfl = rs['βext'].sum(axis=0)
-                rng = rs['range'][0]
-                rs['height'] = np.trapz(βprfl*rng, rng)/np.trapz(βprfl, rng) # extinction weighted mean height
         return results, wavelengths
 
     def parseOutSurface(self, contents, Nλ=None):
