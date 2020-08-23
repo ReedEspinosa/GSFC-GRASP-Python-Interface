@@ -78,7 +78,7 @@ class graspDB():
             while i < Nobjs:
                 if sum([pObj.poll() is None for pObj in pObjs]) < maxCPUs:
                     print('Starting a new thread for graspRun index %d/%d' % (i+1, Nobjs))
-                    if rndGuess: self.grObjs[i].yamlObj.scrambleInitialGuess()
+                    if rndGuess: self.grObjs[i].yamlObj.scrambleInitialGuess(rndGuess)
                     pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP, krnlPathGRASP))
                     i += 1
                 time.sleep(0.1)
@@ -327,18 +327,29 @@ class graspRun():
     def __init__(self, pathYAML=None, orbHghtKM=700, dirGRASP=None, releaseYAML=False, quietStart=False):
         self.releaseYAML = releaseYAML # allow automated modification of YAML, all index of wavelength involved fields MUST cover every wavelength
         self.pathSDATA = False
-        if pathYAML:
-            self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP
+        if type(pathYAML)==str:
+            self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP # set working dir
             if not quietStart: print('Working in %s' % self.dirGRASP)
-            if os.path.dirname(pathYAML) == self.dirGRASP:
+            if os.path.dirname(pathYAML) == self.dirGRASP: # if YAML is in specified working dir
                 self.yamlObj = graspYAML(pathYAML)
-            else:
+            else: # we copy YAML file to new directory
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML))
                 self.yamlObj = graspYAML(pathYAML, newPathYAML)
-        else:
-            assert not dirGRASP, 'You can not have a workin directory (dirGRASP) without a YAML file (pathYAML)!'
+        elif pathYAML==graspYAML:
+            if dirGRASP: # we will just create a new object to be safe
+                self.dirGRASP = dirGRASP
+                newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
+                pathYAML.writeYAML() # incase there are unsaved changes
+                self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
+            else:
+                self.dirGRASP = os.path.dirname(pathYAML.YAMLpath)
+                self.yamlObj = pathYAML
+        elif pathYAML is None:
+            assert not dirGRASP, 'You can not have a working directory (dirGRASP) without a YAML file (pathYAML)!'
             self.dirGRASP = None
             self.yamlObj = graspYAML()
+        else:
+            assert False, 'pathYAML should be None, a string or a yaml object!'
         self.orbHght = orbHghtKM*1000
         self.pixels = []
         self.pObj = False
@@ -993,31 +1004,79 @@ class pixel():
 class graspYAML():
     """Load, modify and/or store the contents of a YAML settings file."""
 
-    def __init__(self, baseYAMLpath=None, workingYAMLpath=None):
-        """Create new instance from YAML settings baseYAMLpath; updates written to workingYAMLpath if probided, otherwise baseYAMLpath."""
+    def __init__(self, baseYAMLpath=None, workingYAMLpath=None, newTmpFile=False):
+        """
+        Create new instance from YAML settings baseYAMLpath
+           updates are written to workingYAMLpath if provided or...
+             a temporary file with newTmpFile in the file name (if newTmpFile is logical 'NEW' is placed in FN)
+             otherwise they are written to baseYAMLpath.
+        """
         assert not (workingYAMLpath and not baseYAMLpath), 'baseYAMLpath must be provided to create a new YAML file at workingYAMLpath!'
-        if workingYAMLpath:
-            copyfile(baseYAMLpath, workingYAMLpath)
-            self.YAMLpath = workingYAMLpath
-        else:
-            self.YAMLpath = baseYAMLpath
-        self.dl = None
         self.lambdaTypes = ['surface_water_CxMnk_iso_noPol',
                             'surface_water_cox_munk_iso',
                             'surface_land_brdf_ross_li',
                             'surface_land_polarized_maignan_breon',
                             'real_part_of_refractive_index_spectral_dependent',
                             'imaginary_part_of_refractive_index_spectral_dependent']
+        if workingYAMLpath:
+            copyfile(baseYAMLpath, workingYAMLpath)
+            self.YAMLpath = workingYAMLpath
+        elif newTmpFile:
+            randomID = hex(np.random.randint(0, 2**63-1))[2:] # needed to prevent identical FN w/ many parallel runs
+            tag = newTmpFile if type(newTmpFile)==str else 'NEW' 
+            newFn = '%s_%s_%s.yml' % (os.path.basename(baseYAMLpath)[:-4], tag, randomID)
+            self.YAMLpath = os.path.join(tempfile.gettempdir(), newFn)
+            copyfile(baseYAMLpath, self.YAMLpath)
+        else:
+            self.YAMLpath = baseYAMLpath
+        self.dl = None
 
-    def scrambleInitialGuess(self, skipTypes=['aerosol_concentration']):
+    def setMultipleCharacteristics(self, vals, setField='value'):
+        fldNms = {
+            'lgrnm':'size_distribution_lognormal',
+            'sph':'sphere_fraction',
+            'vol':'aerosol_concentration',
+            'vrtHght':'vertical_profile_parameter_height',
+            'vrtHghtStd':'vertical_profile_parameter_standard_deviation',
+            'vrtProf':'vertical_profile_normalized',
+            'n':'real_part_of_refractive_index_spectral_dependent',
+            'k':'imaginary_part_of_refractive_index_spectral_dependent',
+            'brdf':'surface_land_brdf_ross_li',
+            'bpdf':'surface_land_polarized_maignan_breon',
+            'cxMnk':'surface_water_cox_munk_iso'}
+        spectralFlds = ['n','k','brdf','bpdf','cxMnk']
+        Nlambda = None
+        for key in vals.keys(): # loop over characteristics
+            if key in spectralFlds:
+                if Nlambda is None:
+                    Nlambda = np.array(vals[key]).shape[1]
+                else:
+                    assert Nlambda==np.array(vals[key]).shape[1], '%s had a differnt Nλ than a previous characteristic!'            
+            for m in range(np.array(vals[key]).shape[0]): # loop over aerosol modes
+                    fldNm = '%s.%d.%s' % (fldNms[key], m+1, setField)
+                    self.access(fldNm, newVal=vals[key][m], write2disk=False, verbose=False) # verbose=False -> no wanrnings about creating a new mode
+                    if key=='vrtProf' and setField=='value': # adjust lambda will not fix this guy – NOTE: this overwrites min/max!
+                        fldNm = '%s.%d.index_of_wavelength_involved' % (fldNms[key], m+1)
+                        self.access(fldNm, newVal=np.zeros(len(vals[key][m]), dtype=int), write2disk=False) 
+                        fldNm = '%s.%d.min' % (fldNms[key], m+1)
+                        self.access(fldNm, newVal=1e-9*np.ones(len(vals[key][m])), write2disk=False)
+                        fldNm = '%s.%d.max' % (fldNms[key], m+1)
+                        self.access(fldNm, newVal=2*np.ones(len(vals[key][m])), write2disk=False)
+        if Nlambda: self.adjustLambda(Nlambda)
+        self.writeYAML()
+        
+    def scrambleInitialGuess(self, fracOfSpace=1, skipTypes=['aerosol_concentration']):
         """Set a random initial guess for all types (excluding skipTypes), uniformly choosen from the range between min and max."""
         self.loadYAML()
+        fracOfSpace = min(fracOfSpace, 0.999) # ensure we don't hit min/max exactly
         for char in self.dl['retrieval']['constraints'].values():
             if (not char['type'] in skipTypes) and char['retrieved']:
                 for mode in np.array(list(char.values()))[['mode' in k for k in char.keys()]]: # only loop over keys containing "mode"
                     lowBnd = np.array(mode['initial_guess']['min'], dtype=float)
-                    rngBnd = np.array(mode['initial_guess']['max'], dtype=float) - lowBnd
-                    newGuess = (np.random.random()*rngBnd+lowBnd).tolist() # guess is spectrally flat relative to rng
+                    uprBnd = np.array(mode['initial_guess']['max'], dtype=float)
+                    rngBnd = fracOfSpace*(uprBnd - lowBnd)/2
+                    meanBnd = (lowBnd + uprBnd)/2
+                    newGuess = np.random.uniform(meanBnd-rngBnd, meanBnd+rngBnd).tolist() # guess is spectrally flat relative to rng
                     mode['initial_guess']['value'] = newGuess
         self.writeYAML()
 

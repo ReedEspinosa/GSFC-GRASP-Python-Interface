@@ -25,20 +25,20 @@ class simulation(object):
         self.rsltBck = None
         self.rsltFwd = None
 
-    def runSim(self, fwdData, bckYAMLpath, Nsims=1, maxCPU=4, maxT=None, binPathGRASP=None, savePath=None,
+    def runSim(self, fwdData, bckYAML, Nsims=1, maxCPU=4, maxT=None, binPathGRASP=None, savePath=None,
                lightSave=False, intrnlFileGRASP=None, releaseYAML=True, rndIntialGuess=False,
                dryRun=False, workingFileSave=False, fixRndmSeed=False, radianceNoiseFun=None, verbose=False):
         """
         <> runs the simulation for given set of simulated and inversion conditions <>
-        fwdData -> yml file path for GRASP fwd model OR "results style" list of dicts
-        bckYAMLpath -> yml file path for GRASP inversion
+        fwdData -> yml file path for GRASP fwd model OR graspYAML object OR "results style" list of dicts
+        bckYAML -> yml file path for GRASP inversion OR graspYAML object
         Nsims -> number of noise pertbations applied to fwd model, must be 1 if fwdData is a list of results dicts
         maxCPU -> the retrieval load will be spread accross maxCPU processes
         binPathGRASP -> path to GRASP binary, if None default from graspRun is used
         savePath -> path to save pickle w/ simulated retrieval results, lightSave -> remove PM data to save space
         intrnlFileGRASP -> alternative path to GRASP kernels, overwrites value in YAML files
         releaseYAML=True -> auto adjust back yaml Nλ and number of vertical bins to match the forward simulated data
-        rndIntialGuess=True -> overwrite initial guesses in bckYAMLpath w/ uniformly distributed random values between min & max
+        rndIntialGuess=True -> overwrite initial guesses in bckYAML w/ uniformly distributed random values between min & max
         dryRun -> run foward model and then return noise added graspDB object, without performing the retrievals
         workingFileSave -> create ZIP with the GRASP SDATA, YAML and Output files used in the run, saved to savePath + .zip
         fixRndmSeed -> Use same random seed for the measurement noise added (each pixel will have identical noise values)
@@ -50,7 +50,7 @@ class simulation(object):
         if fixRndmSeed and not rndIntialGuess:
             warnings.warn('Identical noise values and initial guess used in each pixel, repeating EXACT same retrieval %d times!' % Nsims)
         # ADAPT fwdData/RUN THE FOWARD MODEL
-        if type(fwdData) == str and fwdData[-3:] == 'yml': # we are using GRASP's fwd model
+        if (type(fwdData) == str and fwdData[-3:] == 'yml') or fwdData==rg.graspYAML: # we are using GRASP's fwd model
             assert self.nowPix is not None, 'A dummy pixel (nowPix) with an error function (addError) is required to run the simulation.'
             if verbose: print('Calculating forward model "truth"...')
             gObjFwd = rg.graspRun(fwdData)
@@ -73,7 +73,7 @@ class simulation(object):
         if verbose: print('Forward model "truth" obtained')
         # ADD NOISE AND PERFORM RETRIEVALS
         if verbose: print('Inverting noised-up measurements...')
-        gObjBck = rg.graspRun(bckYAMLpath, releaseYAML=releaseYAML, quietStart=verbose) # quietStart=True -> we won't see path of temp, pre-gDB graspRun
+        gObjBck = rg.graspRun(bckYAML, releaseYAML=releaseYAML, quietStart=verbose) # quietStart=True -> we won't see path of temp, pre-gDB graspRun
         if fixRndmSeed: strtSeed = np.random.randint(low=0, high=2**32-1)
         localVerbose = verbose
         for tOffset, i in enumerate(loopInd): # loop over each simulated pixel, later split up into maxCPU calls to GRASP
