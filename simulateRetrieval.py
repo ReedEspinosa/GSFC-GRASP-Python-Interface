@@ -50,7 +50,7 @@ class simulation(object):
         if fixRndmSeed and not rndIntialGuess:
             warnings.warn('Identical noise values and initial guess used in each pixel, repeating EXACT same retrieval %d times!' % Nsims)
         # ADAPT fwdData/RUN THE FOWARD MODEL
-        if (type(fwdData) == str and fwdData[-3:] == 'yml') or fwdData==rg.graspYAML: # we are using GRASP's fwd model
+        if (type(fwdData) == str and fwdData[-3:] == 'yml') or type(fwdData)==rg.graspYAML: # we are using GRASP's fwd model
             assert self.nowPix is not None, 'A dummy pixel (nowPix) with an error function (addError) is required to run the simulation.'
             if verbose: print('Calculating forward model "truth"...')
             gObjFwd = rg.graspRun(fwdData)
@@ -73,7 +73,7 @@ class simulation(object):
         if verbose: print('Forward model "truth" obtained')
         # ADD NOISE AND PERFORM RETRIEVALS
         if verbose: print('Inverting noised-up measurements...')
-        gObjBck = rg.graspRun(bckYAML, releaseYAML=releaseYAML, quietStart=verbose) # quietStart=True -> we won't see path of temp, pre-gDB graspRun
+        gObjBck = rg.graspRun(bckYAML, releaseYAML=releaseYAML, verbose=False) # verbose=False -> we won't see path of temp, pre-gDB graspRun
         if fixRndmSeed: strtSeed = np.random.randint(low=0, high=2**32-1)
         localVerbose = verbose
         for tOffset, i in enumerate(loopInd): # loop over each simulated pixel, later split up into maxCPU calls to GRASP

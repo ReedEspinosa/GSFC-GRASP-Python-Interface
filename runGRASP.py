@@ -324,36 +324,39 @@ class graspDB():
 
 
 class graspRun():
-    def __init__(self, pathYAML=None, orbHghtKM=700, dirGRASP=None, releaseYAML=False, quietStart=False):
+    def __init__(self, pathYAML=None, orbHghtKM=700, dirGRASP=None, releaseYAML=False, verbose=True):
+        """
+        pathYAML – yaml data: posix path string, graspYAML object or None
+            Note: type(pathYAML)==graspYAML –> create new instance of a graspYAML object, with a duplicated YAML file in dirGRASP (see below)
+        dirGRASP – grasp working directory, None for new temp dir; if passing graspYAML object you can use that directory w/ dirGRASP=pathYAML.YAMLpath
+        releaseYAML – allow this class to adjust YAML to match SDATA (e.g. change number of wavelengths)
+        """
         self.releaseYAML = releaseYAML # allow automated modification of YAML, all index of wavelength involved fields MUST cover every wavelength
         self.pathSDATA = False
+        self.verbose = verbose
+        self.orbHght = orbHghtKM*1000
+        self.pixels = []
+        self.pObj = False
+        self.invRslt = dict()
+        if pathYAML is None:
+            assert not dirGRASP, 'You can not have a working directory (dirGRASP) without a YAML file (pathYAML)!'
+            self.dirGRASP = None
+            self.yamlObj = graspYAML()
+            return
+        self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP # set working dir
         if type(pathYAML)==str:
-            self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP # set working dir
-            if not quietStart: print('Working in %s' % self.dirGRASP)
             if os.path.dirname(pathYAML) == self.dirGRASP: # if YAML is in specified working dir
                 self.yamlObj = graspYAML(pathYAML)
             else: # we copy YAML file to new directory
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML))
                 self.yamlObj = graspYAML(pathYAML, newPathYAML)
-        elif pathYAML==graspYAML:
-            if dirGRASP: # we will just create a new object to be safe
-                self.dirGRASP = dirGRASP
-                newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
-                pathYAML.writeYAML() # incase there are unsaved changes
-                self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
-            else:
-                self.dirGRASP = os.path.dirname(pathYAML.YAMLpath)
-                self.yamlObj = pathYAML
-        elif pathYAML is None:
-            assert not dirGRASP, 'You can not have a working directory (dirGRASP) without a YAML file (pathYAML)!'
-            self.dirGRASP = None
-            self.yamlObj = graspYAML()
+        elif type(pathYAML)==graspYAML:
+            newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
+            pathYAML.writeYAML() # incase there are unsaved changes
+            self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
         else:
             assert False, 'pathYAML should be None, a string or a yaml object!'
-        self.orbHght = orbHghtKM*1000
-        self.pixels = []
-        self.pObj = False
-        self.invRslt = dict()
+        if self.verbose: print('Working in %s' % self.dirGRASP)
 
     def addPix(self, newPixel): # this is called once for each pixel
         self.pixels.append(copy.deepcopy(newPixel)) # deepcopy need to prevent changing via original pixel object outside of graspRun object
@@ -1006,10 +1009,11 @@ class graspYAML():
 
     def __init__(self, baseYAMLpath=None, workingYAMLpath=None, newTmpFile=False):
         """
-        Create new instance from YAML settings baseYAMLpath
-           updates are written to workingYAMLpath if provided or...
-             a temporary file with newTmpFile in the file name (if newTmpFile is logical 'NEW' is placed in FN)
-             otherwise they are written to baseYAMLpath.
+        baseYAMLpath – the template YAML to take as a starting point
+        workingYAMLpath – the path to write changed YAML values (baseYAMLpath is copied here)
+            if None then the text in baseYAMLpath is overwritten by any changes
+        newTmpFile –  workYAMLpath points to a file in the tmp directory; new file's name contains newTmpFile if it is a string
+            NOTE: new YAML will have unique ID but is located in the common (shared) tmp directory 
         """
         assert not (workingYAMLpath and not baseYAMLpath), 'baseYAMLpath must be provided to create a new YAML file at workingYAMLpath!'
         self.lambdaTypes = ['surface_water_CxMnk_iso_noPol',
@@ -1041,6 +1045,8 @@ class graspYAML():
             'vrtProf':'vertical_profile_normalized',
             'n':'real_part_of_refractive_index_spectral_dependent',
             'k':'imaginary_part_of_refractive_index_spectral_dependent',
+            'nCnst':'real_part_of_refractive_index_constant',
+            'kCnst':'imaginary_part_of_refractive_index_constant',
             'brdf':'surface_land_brdf_ross_li',
             'bpdf':'surface_land_polarized_maignan_breon',
             'cxMnk':'surface_water_cox_munk_iso'}
