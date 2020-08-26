@@ -1021,7 +1021,8 @@ class graspYAML():
                             'surface_land_brdf_ross_li',
                             'surface_land_polarized_maignan_breon',
                             'real_part_of_refractive_index_spectral_dependent',
-                            'imaginary_part_of_refractive_index_spectral_dependent']
+                            'imaginary_part_of_refractive_index_spectral_dependent',
+                            'lidar_calibration_coefficient']
         if workingYAMLpath:
             copyfile(baseYAMLpath, workingYAMLpath)
             self.YAMLpath = workingYAMLpath
@@ -1035,7 +1036,7 @@ class graspYAML():
             self.YAMLpath = baseYAMLpath
         self.dl = None
 
-    def setMultipleCharacteristics(self, vals, setField='value'):
+    def setMultipleCharacteristics(self, vals, setField='value', Nlambda=None):
         fldNms = {
             'lgrnm':'size_distribution_lognormal',
             'sph':'sphere_fraction',
@@ -1051,7 +1052,6 @@ class graspYAML():
             'bpdf':'surface_land_polarized_maignan_breon',
             'cxMnk':'surface_water_cox_munk_iso'}
         spectralFlds = ['n','k','brdf','bpdf','cxMnk']
-        Nlambda = None
         for key in vals.keys(): # loop over characteristics
             if key in spectralFlds:
                 if Nlambda is None:
