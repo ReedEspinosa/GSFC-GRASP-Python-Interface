@@ -49,6 +49,8 @@ class simulation(object):
         """
         if fixRndmSeed and not rndIntialGuess:
             warnings.warn('Identical noise values and initial guess used in each pixel, repeating EXACT same retrieval %d times!' % Nsims)
+        if fixRndmSeed and maxCPU<Nsims:
+            warnings.warn('A single YAML is used on multiple identical pixels with identical noise values => repeating EXACT same retrieval more than once! Avoid by setting fixRndmSeed=False OR maxCPU>=Nsims.')
         # ADAPT fwdData/RUN THE FOWARD MODEL
         if (type(fwdData) == str and fwdData[-3:] == 'yml') or type(fwdData)==rg.graspYAML: # we are using GRASP's fwd model
             assert self.nowPix is not None, 'A dummy pixel (nowPix) with an error function (addError) is required to run the simulation.'
