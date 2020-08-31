@@ -135,14 +135,14 @@ class simulation(object):
         NOTE: if forceχ2Calc==True or χthresh~=None this will permanatly alter the values of rsltBck/rsltFwd
         """
         if σ is None:
-            σ={'I'  :0.03, # relative
-               'QoI' :0.005, # absolute
+            σ={'I'   :0.003, # relative
+               'QoI' :0.0015, # absolute
                'UoI' :0.005, # absolute
-               'Q'   :0.005, # absolute in terms of Q/I
+               'Q'   :0.0015, # absolute in terms of Q/I
                'U'   :0.005, # absolute in terms of U/I
-               'LS'  :0.05, # relative
+               'LS'  :0.15, # relative
                'VBS' :0.05, # relative
-               'VExt':17e-6} # absolute
+               'VExt':5e-6} # absolute
         if 'costVal' not in self.rsltBck[0] or forceχ2Calc:
             for i,rb in enumerate(self.rsltBck):
                 rf = self.rsltFwd[0] if len(self.rsltFwd)==1 else self.rsltFwd[i]
@@ -178,11 +178,12 @@ class simulation(object):
         elif χthresh and np.sum([rb['costVal']<=χthresh for rb in self.rsltBck])<minSaved and verbose:
             print('rsltBck only has %d or fewer elements, no χthresh screening will be perofmed.' % minSaved)
 
-    def analyzeSimProfile(self, wvlnthInd=0, FineModes=[0,2]):
-        """ We will assume:
+    def analyzeSimProfile(self, wvlnthInd=0, fineModesFwd=[0,2], fineModesBck=[0,2], rsltRange=None, fwdSim=None):
+        """ 
+        rsltRange – range bins to use in polarimeter data
+        We will assume:
         len(rsltFwd)==len(rsltBck) << CHECKED BELOW
         finemodes and pbl modes are same index in fwd and bck data
-
         We need error/bias estimats for:
         number concentration FT/PBL resolved
         effective radius FT/PBL resolved
@@ -192,41 +193,57 @@ class simulation(object):
         ssa FT/PBL resolved # ω=Σβh/Σαh & ωh*αh=βh => ω=Σωh*αh/Σαh
         lidar ratio FT/PBL resolved  # S=τ/F11[180] & F11h[180]=τh/Sh => S=Στh/Σ(τh/Sh) <<< not implemented yet
         """
-        assert len(self.rsltFwd)==len(self.rsltBck), 'This method only works with sims where fwd and bck pair one-to-one'
-        if 'βext' not in self.rsltFwd[0] or not len(self.rsltFwd[0]['aodMode'][:,0])==len(self.rsltBck[0]['aodMode'][:,0]): # return empty dicts if this is polarimeter only run
-            return dict(), dict(), dict()
-        pxKy = ['biasExt','trueExt','biasExtFine','trueExtFine', 'biasSSA', 'trueSSA']
+        if fwdSim is None:
+            rsltFwdLcl = self.rsltFwd
+            rngBins = rsltRange
+            wvlnthIndFwd = wvlnthInd
+        else:
+            rsltFwdLcl = fwdSim.rsltFwd
+            rngBins = rsltFwdLcl[0]['range'][0,:] if rsltRange is None else rsltRange # this should be okay, lidar case will just ignore it
+            wvlnthIndFwd = np.argmin(np.abs(rsltFwdLcl[0]['lambda']-self.rsltBck[0]['lambda'][wvlnthInd]))
+        if len(rsltFwdLcl) > len(self.rsltBck):
+            warnings.warn('More fwd rslts than bck, clipping extra fwd pixels. Safe in canoncical cases b/c no geomtry dependent vars are used in this method.')
+            rsltFwdLcl = rsltFwdLcl[0:len(self.rsltBck)]
+        assert len(rsltFwdLcl)==len(self.rsltBck), 'This method only works with sims where fwd and bck pair one-to-one'
+        self.addProfFromGuassian(rsltRange=rngBins)
+        pxKy = ['biasExt','trueExt','biasExtFine','trueExtFine', 'biasSSA', 'trueSSA', 'biasLR', 'trueLR']
         pxDct = {k: [] for k in pxKy}
-        for rf,rb in zip(self.rsltFwd, self.rsltBck):
-            Nmodes = len(rf['aodMode'][:,0])
-            assert Nmodes==len(rb['aodMode'][:,0]), 'Fwd and bck should pair one-to-one but they had different lengths!'
-            rng = rf['range'][0,:]
-            Nrange = len(rng)
-            extFwd = np.empty([Nmodes, Nrange])
-            extBck = np.empty([Nmodes, Nrange])
-            scaFwd = np.empty([Nmodes, Nrange])
-            scaBck = np.empty([Nmodes, Nrange])
-            for i in range(Nmodes):
-                extFwd[i,:] = ms.norm2absExtProf(rf['βext'][i,:], rng, rf['aodMode'][i,wvlnthInd])
-                extBck[i,:] = ms.norm2absExtProf(rb['βext'][i,:], rng, rb['aodMode'][i,wvlnthInd])
-                scaFwd[i,:] = extFwd[i,:]*rf['ssaMode'][i,wvlnthInd]
-                scaBck[i,:] = extBck[i,:]*rb['ssaMode'][i,wvlnthInd]
-            pxDct['biasExt'].append(np.sum(extBck - extFwd, axis=0)) # Σa-b = Σa - Σb
+        for rf,rb in zip(rsltFwdLcl, self.rsltBck):
+            extFwd, scaFwd = self._findExtScaProf(rf, wvlnthIndFwd)
+            extBck, scaBck = self._findExtScaProf(rb, wvlnthInd)
+            pxDct['biasExt'].append(np.sum(extBck, axis=0) - np.sum(extFwd, axis=0)) 
             pxDct['trueExt'].append(np.sum(extFwd, axis=0)) # sum over all modes
-            pxDct['biasExtFine'].append(np.sum(extBck[FineModes,:] - extFwd[FineModes,:], axis=0)) # Σa-b = Σa - Σb
-            pxDct['trueExtFine'].append(np.sum(extFwd[FineModes,:], axis=0)) # sum over all modes
-            ssaTr = np.sum(scaFwd, axis=0)/np.sum(extFwd, axis=0)
+            pxDct['biasExtFine'].append(np.sum(extBck[fineModesBck,:], axis=0) - np.sum(extFwd[fineModesFwd,:], axis=0))
+            pxDct['trueExtFine'].append(np.sum(extFwd[fineModesFwd,:], axis=0)) # sum over all modes
+            ssaFwd = np.sum(scaFwd, axis=0)/np.sum(extFwd, axis=0)
             ssaBck = np.sum(scaBck, axis=0)/np.sum(extBck, axis=0)
-            pxDct['biasSSA'].append(ssaBck - ssaTr) # Σa-b = Σa - Σb
-            pxDct['trueSSA'].append(ssaTr)
+            pxDct['biasSSA'].append(ssaBck - ssaFwd)
+            pxDct['trueSSA'].append(ssaFwd)
+            LRModes = rf['LidarRatioMode'][:, wvlnthIndFwd][:,None]
+            LRFwd = np.sum(scaFwd, axis=0)/np.sum(scaFwd/LRModes, axis=0)
+            LRModes = rb['LidarRatioMode'][:, wvlnthInd][:,None]
+            LRBck = np.sum(scaBck, axis=0)/np.sum(scaBck/LRModes, axis=0)
+            pxDct['biasLR'].append(LRBck - LRFwd)
+            pxDct['trueLR'].append(LRFwd)
         bias = {'βext':np.array(pxDct['biasExt']), 'βextFine':np.array(pxDct['biasExtFine']),
-                'ssa':np.array(pxDct['biasSSA'])}
+                'ssa':np.array(pxDct['biasSSA']), 'LR':np.array(pxDct['biasLR'])}
         rmse = {'βext':np.sqrt(np.mean(bias['βext']**2, axis=0)),
                 'βextFine':np.sqrt(np.mean(bias['βextFine']**2, axis=0)),
-                'ssa':np.sqrt(np.mean(bias['ssa']**2, axis=0))} # THIS IS MISSING FINE AND SSA
+                'ssa':np.sqrt(np.mean(bias['ssa']**2, axis=0)), 'LR':np.sqrt(np.mean(bias['LR']**2, axis=0))}
         true = {'βext':np.array(pxDct['trueExt']), 'βextFine':np.array(pxDct['trueExtFine']),
-                'ssa':np.array(pxDct['trueSSA'])}
+                'ssa':np.array(pxDct['trueSSA']), 'LR':np.array(pxDct['trueLR'])}
         return rmse, bias, true # each w/ keys: βext, βextFine, ssa
+
+    def _findExtScaProf(self, rslt, wvlnthInd):
+        Nmodes = len(rslt['aodMode'][:,0])
+        rng = rslt['range'][0,:]
+        Nrange = len(rng)
+        extPrf = np.empty([Nmodes, Nrange])
+        scaPrf = np.empty([Nmodes, Nrange])
+        for i in range(Nmodes):
+            extPrf[i,:] = ms.norm2absExtProf(rslt['βext'][i,:], rng, rslt['aodMode'][i,wvlnthInd])
+            scaPrf[i,:] = extPrf[i,:]*rslt['ssaMode'][i,wvlnthInd]
+        return extPrf, scaPrf
 
     def analyzeSim(self, wvlnthInd=0, modeCut=None, hghtCut=None, fineModesFwd=None, fineModesBck=None):
         """ Returns the RMSE and bias (defined below) from the simulation results
@@ -251,10 +268,10 @@ class simulation(object):
         rmsFun = lambda t,r: np.sqrt(np.nanmedian((t-r)**2, axis=0)) # formula for RMS output (true->t, retrieved->r) – needs to handle nans! (hghtWghtedAvg returns nan when PBL<lowest_GRASP_bin)
         biasFun = lambda t,r: r-t if r.ndim > 1 else np.atleast_2d(r-t).T # formula for bias output – needs to handle nans! (hghtWghtedAvg returns nan when PBL<lowest_GRASP_bin)
         # variables we expect to see
-        varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g', 'LidarRatio']
+        varsSpctrl = ['aod', 'aodMode', 'n', 'k', 'ssa', 'ssaMode', 'g','LidarRatio', 'LidarRatioMode']
         varsMorph = ['rv', 'sigma', 'sph', 'rEffMode', 'rEffCalc', 'rEff', 'height']
         varsAodAvg = ['n', 'k'] # modal variables for which we will append aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
-        modalVars = ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode','rEffMode', 'n', 'k'] # variables for which we find fine/coarse or FT/PBL errors seperately
+        modalVars = ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode','rEffMode', 'n', 'k', 'LidarRatioMode'] # variables for which we find fine/coarse or FT/PBL errors seperately
         # calculate variables that weren't loaded (rEffMode)
         if 'rEffMode' not in self.rsltFwd[0] and 'rv' in self.rsltFwd[0]:
             for rf in self.rsltFwd: rf['rEffMode'] = self.ReffMode(rf)
@@ -353,8 +370,13 @@ class simulation(object):
             avgVal[i] = ttlSum/normDenom
         return np.expand_dims(avgVal, 1)
 
-    def addProfFromGuassian(self, rslts):
-        rsltRange = np.linspace(1, 2e4, 1e3)
+    def addProfFromGuassian(self, rslts=None, rsltRange=None):
+        if rslts is None:
+            self.addProfFromGuassian(self.rsltFwd, rsltRange)
+            self.addProfFromGuassian(self.rsltBck, rsltRange)
+            return
+        if 'range' in rslts[0]: return # profiles are already there
+        if rsltRange is None: rsltRange = np.linspace(1, 2e4, 1e3)
         for rslt in rslts:
             Nmodes = len(rslt['height'])
             rslt['range'] = np.empty([Nmodes,len(rsltRange)])
@@ -377,8 +399,7 @@ class simulation(object):
             Rh = (3/4/π*Vh)/∫ nh*r^2*dr -> reff = 3/4/π*ΣVh/(Σ(3/4/π*Vh)/Rh) = ΣVh/Σ(Vh/Rh)
         """
         assert av not in 'gMode', 'We dont have a wghtVals setting for asymetry parameter (i.e. ssaMode*aodMode)!'
-        if 'range' not in rslts[0]: # this isn't lidar, we need to calucate the profiles
-            self.addProfFromGuassian(rslts)
+        self.addProfFromGuassian(rslts) # no impact if profiles already exist
         if av in ['aod']:
             wghtFun = lambda v,w: np.sum(w)
         elif av in ['rEffMode', 'LidarRatio']:
