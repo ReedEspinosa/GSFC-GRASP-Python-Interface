@@ -352,7 +352,7 @@ class graspRun():
                 self.yamlObj = graspYAML(pathYAML, newPathYAML)
         elif type(pathYAML)==graspYAML:
             newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
-            pathYAML.writeYAML() # incase there are unsaved changes
+            if pathYAML.dl is not None: pathYAML.writeYAML() # incase there are unsaved changes
             self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
         else:
             assert False, 'pathYAML should be None, a string or a yaml object!'
@@ -666,13 +666,13 @@ class graspRun():
                 try: # sometimes GRASP adds range column before extinction profile (if not this expects one more column than is present, producing an index error)
                     self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
                 except (IndexError, AssertionError): # but other times range is a separate field... no obvious rhyme/reason
-                    del results[0]['βext'] # we should have crashed while setting βext in the first pixel, no need to delete key in others 
+                    del results[0]['βext'] # we should have crashed while setting βext in the first pixel, no need to delete key in others
                     for rd in results: del rd['range'] # range should have been set in every pixel before the crash
                     i -= 1 # we need to parse this line again, using the correct arguments for parseMultiParamFld (below)
                     rngAndβextUnited = False # we fixed the issues, and we now no better than to try again
             else:
                 self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext')
-                self.parseMultiParamFld(contents, i, results, ptrnRange, 'range')                                
+                self.parseMultiParamFld(contents, i, results, ptrnRange, 'range')
             self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
             self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
             self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
@@ -790,7 +790,7 @@ class graspRun():
                     if not useLidarRatioFromGRASP:
                         rslt['LidarRatio'][l] = 4*np.pi*rslt['aod'][l]/F11bck # we assume the last angle is θ=180°
 
-    def parseOutFit(self, contents, wavelengths): 
+    def parseOutFit(self, contents, wavelengths):
         results = self.parseOutDateTime(contents)
         ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING[ ]*[\*]+[ ]*$')
         ptrnPIX = re.compile('^[ ]*pixel[ ]*#[ ]*([0-9]+)[ ]*wavelength[ ]*#[ ]*([0-9]+)[ ]*([0-9\.]+)[ ]*\(um\)')
@@ -1013,7 +1013,7 @@ class graspYAML():
         workingYAMLpath – the path to write changed YAML values (baseYAMLpath is copied here)
             if None then the text in baseYAMLpath is overwritten by any changes
         newTmpFile –  workYAMLpath points to a file in the tmp directory; new file's name contains newTmpFile if it is a string
-            NOTE: new YAML will have unique ID but is located in the common (shared) tmp directory 
+            NOTE: new YAML will have unique ID but is located in the common (shared) tmp directory
         """
         assert not (workingYAMLpath and not baseYAMLpath), 'baseYAMLpath must be provided to create a new YAML file at workingYAMLpath!'
         self.lambdaTypes = ['surface_water_CxMnk_iso_noPol',
@@ -1028,7 +1028,7 @@ class graspYAML():
             self.YAMLpath = workingYAMLpath
         elif newTmpFile:
             randomID = hex(np.random.randint(0, 2**63-1))[2:] # needed to prevent identical FN w/ many parallel runs
-            tag = newTmpFile if type(newTmpFile)==str else 'NEW' 
+            tag = newTmpFile if type(newTmpFile)==str else 'NEW'
             newFn = '%s_%s_%s.yml' % (os.path.basename(baseYAMLpath)[:-4], tag, randomID)
             self.YAMLpath = os.path.join(tempfile.gettempdir(), newFn)
             copyfile(baseYAMLpath, self.YAMLpath)
@@ -1057,20 +1057,20 @@ class graspYAML():
                 if Nlambda is None:
                     Nlambda = np.array(vals[key]).shape[1]
                 else:
-                    assert Nlambda==np.array(vals[key]).shape[1], '%s had a differnt Nλ than a previous characteristic!'            
+                    assert Nlambda==np.array(vals[key]).shape[1], '%s had a differnt Nλ than a previous characteristic!'
             for m in range(np.array(vals[key]).shape[0]): # loop over aerosol modes
-                    fldNm = '%s.%d.%s' % (fldNms[key], m+1, setField)
-                    self.access(fldNm, newVal=vals[key][m], write2disk=False, verbose=False) # verbose=False -> no wanrnings about creating a new mode
-                    if key=='vrtProf' and setField=='value': # adjust lambda will not fix this guy – NOTE: this overwrites min/max!
-                        fldNm = '%s.%d.index_of_wavelength_involved' % (fldNms[key], m+1)
-                        self.access(fldNm, newVal=np.zeros(len(vals[key][m]), dtype=int), write2disk=False) 
-                        fldNm = '%s.%d.min' % (fldNms[key], m+1)
-                        self.access(fldNm, newVal=1e-9*np.ones(len(vals[key][m])), write2disk=False)
-                        fldNm = '%s.%d.max' % (fldNms[key], m+1)
-                        self.access(fldNm, newVal=2*np.ones(len(vals[key][m])), write2disk=False)
+                fldNm = '%s.%d.%s' % (fldNms[key], m+1, setField)
+                self.access(fldNm, newVal=vals[key][m], write2disk=False, verbose=False) # verbose=False -> no wanrnings about creating a new mode
+                if key=='vrtProf' and setField=='value': # adjust lambda will not fix this guy – NOTE: this overwrites min/max!
+                    fldNm = '%s.%d.index_of_wavelength_involved' % (fldNms[key], m+1)
+                    self.access(fldNm, newVal=np.zeros(len(vals[key][m]), dtype=int), write2disk=False)
+                    fldNm = '%s.%d.min' % (fldNms[key], m+1)
+                    self.access(fldNm, newVal=1e-9*np.ones(len(vals[key][m])), write2disk=False)
+                    fldNm = '%s.%d.max' % (fldNms[key], m+1)
+                    self.access(fldNm, newVal=2*np.ones(len(vals[key][m])), write2disk=False)
         if Nlambda: self.adjustLambda(Nlambda)
         self.writeYAML()
-        
+
     def scrambleInitialGuess(self, fracOfSpace=1, skipTypes=['aerosol_concentration']):
         """Set a random initial guess for all types (excluding skipTypes), uniformly choosen from the range between min and max."""
         self.loadYAML()
@@ -1110,7 +1110,7 @@ class graspYAML():
         m = 1
         while self.access('%s.%d' % (fldName, m)): # loop over each mode
             λField = self.access('%s.%d.index_of_wavelength_involved' % (fldName, m))[0] > 0 # otherwise yaml specified [0] implying the parameter should be spectrally invarient
-            if not λonly or λField: 
+            if not λonly or λField:
                 for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
                     orgVal = self.access('%s.%d.%s' % (fldName, m, f))
                     if len(orgVal) >= Nrepeats:
@@ -1175,7 +1175,7 @@ class graspYAML():
 
     def writeYAML(self):
         with open(self.YAMLpath, 'w') as outfile:
-            yaml.dump(self.dl, outfile, default_flow_style=None, indent=4, width=1000)
+            yaml.dump(self.dl, outfile, default_flow_style=None, indent=4, width=1000, sort_keys=False)
 
     def loadYAML(self):
         assert self.YAMLpath, 'You must provide a YAML file path to perform a task utilizing a YAML file!'
