@@ -99,7 +99,7 @@ class simulation(object):
             if verbose: print('Packing GRASP working files up into %s' %  fullSaveDir + '.zip')
             if os.path.exists(fullSaveDir): shutil.rmtree(fullSaveDir)
             os.mkdir(fullSaveDir)
-            if self.dirGRASP is not None: # If yes, then this was an OSSE run (no forward calculation folder)
+            if gObjFwd.dirGRASP is not None: # If yes, then this was an OSSE run (no forward calculation folder)
                 shutil.copytree(gObjFwd.dirGRASP, os.path.join(fullSaveDir,'forwardCalculation'))
             for i, gb in enumerate(gDB.grObjs):
                 shutil.copytree(gb.dirGRASP, os.path.join(fullSaveDir,'inversion%02d' % i))
