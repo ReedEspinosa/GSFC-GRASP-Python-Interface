@@ -295,7 +295,7 @@ class simulation(object):
                 true = true[...,wvlnthInd]
             if rtrvd.ndim==1: rtrvd = np.expand_dims(rtrvd,1) # we want [ipix, imode], we add a singleton dimension if only one mode/nonmodal
             if true.ndim==1: true = np.expand_dims(true,1) # we want [ipix, imode], we add a singleton dimension if only one mode/nonmodal
-            if hghtCut is not None and av in modalVars and (av+'_PBL' in fwdKys or 'aodMode' in fwdKys): # calculate vertical dependent RMS/BIAS [PBL, FT*]
+            if hghtCut is not None and av in modalVars and (av+'_PBL' in fwdKys or ('aodMode' in fwdKys and 'βext' in fwdKys)): # calculate vertical dependent RMS/BIAS [PBL, FT*]
                 if av+'_PBL' in fwdKys:
                     trueBilayer = self.getStateVals(av+'_PBL', self.rsltFwd, varsSpctrl, wvlnthInd)
                     pblOnly = av+'_FT' not in fwdKys
