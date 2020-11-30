@@ -227,9 +227,12 @@ class simulation(object):
             pxDct['trueLR'].append(LRFwd)
         bias = {'βext':np.array(pxDct['biasExt']), 'βextFine':np.array(pxDct['biasExtFine']),
                 'ssa':np.array(pxDct['biasSSA']), 'LR':np.array(pxDct['biasLR'])}
-        rmse = {'βext':np.sqrt(np.mean(bias['βext']**2, axis=0)),
-                'βextFine':np.sqrt(np.mean(bias['βextFine']**2, axis=0)),
-                'ssa':np.sqrt(np.mean(bias['ssa']**2, axis=0)), 'LR':np.sqrt(np.mean(bias['LR']**2, axis=0))}
+        βextMeans2 = [(prof**2).mean() for prof in pxDct['biasExt']] # profiles may not all be the same number of bins
+        βextFineMeans2 = [(prof**2).mean() for prof in pxDct['biasExtFine']]
+        ssaMeans2 = [(prof**2).mean() for prof in pxDct['biasSSA']]
+        LRMeans2 = [(prof**2).mean() for prof in pxDct['biasLR']]   
+        rmse = {'βext':np.sqrt(βextMeans2),'βextFine':np.sqrt(βextFineMeans2),
+                'ssa':np.sqrt(ssaMeans2), 'LR':np.sqrt(LRMeans2)}
         true = {'βext':np.array(pxDct['trueExt']), 'βextFine':np.array(pxDct['trueExtFine']),
                 'ssa':np.array(pxDct['trueSSA']), 'LR':np.array(pxDct['trueLR'])}
         return rmse, bias, true # each w/ keys: βext, βextFine, ssa
@@ -249,7 +252,7 @@ class simulation(object):
         """ Returns the RMSE and bias (defined below) from the simulation results
                 wvlngthInd - the index of the wavelength to calculate stats for
                 modeCut - fine/coarse seperation radius in um, currenltly only applied to rEff (None -> do not calculate error's modal dependence)
-                hghtCut - PBL/FT seperation in meters (None -> use rsltFwd['pblh'] if present, otherwise do not vertically resolve error)
+                hghtCut - PBL/FT seperation in meters - can be list (None -> use rsltFwd['pblh'] if present, otherwise do not vertically resolve error)
                             if 'pblh' in fwd keys (OSSE case), fwd PBL(FT) value for VarX will pulled from VarX_PBL(FT), ignoring the value of hghtCut
                             in back OSSE case hghtCut argument is still used if provided, otherwise it is pulled from 'pblh' key
                 fineModesFwd - [array-like] the indices of the fine modes in the foward calculation, set to None to use OSSE ..._Fine variables instead
@@ -278,7 +281,8 @@ class simulation(object):
         if 'rEffMode' not in self.rsltBck[0] and 'rv' in self.rsltBck[0]:
             for rb in self.rsltBck: rb['rEffMode'] = self.ReffMode(rb)
         if hghtCut is not None:
-            hghtCut = np.full(len(self.rsltBck), hghtCut)
+            if not (type(hghtCut) is np.ndarray or type(hghtCut) is list):
+                hghtCut = np.full(len(self.rsltBck), hghtCut)
         elif 'pblh' in fwdKys and len(self.rsltFwd)==len(self.rsltBck):
             hghtCut = [rd['pblh'] for rd in self.rsltFwd] 
         varsSpctrl = [z for z in varsSpctrl if z in fwdKys and z in bckKys] # check that the variable is used in current configuration
