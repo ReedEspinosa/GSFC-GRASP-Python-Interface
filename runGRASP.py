@@ -351,9 +351,12 @@ class graspRun():
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML))
                 self.yamlObj = graspYAML(pathYAML, newPathYAML)
         elif type(pathYAML)==graspYAML:
-            newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
             if pathYAML.dl is not None: pathYAML.writeYAML() # incase there are unsaved changes
-            self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
+            if releaseYAML: # copy so we don't overwrite orinal
+                newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
+                self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
+            else:
+                self.yamlObj = graspYAML(pathYAML.YAMLpath)
         else:
             assert False, 'pathYAML should be None, a string or a yaml object!'
         if self.verbose: print('Working in %s' % self.dirGRASP)
@@ -402,8 +405,8 @@ class graspRun():
             self.invRslt = self.readOutput()
         return self.pObj # returns Popen object, (PopenObj.poll() is not None) == True when complete
 
-    def readOutput(self, customOUT=None): # customOUT is full path of unrelated SDATA file to read
-        if not customOUT and not self.pObj:
+    def readOutput(self, customOUT=None): # customOUT is full path of unrelated output file to read
+        if customOUT is None and not self.pObj:
             warnings.warn('You must call runGRASP() before reading the output!')
             return False
         if not customOUT and self.pObj.poll() is None:
@@ -891,6 +894,7 @@ class pixel():
         self.lon = lon
         self.lat = lat
         self.masl = masl
+        if np.isclose(land_prct,1): warnings.warn('land_prct provided was 1.0 – this value is a percentage (100 -> completely land)')
         self.land_prct = land_prct
         self.nwl = 0
         self.measVals = []
