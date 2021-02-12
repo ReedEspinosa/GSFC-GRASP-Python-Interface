@@ -328,7 +328,7 @@ class graspRun():
         """
         pathYAML – yaml data: posix path string, graspYAML object or None
             Note: type(pathYAML)==graspYAML –> create new instance of a graspYAML object, with a duplicated YAML file in dirGRASP (see below)
-        dirGRASP – grasp working directory, None for new temp dir; if passing graspYAML object you can use that directory w/ dirGRASP=pathYAML.YAMLpath
+        dirGRASP – grasp working directory, None for new temp dir; this needs to point to directory with SDATA file if writeSDATA is not called
         releaseYAML – allow this class to adjust YAML to match SDATA (e.g. change number of wavelengths)
         """
         self.releaseYAML = releaseYAML # allow automated modification of YAML, all index of wavelength involved fields MUST cover every wavelength
@@ -355,8 +355,11 @@ class graspRun():
             if releaseYAML: # copy so we don't overwrite orinal
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
                 self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
-            else:
-                self.yamlObj = graspYAML(pathYAML.YAMLpath)
+            elif os.path.dirname(pathYAML.YAMLpath) == self.dirGRASP: # if YAML is in specified working dir:
+                self.yamlObj = pathYAML # path YAML is actually a YAML object, not a path
+            else: # we copy YAML file to the directory that will have the SDATA file [THIS WILL BREAK RUN WITH JUST YAML!!!]
+                newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
+                self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
         else:
             assert False, 'pathYAML should be None, a string or a yaml object!'
         if self.verbose: print('Working in %s' % self.dirGRASP)
@@ -1058,10 +1061,12 @@ class graspYAML():
         spectralFlds = ['n','k','brdf','bpdf','cxMnk']
         for key in vals.keys(): # loop over characteristics
             if key in spectralFlds:
+                shapeValsKey = np.array(vals[key]).shape
+                assert len(shapeValsKey) <= 2, '%s had %d dimensions – It should be 2D!' % (key, len(shapeValsKey))
                 if Nlambda is None:
-                    Nlambda = np.array(vals[key]).shape[1]
+                    Nlambda = shapeValsKey[1]
                 else:
-                    assert Nlambda==np.array(vals[key]).shape[1], '%s had a differnt Nλ than a previous characteristic!'
+                    assert Nlambda==shapeValsKey[1], '%s had a differnt Nλ than a previous characteristic!'
             for m in range(np.array(vals[key]).shape[0]): # loop over aerosol modes
                 fldNm = '%s.%d.%s' % (fldNms[key], m+1, setField)
                 self.access(fldNm, newVal=vals[key][m], write2disk=False, verbose=False) # verbose=False -> no wanrnings about creating a new mode
