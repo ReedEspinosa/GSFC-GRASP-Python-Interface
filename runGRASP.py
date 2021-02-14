@@ -34,7 +34,7 @@ class graspDB():
         It also contains a variety of (rather old) plotting functions to apply to many grasp results
         INPUTS: graspRunObjs - what it sounds like, a list of grasp run objects
                 maxCPU - the maximum number of GRASP process to run at any given time (each process consumes one core); None for no max
-                maxT - the maximum number of pixels to include in a single GRASP process; None for no max
+                maxT - the maximum number of pixels to include in a single GRASP process; None for no max (not used if graspRunObjs is list)
         """
         self.maxCPU = maxCPU
         if type(graspRunObjs) is list:

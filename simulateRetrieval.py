@@ -20,7 +20,10 @@ class simulation(object):
         if nowPix is None:
             self.nowPix = None
             return
-        assert np.all([np.all(np.diff(mv['meas_type'])>0) for mv in nowPix.measVals]), 'nowPix.measVals[l][\'meas_type\'] must be in ascending order at each l'
+        if not isinstance(nowPix, (list, np.ndarray)):
+            nowPix = [nowPix]
+        for pix in nowPix:
+            assert np.all([np.all(np.diff(mv['meas_type'])>0) for mv in pix.measVals]), 'nowPix.measVals[l][\'meas_type\'] must be in ascending order at each l'
         self.nowPix = copy.deepcopy(nowPix) # we will change this, bad form not to make our own copy
         self.rsltBck = None
         self.rsltFwd = None
@@ -30,9 +33,10 @@ class simulation(object):
                dryRun=False, workingFileSave=False, fixRndmSeed=False, radianceNoiseFun=None, verbose=False):
         """
         <> runs the simulation for given set of simulated and inversion conditions <>
-        fwdData -> yml file path for GRASP fwd model OR graspYAML object OR "results style" list of dicts
-        bckYAML -> yml file path for GRASP inversion OR graspYAML object
-        Nsims -> number of noise pertbations applied to fwd model, must be 1 if fwdData is a list of results dicts
+        fwdData -> yml file path for GRASP fwd model OR graspYAML object OR a list of either of the prior two OR "results style" list of dicts
+                        if a list of YAML files, len(self.nowPix) can be unity OR len(fwdData) [if latter, they pair one-to-one]
+        bckYAML -> yml file path for GRASP inversion OR graspYAML object [only one allowed here, no lists]
+        Nsims -> number of noise perturbations applied to each fwd model [Nsims*len(fwdData) total retrievals]
         maxCPU -> the retrieval load will be spread accross maxCPU processes
         binPathGRASP -> path to GRASP binary, if None default from graspRun is used
         savePath -> path to save pickle w/ simulated retrieval results, lightSave -> remove PM data to save space
@@ -52,26 +56,27 @@ class simulation(object):
         if fixRndmSeed and maxCPU<Nsims:
             warnings.warn('A single YAML is used on multiple identical pixels with identical noise values => repeating EXACT same retrieval more than once! Avoid by setting fixRndmSeed=False OR maxCPU>=Nsims.')
         # ADAPT fwdData/RUN THE FOWARD MODEL
-        if (type(fwdData) == str and fwdData[-3:] == 'yml') or type(fwdData)==rg.graspYAML: # we are using GRASP's fwd model
+        if not type(fwdData) == list: fwdData = [fwdData]
+        isYaml = lambda obj : (type(obj) == str and obj[-3:] == 'yml') or type(obj)==rg.graspYAML
+        if isYaml(fwdData[0]): # we are using GRASP's fwd model
             assert self.nowPix is not None, 'A dummy pixel (nowPix) with an error function (addError) is required to run the simulation.'
             if verbose: print('Calculating forward model "truth"...')
-            gObjFwd = rg.graspRun(fwdData)
-            gObjFwd.addPix(self.nowPix)
-            gObjFwd.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=intrnlFileGRASP)
-            try:
-                self.rsltFwd = np.array([gObjFwd.readOutput()[0]])
-            except IndexError as e:
-                raise Exception('Forward calucation output could not be read, halting the simulation.') from e
-            loopInd = np.zeros(Nsims, int)
-        elif type(fwdData) == list: # likely OSSE from netCDF
+            gObjFwd = []
+            for i,fd in enumerate(fwdData):
+                pix = self.nowPix[0] if len(self.nowPix)==1 else self.nowPix[i]
+                gObjFwd.append(rg.graspRun(fd))
+                gObjFwd[-1].addPix(pix)
+            gDBFwd = rg.graspDB(gObjFwd, maxCPU=maxCPU)
+            self.rsltFwd = gDBFwd.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=False)
+            assert len(self.rsltFwd)==len(fwdData), 'Forward calucation was not fully successfull, halting the simulation.'
+        elif type(fwdData[0]) == dict: # likely OSSE from netCDF
             self.rsltFwd = fwdData
-            gObjFwd = rg.graspRun()
-            gObjFwd.invRslt = fwdData
-            assert Nsims <= 1, 'Running multiple noise perturbations on more than one foward simulation is not supported.'
-            loopInd = range(len(self.rsltFwd))
-            if self.nowPix is None: self.nowPix = rg.pixel() # nowPix is optional argument to _init_ in OSSE case
         else:
             assert False, 'Unrecognized data type, fwdModelYAMLpath should be path to YAML file or a DICT!'
+        gObjFwd = rg.graspRun()
+        gObjFwd.invRslt = self.rsltFwd # just for output
+        if self.nowPix is None: self.nowPix = [rg.pixel()] # nowPix is optional argument in OSSE case, make sure it exists <<<<<
+        loopInd = np.tile(np.r_[0:len(self.rsltFwd)], Nsims)
         if verbose: print('Forward model "truth" obtained')
         # ADD NOISE AND PERFORM RETRIEVALS
         if verbose: print('Inverting noised-up measurements...')
@@ -80,11 +85,13 @@ class simulation(object):
         localVerbose = verbose
         for tOffset, i in enumerate(loopInd): # loop over each simulated pixel, later split up into maxCPU calls to GRASP
             if fixRndmSeed: np.random.seed(strtSeed) # reset to same seed, adding same noise to every pixel
-            self.nowPix.populateFromRslt(self.rsltFwd[i], radianceNoiseFun=radianceNoiseFun, verbose=localVerbose)
+            nowPix = self.nowPix[0] if len(self.nowPix)==1 else self.nowPix[i]
+            nowPix.populateFromRslt(self.rsltFwd[i], radianceNoiseFun=radianceNoiseFun, verbose=localVerbose)
             if len(np.unique(loopInd)) != len(loopInd): # we are using the same rsltFwd dictionary more than once
-                self.nowPix.dtObj = self.nowPix.dtObj + dt.timedelta(seconds=tOffset) # increment hour otherwise GRASP will whine
-            gObjBck.addPix(self.nowPix) # addPix performs a deepcopy on nowPix, won't be impact by next iteration through loopInd
+                nowPix.dtObj = nowPix.dtObj + dt.timedelta(seconds=tOffset) # increment hour otherwise GRASP will whine
+            gObjBck.addPix(nowPix) # addPix performs a deepcopy on nowPix, won't be impact by next iteration through loopInd
             localVerbose = False # verbose output for just one pixel should be sufficient
+        if len(self.rsltFwd)>1: self.rsltFwd = np.tile(self.rsltFwd, Nsims) # make len(rsltBck)==len(rsltFwd)... very memory inefficient though so only do it in more complicated len(self.rstlFwd)>1 cases 
         gDB = rg.graspDB(gObjBck, maxCPU=maxCPU, maxT=maxT)
         if not dryRun:
             self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
@@ -99,10 +106,11 @@ class simulation(object):
             if verbose: print('Packing GRASP working files up into %s' %  fullSaveDir + '.zip')
             if os.path.exists(fullSaveDir): shutil.rmtree(fullSaveDir)
             os.mkdir(fullSaveDir)
-            if gObjFwd.dirGRASP is not None: # If yes, then this was an OSSE run (no forward calculation folder)
-                shutil.copytree(gObjFwd.dirGRASP, os.path.join(fullSaveDir,'forwardCalculation'))
+            if not type(fwdData[0]) == dict: # If yes, then this was an OSSE run (no forward calc. or gDBFwd object)
+                for i, gb in enumerate(gDBFwd.grObjs):
+                    shutil.copytree(gb.dirGRASP, os.path.join(fullSaveDir,'forwardCalc%03d' % i))
             for i, gb in enumerate(gDB.grObjs):
-                shutil.copytree(gb.dirGRASP, os.path.join(fullSaveDir,'inversion%02d' % i))
+                shutil.copytree(gb.dirGRASP, os.path.join(fullSaveDir,'inversion%03d' % i))
             shutil.make_archive(fullSaveDir, 'zip', fullSaveDir)
             shutil.rmtree(fullSaveDir)
         return gObjFwd, gDB.grObjs
