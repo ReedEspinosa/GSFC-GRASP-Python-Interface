@@ -91,6 +91,7 @@ class simulation(object):
                 nowPix.dtObj = nowPix.dtObj + dt.timedelta(seconds=tOffset) # increment hour otherwise GRASP will whine
             gObjBck.addPix(nowPix) # addPix performs a deepcopy on nowPix, won't be impact by next iteration through loopInd
             localVerbose = False # verbose output for just one pixel should be sufficient
+        # TODO: the following should go after gDB.processData, and only include cases for which rsltBck was successfully derived
         if len(self.rsltFwd)>1: self.rsltFwd = np.tile(self.rsltFwd, Nsims) # make len(rsltBck)==len(rsltFwd)... very memory inefficient though so only do it in more complicated len(self.rstlFwd)>1 cases 
         gDB = rg.graspDB(gObjBck, maxCPU=maxCPU, maxT=maxT)
         if not dryRun:
