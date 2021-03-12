@@ -10,13 +10,14 @@ from glob import glob
 waveInd = 2
 waveInd2 = 4
 fnPtrnList = []
-fnPtrnList.append('Basic01_modis_HuamboVegetation_tFct1.000_n0_nAng*.pkl')
-fnPtrnList.append('MultiPix10_modis_HuamboVegetation_tFct1.000_n0_nAng*.pkl')
-# fnPtrnList.append('MultiPix20_modis_HuamboVegetation_tFct1.000_n0_nAng*.pkl')
+# fnPtrnList.append('Basic01_modis_HuamboVegetation_tFct1.000_n0_nAng*.pkl')
+fnPtrnList.append('MultiPix30_modis_HuamboVegetation_tFct1.000_n0_nAng*.pkl')
+fnPtrnList.append('MultiPix31_modis_HuamboVegetation_tFct1.000_n0_nAng*.pkl')
+# fnPtrnList.append('MultiPix23_modis_HuamboVegetation_tFct1.000_n0_nAng*.pkl')
 colorList = [[0.7,0.7,0.95], [0.9,0.0,0.0]]
 inDirPath = '/Users/wrespino/synced/Working/TASNPP_simulation00/'
 
-biasCorrect = 0
+biasCorrect = [0,0]
 
 xlabel = 'Simulated Truth'
 MS = 1
@@ -80,6 +81,52 @@ for i,(fnPtrn,clrNow) in enumerate(zip(fnPtrnList,colorList)):
     tHnd = ax[0].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
                         textcoords='offset points', color=clrNow, fontsize=FS)
     if i==len(colorList)-2: tHnd.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='None'))
+
+    # HEIGHT
+    tauWght = lambda tau,var: np.sum(var*tau)/np.sum(tau)
+    true = np.asarray([rf['aodMode'][1][waveInd] for rf in sim.rsltFwd])
+    rtrv = np.asarray([rf['aodMode'][1][waveInd] for rf in sim.rsltBck])
+    if i==1:
+        minAOD = np.min(true)*0.95
+        maxAOD = np.max(true)*1.05
+        ax[1].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
+        ax[1].set_title('Asym. Param.')
+        ax[1].set_xlabel(xlabel)
+        ax[1].set_xlim(minAOD,maxAOD)
+        ax[1].set_ylim(minAOD,maxAOD)
+        ax[1].set_xticks(np.arange(minAOD, maxAOD, 500))
+        ax[1].set_yticks(np.arange(minAOD, maxAOD, 500))
+    ax[1].plot(true, rtrv, '.', markersize=MS, color=clrNow)
+    Rcoef = np.corrcoef(true, rtrv)[0,1]
+    RMSE = np.sqrt(np.median((true - rtrv)**2))
+    bias = np.mean((rtrv-true))
+    textstr = frmt % (Rcoef, RMSE, bias)
+    tHnd = ax[1].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
+                        textcoords='offset points', color=clrNow, fontsize=FS)
+    if i==len(colorList)-2: tHnd.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='None'))    
+    """
+    # HEIGHT
+    tauWght = lambda tau,var: np.sum(var*tau)/np.sum(tau)
+    true = np.asarray([tauWght(rf['aodMode'][:,waveInd], rf['height']) for rf in sim.rsltFwd])
+    rtrv = np.asarray([tauWght(rf['aodMode'][:,waveInd], rf['height']) for rf in sim.rsltBck])
+    if i==1:
+        minAOD = np.min(true)*0.95
+        maxAOD = np.max(true)*1.05
+        ax[1].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
+        ax[1].set_title('Layer Height')
+        ax[1].set_xlabel(xlabel)
+        ax[1].set_xlim(minAOD,maxAOD)
+        ax[1].set_ylim(minAOD,maxAOD)
+        ax[1].set_xticks(np.arange(minAOD, maxAOD, 500))
+        ax[1].set_yticks(np.arange(minAOD, maxAOD, 500))
+    ax[1].plot(true, rtrv, '.', markersize=MS, color=clrNow)
+    Rcoef = np.corrcoef(true, rtrv)[0,1]
+    RMSE = np.sqrt(np.median((true - rtrv)**2))
+    bias = np.mean((rtrv-true))
+    textstr = frmt % (Rcoef, RMSE, bias)
+    tHnd = ax[1].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
+                        textcoords='offset points', color=clrNow, fontsize=FS)
+    if i==len(colorList)-2: tHnd.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='None'))
         
     # ANGSTROM
     aod2 = np.asarray([rf['aod'][waveInd2] for rf in sim.rsltFwd])
@@ -87,7 +134,7 @@ for i,(fnPtrn,clrNow) in enumerate(zip(fnPtrnList,colorList)):
     true = -np.log(true/aod2)/logLamdRatio
     aod2 = np.asarray([rf['aod'][waveInd2] for rf in sim.rsltBck])
     rtrv = -np.log(rtrv/aod2)/logLamdRatio 
-    rtrv = rtrv - 0.6*(2.2-rtrv)*(i==1)*biasCorrect-0.1
+    rtrv = rtrv - 0.6*(2.2-rtrv)*biasCorrect[i]-0.1
     if i==0:
         minAOD = np.min(true)*0.95
         minAOD = 1.6
@@ -108,11 +155,11 @@ for i,(fnPtrn,clrNow) in enumerate(zip(fnPtrnList,colorList)):
     tHnd = ax[1].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
                         textcoords='offset points', color=clrNow, fontsize=FS)
     if i==len(colorList)-2: tHnd.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='None'))
-    
+    """ 
     # SSA
     true = np.asarray([rf['ssa'][waveInd] for rf in sim.rsltFwd])
     rtrv = np.asarray([rf['ssa'][waveInd] for rf in sim.rsltBck]) 
-    if biasCorrect>0 and i==1:
+    if biasCorrect[i]>0:
         rtrv[rtrv<0.925] = rtrv[rtrv<0.925] - 0.022
         indMid = np.logical_and(rtrv>=0.925, rtrv<0.940)
         rtrv[indMid] = rtrv[indMid] - 0.022*(0.940-rtrv[indMid])/0.015
