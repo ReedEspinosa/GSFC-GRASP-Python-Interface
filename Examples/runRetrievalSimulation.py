@@ -37,7 +37,7 @@ krnlPath = '/Users/wrespino/Synced/Local_Code_MacBook/grasp_open/src/retrieval/i
 
 # Directory containing the foward and inversion YAML files you would like to use
 ymlDir = '/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/'
-fwdModelYAMLpath = os.path.join(ymlDir, 'settings_FWD_IQU_3lambda_POL.yml') # foward YAML file
+fwdModelYAMLpath = os.path.join(ymlDir, 'settings_FWD_IQU_POLAR_1lambda.yml') # foward YAML file
 bckYAMLpath = os.path.join(ymlDir, 'settings_BCK_POLAR_2modes.yml') # inversion YAML file
 
 # Other non-path related settings
