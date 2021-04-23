@@ -405,7 +405,7 @@ class graspRun():
 #            self.pObj.wait()
             self.pObj.communicate() # This seems to keep things from hanging if there is a lot of output...
             self.pObj.stdout.close()
-            self.invRslt = self.readOutput()
+            self.invRslt = self.readOutput() # Why store rsltDict only if not parallel? I guess to keep it from being stored twice in memory in graspDB case?
         return self.pObj # returns Popen object, (PopenObj.poll() is not None) == True when complete
 
     def readOutput(self, customOUT=None): # customOUT is full path of unrelated output file to read
@@ -421,7 +421,7 @@ class graspRun():
             with open(outputFN) as fid:
                 contents = fid.readlines()
         except FileNotFoundError:
-            msg = '%s could not be found, probably beacuse GRASP crashed. \n   Returning empty list in place of output data...'
+            msg = '%s could not be found, probably because GRASP crashed. \n   Returning empty list in place of output data...'
             warnings.warn(msg % outputFN)
             return []
         rsltAeroDict, wavelengths = self.parseOutAerosol(contents)
@@ -447,6 +447,8 @@ class graspRun():
             return self.readOutput(customOUT)
         elif rsltDict:
             return rsltDict
+        elif len(self.invRslt)>0:
+            return self.invRslt
         else:
             return self.readOutput()
 

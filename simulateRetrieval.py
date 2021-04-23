@@ -92,7 +92,7 @@ class simulation(object):
             gObjBck.addPix(nowPix) # addPix performs a deepcopy on nowPix, won't be impact by next iteration through loopInd
             localVerbose = False # verbose output for just one pixel should be sufficient
         # TODO: the following should go after gDB.processData, and only include cases for which rsltBck was successfully derived
-        if len(self.rsltFwd)>1: self.rsltFwd = np.tile(self.rsltFwd, Nsims) # make len(rsltBck)==len(rsltFwd)... very memory inefficient though so only do it in more complicated len(self.rstlFwd)>1 cases 
+        if len(self.rsltFwd)>1: self.rsltFwd = np.tile(self.rsltFwd, Nsims) # make len(rsltBck)==len(rsltFwd)... very memory inefficient though so only do it in more complicated len(self.rstlFwd)>1 cases
         gDB = rg.graspDB(gObjBck, maxCPU=maxCPU, maxT=maxT)
         if not dryRun:
             self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
@@ -188,7 +188,7 @@ class simulation(object):
             print('rsltBck only has %d or fewer elements, no χthresh screening will be perofmed.' % minSaved)
 
     def analyzeSimProfile(self, wvlnthInd=0, fineModesFwd=[0,2], fineModesBck=[0,2], rsltRange=None, fwdSim=None):
-        """ 
+        """
         rsltRange – range bins to use in polarimeter data
         We will assume:
         len(rsltFwd)==len(rsltBck) << CHECKED BELOW
@@ -220,7 +220,7 @@ class simulation(object):
         for rf,rb in zip(rsltFwdLcl, self.rsltBck):
             extFwd, scaFwd = self._findExtScaProf(rf, wvlnthIndFwd)
             extBck, scaBck = self._findExtScaProf(rb, wvlnthInd)
-            pxDct['biasExt'].append(np.sum(extBck, axis=0) - np.sum(extFwd, axis=0)) 
+            pxDct['biasExt'].append(np.sum(extBck, axis=0) - np.sum(extFwd, axis=0))
             pxDct['trueExt'].append(np.sum(extFwd, axis=0)) # sum over all modes
             pxDct['biasExtFine'].append(np.sum(extBck[fineModesBck,:], axis=0) - np.sum(extFwd[fineModesFwd,:], axis=0))
             pxDct['trueExtFine'].append(np.sum(extFwd[fineModesFwd,:], axis=0)) # sum over all modes
@@ -239,7 +239,7 @@ class simulation(object):
         βextMeans2 = [(prof**2).mean() for prof in pxDct['biasExt']] # profiles may not all be the same number of bins
         βextFineMeans2 = [(prof**2).mean() for prof in pxDct['biasExtFine']]
         ssaMeans2 = [(prof**2).mean() for prof in pxDct['biasSSA']]
-        LRMeans2 = [(prof**2).mean() for prof in pxDct['biasLR']]   
+        LRMeans2 = [(prof**2).mean() for prof in pxDct['biasLR']]
         rmse = {'βext':np.sqrt(βextMeans2),'βextFine':np.sqrt(βextFineMeans2),
                 'ssa':np.sqrt(ssaMeans2), 'LR':np.sqrt(LRMeans2)}
         true = {'βext':np.array(pxDct['trueExt']), 'βextFine':np.array(pxDct['trueExtFine']),
@@ -267,7 +267,7 @@ class simulation(object):
                 fineModesFwd - [array-like] the indices of the fine modes in the foward calculation, set to None to use OSSE ..._Fine variables instead
                 fineModesBck -  [array-like] the indices of the fine modes in the retrieval """
         # check on input and available variables
-        assert (self.rsltBck is not None) and (self.rsltFwd is not None), 'You must call loadSim() or runSim() before you can calculate statistics!'
+        assert (self.rsltBck is not None) and (self.rsltFwd is not None), 'You must call loadSim() or runSim(...,dryRun=False) before you can calculate statistics!'
         if type(self.rsltFwd) is dict: self.rsltFwd = [self.rsltFwd]
         assert type(self.rsltFwd) is list or type(self.rsltFwd) is np.ndarray, 'rsltFwd must be a list! Note that it was stored as a dict in older versions of the code.'
         fwdKys = self.rsltFwd[0].keys()
@@ -293,7 +293,7 @@ class simulation(object):
             if not (type(hghtCut) is np.ndarray or type(hghtCut) is list):
                 hghtCut = np.full(len(self.rsltBck), hghtCut)
         elif 'pblh' in fwdKys and len(self.rsltFwd)==len(self.rsltBck):
-            hghtCut = [rd['pblh'] for rd in self.rsltFwd] 
+            hghtCut = [rd['pblh'] for rd in self.rsltFwd]
         varsSpctrl = [z for z in varsSpctrl if z in fwdKys and z in bckKys] # check that the variable is used in current configuration
         varsMorph = [z for z in varsMorph if z in fwdKys and z in bckKys]
         # loop through varsSpctrl and varsMorph calcualted RMS and bias
@@ -319,7 +319,7 @@ class simulation(object):
                 else: # 'aodMode' in self.rsltFwd[0]
                     trueBilayer = self.hghtWghtedAvg(true, self.rsltFwd, wvlnthInd, hghtCut, av)
                     rtrvdBilayer = self.hghtWghtedAvg(rtrvd, self.rsltBck, wvlnthInd, hghtCut, av)
-                if np.all(np.isnan(rtrvdBilayer[:,0])): 
+                if np.all(np.isnan(rtrvdBilayer[:,0])):
                     warnings.warn('Lowest GRASP bin below PBL at every pixel: All-NaN slice encountered -> can not calculate PBL uncertainties')
                 rmsErr[av+'_PBLFT'] = rmsFun(trueBilayer, rtrvdBilayer) # PBL is 1st ind, FT (not total column!) is 2nd
                 bias[av+'_PBLFT'] = biasFun(trueBilayer, rtrvdBilayer)
@@ -400,7 +400,7 @@ class simulation(object):
                 rslt['βext'][i,:] = guasDist.pdf(rsltRange)
 
     def hghtWghtedAvg(self, val, rslts, wvlnthInd, hghtCuts, av, pblOnly=False):
-        """ 
+        """
         If no GRASP bins are at hghtCut or below we return nan for that pixel
         quantities in val could correspond to: av { ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode','n','k']
             ω=Σβh/Σαh => ω=Σωh*αh/Σαh, i.e. aod weighting below is exact for SSA

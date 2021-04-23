@@ -59,13 +59,13 @@ nowPix = returnPixel(instrument, sza=SZA, relPhi=Phi, nowPix=None)
 cstmFwdYAML = setupConCaseYAML(conCase, nowPix, fwdModelYAMLpath, caseLoadFctr=τFactor)
 
 # Define a new instance of the simulation class for the instrument defined by nowPix (an instance of the pixel class)
-simA = rs.simulation(nowPix) 
+simA = rs.simulation(nowPix)
 
 # run the simulation, see below the definition of runSIM in simulateRetrieval.py for more input argument explanations
 gObjFwd, gObjBck = simA.runSim(cstmFwdYAML, bckYAMLpath, Nsims, maxCPU=maxCPU, savePath=savePath, \
             binPathGRASP=binGRASP, intrnlFileGRASP=krnlPath, releaseYAML=True, lightSave=True, \
             rndIntialGuess=False, dryRun=False, workingFileSave=True, verbose=True)
-    
+
 # print some results to the console/terminal
 wavelengthIndex = 3
 wavelengthValue = simA.rsltFwd[0]['lambda'][wavelengthIndex]
@@ -73,5 +73,4 @@ print('RMS deviations (retrieved-truth) at wavelength of %5.3f μm:' % wavelengt
 pprint.pprint(simA.analyzeSim(0)[0])
 
 # save the some simulated truth data to a NetCDF file (this functionality needs expanding)
-gObjFwd.output2netCDF(savePath[:-3] + '_truth.nc4')
-
+gObjFwd.output2netCDF(savePath[:-4] + '_truth.nc4')
