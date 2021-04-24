@@ -673,11 +673,11 @@ class graspRun():
             if rngAndβextUnited:
                 try: # sometimes GRASP adds range column before extinction profile (if not this expects one more column than is present, producing an index error)
                     self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
-                except (IndexError, AssertionError): # but other times range is a separate field... no obvious rhyme/reason
+                except (IndexError, AssertionError): # but other times range is a separate field... no obvious rhyme or reason
                     del results[0]['βext'] # we should have crashed while setting βext in the first pixel, no need to delete key in others
                     for rd in results: del rd['range'] # range should have been set in every pixel before the crash
                     i -= 1 # we need to parse this line again, using the correct arguments for parseMultiParamFld (below)
-                    rngAndβextUnited = False # we fixed the issues, and we now no better than to try again
+                    rngAndβextUnited = False # we fixed the issues, and we now know better than to try again
             else:
                 self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext')
                 self.parseMultiParamFld(contents, i, results, ptrnRange, 'range')
@@ -696,6 +696,13 @@ class graspRun():
             warnings.warn('Limited or no aerosol data found, returning incomplete dictionary...')
             return results
         wavelengths = np.atleast_1d(results[0]['lambda'])
+        if len(wavelengths)<2:
+            if len(wavelengths)==0:
+                warnings.warn('No wavelengths (lambda) values found, returning incomplete dictionary...')
+                return results
+            for i in range(len(results)): # we need to convert aod, ssa, etc. from scalars to numpy arrays
+                for key in results[0].keys():
+                    if key in results[i]: results[i][key] = np.atleast_1d(results[i][key])
         if 'aodMode' in results[0]:
             Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]
             nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
@@ -772,7 +779,7 @@ class graspRun():
             i += 1
         return results
 
-    def calcAsymParam(self, results): # Calculate the total asymmetry parameter, and lidar ratios while we're at it
+    def calcAsymParam(self, results): # Calculate the total asymmetry parameter, and lidar ratio and depol while we're at it
         for rslt in results: # loop over pixels
             if np.all([fld in rslt for fld in ['p11', 'angle','aod','ssa','aodMode','ssaMode']]):
                 rslt['g'] = np.empty(rslt['aod'].shape)
@@ -1100,10 +1107,10 @@ class graspYAML():
     def adjustLambda(self, Nlambda):
         """Change YAML settings to match a specific number of wavelenths, cutting and adding from the longest wavelength."""
         for lt in self.lambdaTypes: self._repeatElementsInField(fldName=lt, Nrepeats=Nlambda, λonly=True)  # loop over constraint types
-        for n in range(len(self.access('retrieval.noises'))): # adjust the noise lambda as well
+        for n in range(len(self.access('retrieval.inversion.noises'))): # adjust the noise lambda as well
             m = 1
-            while self.access('retrieval.noises.noise[%d].measurement_type[%d]' % (n+1, m)):
-                fldNm = 'retrieval.noises.noise[%d].measurement_type[%d].index_of_wavelength_involved' % (n+1, m)
+            while self.access('retrieval.inversion.noises.noise[%d].measurement_type[%d]' % (n+1, m)):
+                fldNm = 'retrieval.inversion.noises.noise[%d].measurement_type[%d].index_of_wavelength_involved' % (n+1, m)
                 orgVal = self.access(fldNm)
                 if len(orgVal) >= Nlambda:
                     newVal = orgVal[0:Nlambda]
@@ -1148,6 +1155,8 @@ class graspYAML():
         elif type(newVal).__module__ == np.__name__: # just a single value of a numpy type
             newVal = newVal.item()
         self.loadYAML()
+        if fldPath == 'stop_before_performing_retrieval' and type(newVal)==bool: # caller assumed old GRASP<V1.0 YAML syntax
+            newVal = 'forward' if newVal else 'inversion'
         fldPath = self.exapndFldPath(fldPath)
         prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal)
         if not prsntVal and newVal: # we were supposed to change a value but the field wasn't there
@@ -1160,9 +1169,9 @@ class graspYAML():
                     lastModeVal = self.YAMLrecursion(self.dl, lastModePath[0:4])
                     self.dl['retrieval']['constraints'][fldPath.split('.')[2]]['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lastModeVal)
                     prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal) # new mode exist now, write value to it
-                    if not 'mode[%d]' % int(mtch.group(1)) in self.dl['retrieval']['phase_matrix']['radius'].keys(): # phase_matrix radius not present from this mode
-                        lstModeRadius = self.dl['retrieval']['phase_matrix']['radius']['mode[%d]' % (int(mtch.group(1))-1)] # we copy it from previous mode
-                        self.dl['retrieval']['phase_matrix']['radius']['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lstModeRadius)
+                    if not 'mode[%d]' % int(mtch.group(1)) in self.dl['retrieval']['forward_model']['phase_matrix']['radius'].keys(): # phase_matrix radius not present from this mode
+                        lstModeRadius = self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]' % (int(mtch.group(1))-1)] # we copy it from previous mode
+                        self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lstModeRadius)
         if newVal and write2disk: self.writeYAML() # if no change was made no need to re-write the file
         return prsntVal
 
@@ -1171,7 +1180,7 @@ class graspYAML():
         if fldPath == 'path_to_internal_files': # <-SHORTCUT: fldPath='path_to_internal_files'
             return 'retrieval.general.path_to_internal_files'
         if fldPath == 'stop_before_performing_retrieval': # <-SHORTCUT:
-            return 'retrieval.convergence.stop_before_performing_retrieval'
+            return 'retrieval.mode'
         if fldPath == 'stream_fn': # <-SHORTCUT:
             return 'output.segment.stream'
         if fldPath == 'sdata_fn': # <-SHORTCUT:

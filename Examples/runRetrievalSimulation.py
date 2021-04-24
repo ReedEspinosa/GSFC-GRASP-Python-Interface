@@ -30,6 +30,7 @@ from canonicalCaseMap import setupConCaseYAML
 savePath = '/Users/wrespino/Desktop/exampleSimulationTest.pkl'
 
 # Full path grasp binary
+# binGRASP = '/usr/local/bin/grasp'
 binGRASP = '/Users/wrespino/Synced/Local_Code_MacBook/grasp_open/build/bin/grasp'
 
 # Full path grasp precomputed single scattering kernels
