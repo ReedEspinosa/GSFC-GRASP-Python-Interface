@@ -106,7 +106,7 @@ class simulation(object):
             fullSaveDir = savePath[0:-4]
             if verbose: print('Packing GRASP working files up into %s' %  fullSaveDir + '.zip')
             if os.path.exists(fullSaveDir): shutil.rmtree(fullSaveDir)
-            os.mkdir(fullSaveDir)
+            os.makedirs(fullSaveDir)
             if not type(fwdData[0]) == dict: # If yes, then this was an OSSE run (no forward calc. or gDBFwd object)
                 for i, gb in enumerate(gDBFwd.grObjs):
                     shutil.copytree(gb.dirGRASP, os.path.join(fullSaveDir,'forwardCalc%03d' % i))
@@ -118,7 +118,7 @@ class simulation(object):
 
     def saveSim(self, savePath, lightSave=False, verbose=False):
         if not os.path.exists(os.path.dirname(savePath)):
-            print('savePath (%s) did not exist, creating it...')
+            print('savePath (%s) did not exist, creating it...' % savePath)
             os.makedirs(os.path.dirname(savePath))
         if lightSave:
             for pmStr in ['p11','p12','p22','p33','p34','p44']:

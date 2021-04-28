@@ -1107,6 +1107,7 @@ class graspYAML():
     def adjustLambda(self, Nlambda):
         """Change YAML settings to match a specific number of wavelenths, cutting and adding from the longest wavelength."""
         for lt in self.lambdaTypes: self._repeatElementsInField(fldName=lt, Nrepeats=Nlambda, λonly=True)  # loop over constraint types
+        assert self.access('retrieval.inversion.noises') is not None, 'Could not find YAML field for noises! Note that only GRASP version 1.0 or later YAML files work with this verison of grasp_scripts.'
         for n in range(len(self.access('retrieval.inversion.noises'))): # adjust the noise lambda as well
             m = 1
             while self.access('retrieval.inversion.noises.noise[%d].measurement_type[%d]' % (n+1, m)):
