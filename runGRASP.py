@@ -442,10 +442,11 @@ class graspRun():
         return rsltDict
 
     def _findRslts(self, rsltDict=None, customOUT=None):
+        # note that rsltDict (which this method returns) is actually a list of dicts
         assert not (rsltDict is not None and customOUT is not None), 'Only one of rsltDict or customOUT should be provided, not both!'
         if customOUT is not None:
             return self.readOutput(customOUT)
-        elif rsltDict:
+        elif rsltDict is not None:
             return rsltDict
         elif len(self.invRslt)>0:
             return self.invRslt
@@ -516,7 +517,7 @@ class graspRun():
             varHnds[tName] = root_grp.createVariable(tName, 'u2', (tName))
             varHnds[tName][:] = np.r_[0:len(rsltDict)]
             varHnds[tName].units = 'none'
-            varHnds[tName].long_name = 'index of pixel'
+            varHnds[tName].long_name = 'Index of pixel'
             λName = 'wavelength'
             root_grp.createDimension(λName, len(rsltDict[0]['lambda']))
             varHnds[λName] = root_grp.createVariable(λName, 'f4', (λName))
@@ -529,16 +530,17 @@ class graspRun():
             varHnds[visName][:] = np.sort(np.unique(rsltDict[0]['vis'][:,0]))
             varHnds[visName].units = 'degree'
             varHnds[visName].long_name = 'viewing zenith angle'
-            fisName = 'relative_azimuth'
+            fisName = 'relative_azimuth' # BUG: THIS NEEDS DIMENSION OF PIX IND
             root_grp.createDimension(fisName, Nfis)
             varHnds[fisName] = root_grp.createVariable(fisName, 'f4', (fisName))
             varHnds[fisName][:] = np.sort(np.unique(rsltDict[0]['fis'][:,0]))
             varHnds[fisName].units = 'degree'
             varHnds[fisName].long_name = 'relative azimuth angle (φ_solar - φ_viewing)'
+            # TODO: Replicate above for SZA, lat, lon and time
             # write data variables
             for key in rsltDict[0].keys(): # loop over keys
                 if 'fit' in key or 'sca_ang' in key:
-                    if key.replace('fit_','') in ['I','Q','U']:
+                    if key.replace('fit_','') in ['I','Q','U','QoI','UoI']:
                         var = key.replace('fit_','')
                         varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName, visName, fisName))
                         varHnds[var].units = 'none'
@@ -566,7 +568,7 @@ class graspRun():
                     varHnds['RTLS_ISO'].long_name = 'Isotropic kernel of the RTLS model'
                     varHnds['RTLS_VOL'].long_name = 'Volume kernel of the RTLS model (MAIAC_vol/MAIAC_iso)'
                     varHnds['RTLS_GEO'].long_name = 'Geometric kernel of the RTLS model (MAIAC_geo/MAIAC_iso)'
-                elif key=='brdf' and rsltDict[0]['brdf'].ndim==1: # probably Maignan parameters
+                elif key=='bpdf' and rsltDict[0]['bpdf'].ndim==1: # probably Maignan parameters
                     var = 'maignan_parameter'
                     varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName))
                     varHnds[var].units = 'none'
@@ -577,7 +579,8 @@ class graspRun():
                     varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName))
                     varHnds[var].units = 'none'
                     varHnds[var][:,:] = np.array([rslt['aod'] for rslt in rsltDict]) # loop over times, select all λ
-                    varHnds[var].long_name = 'aerosol optical depth'
+                    varHnds[var].long_name = 'Aerosol Optical Depth'
+                self._NC4_writeLambdaVar(key, 'aod', 'Aerosol Optical Depth', (tName, λName), varHnds)
             if seaLevel: # This is a little nasty, need to double check numbers below before using
                 var = 'ROD'
                 varHnds[var] = root_grp.createVariable(var, 'f8', (λName))
@@ -589,6 +592,14 @@ class graspRun():
                 varHnds[var].units = 'none'
                 varHnds[var][:] = 0.0295*np.ones(len(varHnds[λName][:]))
                 varHnds[var].long_name = 'Rayleigh Depolarization Ratio'
+
+    def _NC4_writeLambdaVar(srchKey, trgtKey, desc, dimTuple, varHnds, nc4Key=None, units='none'):
+        if not srchKey==trgtKey: return
+        if nc4Key is None: nc4Key = trgtKey
+        varHnds[var] = root_grp.createVariable(nc4Key, 'f8', dimTuple)
+        varHnds[var].units = units
+        varHnds[var][:,:] = np.array([rslt[trgtKey] for rslt in rsltDict]) # loop over times, select all λ
+        varHnds[var].long_name = desc
 
     def seaLevelROD(self, λtarget):
         λ =   np.r_[0.3600, 0.3800, 0.4100, 0.5500, 0.6700, 0.8700, 1.5500, 1.6500]
