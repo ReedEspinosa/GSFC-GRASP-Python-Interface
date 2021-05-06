@@ -145,19 +145,19 @@ class graspDB():
             yVarVal = yVarVal[vldInd]
             assert (not logScl) or ((xVarVal > 0).all() and (yVarVal > 0).all()), zeroErrStr
             if type(xVarVal[0])==dt or type(yVarVal[0])==dt: # don't color datetimes by density
-                clrVar = np.zeros(xVarVal.shape[0])
+                clrvarNm = np.zeros(xVarVal.shape[0])
             else:
                 xy = np.log(np.vstack([xVarVal,yVarVal])) if logScl else np.vstack([xVarVal,yVarVal])
-                clrVar = gaussian_kde(xy)(xy)
-                if 'aod' in xVarNm: clrVar = clrVar**0.25
+                clrvarNm = gaussian_kde(xy)(xy)
+                if 'aod' in xVarNm: clrvarNm = clrVar**0.25
         else:
-            clrVar = self.getVarValues(cVarNm, cInd, rsltInds)
+            clrvarNm = self.getVarValues(cVarNm, cInd, rsltInds)
             vldInd = ~np.any((pd.isnull(xVarVal),pd.isnull(yVarVal),pd.isnull(clrVar)), axis=0)
 #            vldInd = np.logical_and(vldInd, np.abs(clrVar)<np.nanpercentile(np.abs(clrVar),20.0)) # HACK to stretch color scale
             assert np.any(vldInd), noValPntsErrstr
             xVarVal = xVarVal[vldInd]
             yVarVal = yVarVal[vldInd]
-            clrVar = clrVar[vldInd]
+            clrvarNm = clrVar[vldInd]
             assert (not logScl) or ((xVarVal > 0).all() and (yVarVal > 0).all()), zeroErrStr
         # GENERATE PLOTS
         if customAx: plt.sca(customAx)
@@ -454,7 +454,7 @@ class graspRun():
             return self.readOutput()
 
     def singleScat2CSV(self, csvPath, pixInd=0, rsltDict=None, customOUT=None):
-        """ This function will take grasp output and dump it in a netCDF file
+        """ This function will take grasp output and dump it in a CSV file
             PM of pixInd (defualt 0) will be saved (only one pixel saved at a time)
             If resultDict is provided, this data will be written to netCDF.
             If customOUT is provided, data from GRASP output text file specified will be written to netCDF.
@@ -541,15 +541,15 @@ class graspRun():
             for key in rsltDict[0].keys(): # loop over keys
                 if 'fit' in key or 'sca_ang' in key:
                     if key.replace('fit_','') in ['I','Q','U','QoI','UoI']:
-                        var = key.replace('fit_','')
-                        varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName, visName, fisName))
-                        varHnds[var].units = 'none'
-                        varHnds[var].long_name = '%s at TOA' % var
+                        varNm = key.replace('fit_','')
+                        varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (tName, λName, visName, fisName))
+                        varHnds[varNm].units = 'none'
+                        varHnds[varNm].long_name = '%s at TOA' % varNm
                     elif key == 'sca_ang':
-                        var = key
-                        varHnds[var] = root_grp.createVariable(var, 'f4', (tName, λName, visName, fisName))
-                        varHnds[var].units = 'degree'
-                        varHnds[var].long_name = 'scattering angle'
+                        varNm = key
+                        varHnds[varNm] = root_grp.createVariable(varNm, 'f4', (tName, λName, visName, fisName))
+                        varHnds[varNm].units = 'degree'
+                        varHnds[varNm].long_name = 'scattering angle'
                     else:
                         assert False, 'This function does not know how to handle the variable %s' % key
                     for ti, rslt in enumerate(rsltDict): # loop over pixels
@@ -559,47 +559,42 @@ class graspRun():
                                     ind = np.logical_and(np.isclose(rslt['vis'][:,λi], θ),
                                                          np.isclose(rslt['fis'][:,λi], φ)).nonzero()[0]
                                     assert ind.shape[0] == 1, "%d values were found for %s at pixel# %d, λind=%d, θv=%4.1f, φ=%4.1f!" % (ind.shape[0],key,ti,λi,θ,φ)
-                                    varHnds[var][ti,λi,θi,φi] = rslt[key][ind[0],λi]
+                                    varHnds[varNm][ti,λi,θi,φi] = rslt[key][ind[0],λi]
                 elif key=='brdf' and rsltDict[0]['brdf'].shape[0]==3: # probably RTLS parameters
-                    for i,var in enumerate(['RTLS_ISO', 'RTLS_VOL', 'RTLS_GEO']): # loop over the three RTLS kernels
-                        varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName))
-                        varHnds[var].units = 'none'
-                        varHnds[var][:,:] = np.array([rslt['brdf'][i,:] for rslt in rsltDict]) # loop over times, select all λ
+                    for i,varNm in enumerate(['RTLS_ISO', 'RTLS_VOL', 'RTLS_GEO']): # loop over the three RTLS kernels
+                        varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (tName, λName))
+                        varHnds[varNm].units = 'none'
+                        varHnds[varNm][:,:] = np.array([rslt['brdf'][i,:] for rslt in rsltDict]) # loop over times, select all λ
                     varHnds['RTLS_ISO'].long_name = 'Isotropic kernel of the RTLS model'
                     varHnds['RTLS_VOL'].long_name = 'Volume kernel of the RTLS model (MAIAC_vol/MAIAC_iso)'
                     varHnds['RTLS_GEO'].long_name = 'Geometric kernel of the RTLS model (MAIAC_geo/MAIAC_iso)'
                 elif key=='bpdf' and rsltDict[0]['bpdf'].ndim==1: # probably Maignan parameters
-                    var = 'maignan_parameter'
-                    varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName))
-                    varHnds[var].units = 'none'
-                    varHnds[var][:,:] = np.array([rslt['bpdf'] for rslt in rsltDict]) # loop over times, select all λ
-                    varHnds[var].long_name = 'Value of the Maignan model (exp(-NDVI)*C_maignan)'
-                elif key=='aod':
-                    var = 'aod'
-                    varHnds[var] = root_grp.createVariable(var, 'f8', (tName, λName))
-                    varHnds[var].units = 'none'
-                    varHnds[var][:,:] = np.array([rslt['aod'] for rslt in rsltDict]) # loop over times, select all λ
-                    varHnds[var].long_name = 'Aerosol Optical Depth'
-                self._NC4_writeLambdaVar(key, 'aod', 'Aerosol Optical Depth', (tName, λName), varHnds)
+                    varNm = 'maignan_parameter'
+                    varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (tName, λName))
+                    varHnds[varNm].units = 'none'
+                    varHnds[varNm][:,:] = np.array([rslt['bpdf'] for rslt in rsltDict]) # loop over times, select all λ
+                    varHnds[varNm].long_name = 'Value of the Maignan model (exp(-NDVI)*C_maignan)'
+                else:
+                    self._NC4_writeLambdaVar(key, 'aod', 'Aerosol Optical Depth', (tName, λName), varHnds)
             if seaLevel: # This is a little nasty, need to double check numbers below before using
-                var = 'ROD'
-                varHnds[var] = root_grp.createVariable(var, 'f8', (λName))
-                varHnds[var].units = 'none'
-                varHnds[var][:] = self.seaLevelROD(varHnds[λName][:])
-                varHnds[var].long_name = 'Rayleigh Optical Depth'
-                var = 'rayleigh_depol'
-                varHnds[var] = root_grp.createVariable(var, 'f8', (λName))
-                varHnds[var].units = 'none'
-                varHnds[var][:] = 0.0295*np.ones(len(varHnds[λName][:]))
-                varHnds[var].long_name = 'Rayleigh Depolarization Ratio'
+                varNm = 'ROD'
+                varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (λName))
+                varHnds[varNm].units = 'none'
+                varHnds[varNm][:] = self.seaLevelROD(varHnds[λName][:])
+                varHnds[varNm].long_name = 'Rayleigh Optical Depth'
+                varNm = 'rayleigh_depol'
+                varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (λName))
+                varHnds[varNm].units = 'none'
+                varHnds[varNm][:] = 0.0295*np.ones(len(varHnds[λName][:]))
+                varHnds[varNm].long_name = 'Rayleigh Depolarization Ratio'
 
     def _NC4_writeLambdaVar(srchKey, trgtKey, desc, dimTuple, varHnds, nc4Key=None, units='none'):
         if not srchKey==trgtKey: return
         if nc4Key is None: nc4Key = trgtKey
-        varHnds[var] = root_grp.createVariable(nc4Key, 'f8', dimTuple)
-        varHnds[var].units = units
-        varHnds[var][:,:] = np.array([rslt[trgtKey] for rslt in rsltDict]) # loop over times, select all λ
-        varHnds[var].long_name = desc
+        varHnds[varNm] = root_grp.createVariable(nc4Key, 'f8', dimTuple)
+        varHnds[varNm].units = units
+        varHnds[varNm][:,:] = np.array([rslt[trgtKey] for rslt in rsltDict]) # loop over times, select all λ
+        varHnds[varNm].long_name = desc
 
     def seaLevelROD(self, λtarget):
         λ =   np.r_[0.3600, 0.3800, 0.4100, 0.5500, 0.6700, 0.8700, 1.5500, 1.6500]
