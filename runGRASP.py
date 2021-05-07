@@ -26,8 +26,10 @@ try:
 except ImportError:
     PLOT_LOADED = False
 
+vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
 
 class graspDB():
+
     def __init__(self, graspRunObjs=[], maxCPU=None, maxT=None):
         """
         The graspDB class is designed to run many instances of GRASP in parallel/sequence (depending on maxCPU and maxT below).
@@ -500,12 +502,7 @@ class graspRun():
             If customOUT is provided, data from GRASP output text file specified will be written to netCDF.
             If neither are provided the output text file associated with current instance will be written.
             seaLevel=True should be used with caution, see assumed ROD and depol. below. """
-        vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
         rsltDict = self._findRslts(rsltDict, customOUT)
-        vzaSigned = np.unique([vzaSgnCalc(r['vis'], r['fis']) for r in rsltDict])
-        Nvis = len(vzaSigned)
-        ErrMsg = 'N_VZA (%d) does not match shape of rslt[vis] (%d). This method requires: (1) a single φ per signed VZA, (2) same set of VZAs for all times and λ'
-        assert Nvis==rsltDict[0]['vis'].shape[0], ErrMsg % (Nvis, rsltDict[0]['vis'].shape[0])
         # create netCDF4 data file
         with Dataset(nc4Path, 'w', format='NETCDF4') as root_grp:
             root_grp.description = 'Results of a GRASP run'
@@ -529,13 +526,15 @@ class graspRun():
             varHnds[mName] = root_grp.createVariable(mName, 'u2', (mName))
             varHnds[mName][:] = np.r_[0:Nmodes]
             varHnds[mName].units = 'none'
-            varHnds[mName].long_name = 'Index aerosol size mode'
-            visName = 'viewing_zenith'
-            root_grp.createDimension(visName, Nvis)
-            varHnds[visName] = root_grp.createVariable(visName, 'f4', (visName))
-            varHnds[visName][:] = np.sort(vzaSigned)
+            varHnds[mName].long_name = 'Aerosol size mode index'
+            visName = 'viewing_angle'
+            Nang = rsltDict[0]['vis'].shape[0]
+            root_grp.createDimension(visName, Nang)
+            varHnds[visName] = root_grp.createVariable(visName, 'u2', (visName))
+            varHnds[visName][:] = np.r_[0:Nang]
             varHnds[visName].units = 'degrees'
-            varHnds[visName].long_name = 'Viewing zenith angle'
+            varHnds[visName].long_name = 'Viewing angle index'
+
             # write data variables
             for key in rsltDict[0].keys(): # loop over keys
                 if 'fit' in key or 'sca_ang' in key:
@@ -552,12 +551,7 @@ class graspRun():
                         varHnds[varNm].long_name = 'scattering angle'
                     else:
                         assert False, 'This function does not know how to handle the variable %s' % key
-                    for ti, rslt in enumerate(rsltDict): # loop over pixels
-                        for λi in range(len(varHnds[λName][:])): # loop over wavelengths
-                            for θi,θ in enumerate(varHnds[visName][:]): # loop over viewing zeniths
-                                ind = np.isclose(vzaSgnCalc(rslt['vis'][:,λi], rslt['fis'][:,λi]), θ, atol=1e-3).nonzero()[0] # isclose() needed b/c θ from netCDF file w/ 4 byte float
-                                assert ind.shape[0] == 1, "%d values were found for %s at pixel# %d, λind=%d, θv=%4.1f!" % (ind.shape[0],key,ti,λi,θ)
-                                varHnds[varNm][ti,λi,θi] = rslt[key][ind[0],λi]
+                    for ti, rslt in enumerate(rsltDict): varHnds[varNm][ti,:,:] = rslt[key].T # loop over pixels and set observable
                 elif key=='brdf' and rsltDict[0]['brdf'].shape[0]==3: # probably RTLS parameters
                     for i,varNm in enumerate(['RTLS_ISO', 'RTLS_VOL', 'RTLS_GEO']): # loop over the three RTLS kernels
                         varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (tName, λName))
@@ -572,12 +566,17 @@ class graspRun():
                     # TODO: add full PSD output to the below... need to make radius a dimension
                     self._CVnc4('latitude', 'latitude coordinate', (tName,), varHnds, key, rsltDict, root_grp, units='degrees_north')
                     self._CVnc4('longitude', 'longitude coordinate', (tName, visName), varHnds, key, rsltDict, root_grp, units='degrees_east')
-                    self._CVnc4('fis', 'relative azimuth angle (φ_solar - φ_viewing)', (tName, visName), varHnds, key, rsltDict, root_grp, units='degrees')
-                    self._CVnc4('sza', 'Solar zenith angle', (tName, visName), varHnds, key, rsltDict, root_grp, units='degrees')
+                    self._CVnc4('land_prct', 'Percentage of land cover', (tName,), varHnds, key, rsltDict, root_grp, units='percent')
+                    self._CVnc4('masl', 'Pressure derived altitude above sea level', (tName,), varHnds, key, rsltDict, root_grp, units='m')
+                    self._CVnc4('pblh', 'Height of the PBL', (tName,), varHnds, key, rsltDict, root_grp, units='m')
+                    self._CVnc4('vis', 'Viewing zenith angle [signed]', (tName, visName), varHnds, key, rsltDict, root_grp, nc4Key='vza', units='degrees') # adjustments to vis made inside _CVnc4()
+                    self._CVnc4('fis', 'Relative azimuth angle (φ_solar - φ_view) [0≤φ≤180]', (tName, visName), varHnds, key, rsltDict, root_grp, nc4Key='phi', units='degrees')  # adjustments to fis made inside _CVnc4()
+                    self._CVnc4('sza', 'Solar zenith angle', (tName, visName), varHnds, key, rsltDict, root_grp, units='degrees') # adjustments to sza made inside _CVnc4()
                     self._CVnc4('costVal', 'Cost function at final/best fit', (tName,), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('bpdf', 'Maignan model parameter [e^(-NDVI)*C_maignan]', (tName, λName), varHnds, key, rsltDict, root_grp, nc4Key='maignan_parameter')
                     self._CVnc4('aod', 'Total aerosol optical depth', (tName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('ssa', 'Total single scattering albedo', (tName, λName), varHnds, key, rsltDict, root_grp)
+                    self._CVnc4('g', 'Asymmetry parameter', (tName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('aodMode', 'Mode resolved AOD', (tName, mName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('ssaMode', 'Mode resolved SSA', (tName, mName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('n', 'Real refractive index', (tName, mName, λName), varHnds, key, rsltDict, root_grp)
@@ -586,6 +585,8 @@ class graspRun():
                     self._CVnc4('rv', 'Median volume radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp, units='μm')
                     self._CVnc4('sigma', 'Standard deviations of modes [ln(σg)]', (tName, mName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('rEffMode', 'Effective radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp)
+                    self._CVnc4('rEff', 'Total effective radii', (tName,), varHnds, key, rsltDict, root_grp, units='μm')
+                    self._CVnc4('rEffCalc', 'Total effective radii', (tName,), varHnds, key, rsltDict, root_grp, nc4Key='rEff', units='μm') # might cause problems if rEff is also in rslts
                     self._CVnc4('LidarRatio', 'Total lidar ratio', (tName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('height', 'Gaussian layer median height', (tName, mName), varHnds, key, rsltDict, root_grp, units='m')
                     self._CVnc4('heightStd', 'Gaussian layer standard deviation', (tName, mName), varHnds, key, rsltDict, root_grp, units='m')
@@ -607,16 +608,20 @@ class graspRun():
         if nc4Key is None: nc4Key = trgtKey
         varHnds[nc4Key] = root_grp.createVariable(nc4Key, 'f8', dimTuple)
         varHnds[nc4Key].units = units
-        newData = np.array([rslt[trgtKey] for rslt in rsltDict]) # loop over times, select all λ
+        if trgtKey=='vis':
+            newData = np.array([vzaSgnCalc(r['vis'], r['fis']) for r in rsltDict]) # add sign information to SZA based on φ (inefficient by factor of Νλ b/c we drop wavelength dim below)
+        else:
+            newData = np.array([rslt[trgtKey] for rslt in rsltDict]) # loop over times, select all λ
         if len(dimTuple)==1:
             varHnds[nc4Key][:] = newData
         elif len(dimTuple)==2:
-            if trgtKey in ['sza','fis']: newData = newData.mean(axis=2) # we only want one SZA per wavelength [rsltDict has SZA(t,Nang,λ)]
+            if trgtKey in ['sza','fis', 'vis']: newData = newData.mean(axis=2) # we only want one SZA per wavelength [rsltDict has SZA(t,Nang,λ)]
+            if trgtKey=='fis': newData[newData>180] = newData[newData>180] - 180 # bound φ between 0 and 180 (sza is signed in netCDF file)
             varHnds[nc4Key][:,:] = newData
         elif len(dimTuple)==3:
             varHnds[nc4Key][:,:,:] = newData
         else:
-            assert False, 'This method can not currently handle a variables with more than 3 dimensions.' # it is easy to add one more (generalizing the above is really tricky though)
+            assert False, 'This method can not currently handle a variables with more than 3 dimensions.' # it is easy to add one more (fully generalizing the above is really tricky though)
         varHnds[nc4Key].long_name = desc
 
     def seaLevelROD(self, λtarget):
