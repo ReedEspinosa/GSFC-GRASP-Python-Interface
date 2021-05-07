@@ -98,3 +98,5 @@ simA.runSim(fwdData, bckYAMLpath, maxCPU=maxCPU, maxT=20, savePath=savePath,
             binPathGRASP=dirGRASP, intrnlFileGRASP=krnlPath, releaseYAML=True, lightSave=True,
             rndIntialGuess=rndIntialGuess, radianceNoiseFun=radNoiseFun,
             workingFileSave=True, dryRun=False, verbose=True)
+
+simA.saveSim_netCDF(os.path.basename(savePath), verbose=True)
