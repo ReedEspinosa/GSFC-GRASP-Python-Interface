@@ -503,8 +503,7 @@ class graspRun():
             If neither are provided the output text file associated with current instance will be written.
             seaLevel=True should be used with caution, see assumed ROD and depol. below. """
         rsltDict = self._findRslts(rsltDict, customOUT)
-        # create netCDF4 data file
-        with Dataset(nc4Path, 'w', format='NETCDF4') as root_grp:
+        with Dataset(nc4Path, 'w', format='NETCDF4') as root_grp: # open/create netCDF4 data file
             root_grp.description = 'Results of a GRASP run'
             varHnds = dict()
             # add dimensions and write corresponding variables
@@ -534,7 +533,6 @@ class graspRun():
             varHnds[visName][:] = np.r_[0:Nang]
             varHnds[visName].units = 'degrees'
             varHnds[visName].long_name = 'Viewing angle index'
-
             # write data variables
             for key in rsltDict[0].keys(): # loop over keys
                 if 'fit' in key or 'sca_ang' in key:
@@ -553,19 +551,19 @@ class graspRun():
                         assert False, 'This function does not know how to handle the variable %s' % key
                     for ti, rslt in enumerate(rsltDict): varHnds[varNm][ti,:,:] = rslt[key].T # loop over pixels and set observable
                 elif key=='brdf' and rsltDict[0]['brdf'].shape[0]==3: # probably RTLS parameters
-                    for i,varNm in enumerate(['RTLS_ISO', 'RTLS_VOL', 'RTLS_GEO']): # loop over the three RTLS kernels
+                    for i,varNm in enumerate(['RTLS_ISO', 'RTLS_VOL', 'RTLS_GEO']): # loop over the three RTLS parameters
                         varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (tName, λName))
                         varHnds[varNm].units = 'none'
                         varHnds[varNm][:,:] = np.array([rslt['brdf'][i,:] for rslt in rsltDict]) # loop over times, select all λ
                     varHnds['RTLS_ISO'].long_name = 'Isotropic kernel of the RTLS model'
                     varHnds['RTLS_VOL'].long_name = 'Volume kernel of the RTLS model (MAIAC_vol/MAIAC_iso)'
                     varHnds['RTLS_GEO'].long_name = 'Geometric kernel of the RTLS model (MAIAC_geo/MAIAC_iso)'
-                # TODO: add another elif for wtrSurf (cox-munk)
+                # TODO: add another elif for wtrSurf (cox-munk) [readOSSEnetCDF doesn't pull this yet anyway]
                 else:
                     # TODO: add datetime to below... not sure of best method off hand
-                    # TODO: add full PSD output to the below... need to make radius a dimension
+                    # TODO: add full PSD output to the below... need to make radius a dimension [readOSSEnetCDF doesn't pull this yet anyway]
                     self._CVnc4('latitude', 'latitude coordinate', (tName,), varHnds, key, rsltDict, root_grp, units='degrees_north')
-                    self._CVnc4('longitude', 'longitude coordinate', (tName, visName), varHnds, key, rsltDict, root_grp, units='degrees_east')
+                    self._CVnc4('longitude', 'longitude coordinate', (tName,), varHnds, key, rsltDict, root_grp, units='degrees_east')
                     self._CVnc4('land_prct', 'Percentage of land cover', (tName,), varHnds, key, rsltDict, root_grp, units='percent')
                     self._CVnc4('masl', 'Pressure derived altitude above sea level', (tName,), varHnds, key, rsltDict, root_grp, units='m')
                     self._CVnc4('pblh', 'Height of the PBL', (tName,), varHnds, key, rsltDict, root_grp, units='m')
@@ -621,7 +619,7 @@ class graspRun():
         elif len(dimTuple)==3:
             varHnds[nc4Key][:,:,:] = newData
         else:
-            assert False, 'This method can not currently handle a variables with more than 3 dimensions.' # it is easy to add one more (fully generalizing the above is really tricky though)
+            assert False, 'This method can not currently handle a variables with more than 3 dimensions.' # easy to add one more dim, but fully generalizing the above is really tricky
         varHnds[nc4Key].long_name = desc
 
     def seaLevelROD(self, λtarget):

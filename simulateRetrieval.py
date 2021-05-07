@@ -118,7 +118,7 @@ class simulation(object):
 
     def saveSim(self, savePath, lightSave=False, verbose=False):
         if not os.path.exists(os.path.dirname(savePath)):
-            print('savePath (%s) did not exist, creating it...' % savePath)
+            print('savePath (%s) did not exist, creating it...' % os.path.dirname(savePath))
             os.makedirs(os.path.dirname(savePath))
         if lightSave:
             for pmStr in ['p11','p12','p22','p33','p34','p44']:
@@ -128,6 +128,16 @@ class simulation(object):
         with open(savePath, 'wb') as f:
             pickle.dump(list(self.rsltBck), f, pickle.HIGHEST_PROTOCOL)
             pickle.dump(list(self.rsltFwd), f, pickle.HIGHEST_PROTOCOL)
+
+    def saveSim_netCDF(self, savePath, verbose=False):
+        if not os.path.exists(os.path.dirname(savePath)):
+            print('savePath (%s) did not exist, creating it...' % os.path.dirname(savePath))
+            os.makedirs(os.path.dirname(savePath))
+        gRun = rg.graspRun()
+        for dsc,rslts in zip(['TRUTH', 'RETRIEVED'], (self.rsltFwd, self.rsltBck)):
+            savePathNow = savePath.replace('.nc4','') + ('_%s.nc4' % dsc)
+            if verbose: print('Saving simulation %s results to %s' %  (dsc.lower(), savePathNow))
+            gRun.output2netCDF(savePathNow, rsltDict=rslts)
 
     def loadSim(self, picklePath):
         with open(picklePath, 'rb') as f:
