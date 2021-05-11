@@ -938,10 +938,15 @@ class pixel():
         self.lon = lon
         self.lat = lat
         self.masl = masl
-        if np.isclose(land_prct,1): warnings.warn('land_prct provided was 1.0 – this value is a percentage (100 -> completely land)')
-        self.land_prct = land_prct
+        self.land_prct = self.set_land_prct(land_prct)
         self.nwl = 0
         self.measVals = []
+
+    def set_land_prct(self, newValue):
+        """ There is a special method for this so that we can warn user if not setting it as a percent """
+        if np.isclose(newValue, 1.0, rtol=1e-3, atol=1e-3):
+            warnings.warn('land_prct provided was %4.2f – this value is a percentage (100 => completely land)' % newValue)
+        self.land_prct = newValue
 
     def addMeas(self, wl, msTyp=[], nbvm=[], sza=[], thtv=[], phi=[], msrmnts=[], errModel=None): # this is called once for each wavelength of data (see frmtMsg below)
         """Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)"""
@@ -1000,7 +1005,7 @@ class pixel():
         if 'datetime' in rslt: self.dtObj = rslt['datetime']
         if 'latitude' in rslt: self.lat = rslt['latitude']
         if 'longitude' in rslt: self.lon = rslt['longitude']
-        if 'land_prct' in rslt: self.land_prct = rslt['land_prct']
+        if 'land_prct' in rslt: self.set_land_prct(rslt['land_prct'])
         if 'masl' in rslt: self.masl = rslt['masl']
 
     def formatMeas(self, newMeas, lowThresh=1e-10):
