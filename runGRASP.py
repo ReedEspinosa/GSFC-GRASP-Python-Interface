@@ -531,7 +531,7 @@ class graspRun():
             root_grp.createDimension(visName, Nang)
             varHnds[visName] = root_grp.createVariable(visName, 'u2', (visName))
             varHnds[visName][:] = np.r_[0:Nang]
-            varHnds[visName].units = 'degrees'
+            varHnds[visName].units = 'none'
             varHnds[visName].long_name = 'Viewing angle index'
             # write data variables
             for key in rsltDict[0].keys(): # loop over keys
