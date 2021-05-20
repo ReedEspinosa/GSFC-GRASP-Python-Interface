@@ -520,7 +520,10 @@ class graspRun():
             varHnds[λName].units = 'μm'
             varHnds[λName].long_name = 'Wavelength of measurement'
             mName = 'mode'
-            Nmodes = len(rsltDict[0]['sph']) if 'sph' in rsltDict[0] else 1
+            try:
+                Nmodes = len(rsltDict[0]['sph'])
+            except (KeyError, TypeError) as e:
+                Nmodes = 1 # either sph was a float OR it wasn't there so we just assume single mode
             root_grp.createDimension(mName, Nmodes)
             varHnds[mName] = root_grp.createVariable(mName, 'u2', (mName))
             varHnds[mName][:] = np.r_[0:Nmodes]
