@@ -520,7 +520,10 @@ class graspRun():
             varHnds[λName].units = 'μm'
             varHnds[λName].long_name = 'Wavelength of measurement'
             mName = 'mode'
-            Nmodes = len(rsltDict[0]['sph']) if 'sph' in rsltDict[0] else 1
+            try:
+                Nmodes = len(rsltDict[0]['sph'])
+            except (KeyError, TypeError) as e:
+                Nmodes = 1 # either sph was a float OR it wasn't there so we just assume single mode
             root_grp.createDimension(mName, Nmodes)
             varHnds[mName] = root_grp.createVariable(mName, 'u2', (mName))
             varHnds[mName][:] = np.r_[0:Nmodes]
@@ -531,7 +534,7 @@ class graspRun():
             root_grp.createDimension(visName, Nang)
             varHnds[visName] = root_grp.createVariable(visName, 'u2', (visName))
             varHnds[visName][:] = np.r_[0:Nang]
-            varHnds[visName].units = 'degrees'
+            varHnds[visName].units = 'none'
             varHnds[visName].long_name = 'Viewing angle index'
             # write data variables
             for key in rsltDict[0].keys(): # loop over keys
@@ -579,7 +582,8 @@ class graspRun():
                     self._CVnc4('ssaMode', 'Mode resolved SSA', (tName, mName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('n', 'Real refractive index', (tName, mName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('k', 'Imaginary refractive index', (tName, mName, λName), varHnds, key, rsltDict, root_grp)
-                    self._CVnc4('sph', 'Volume fraction of spherical particles', (tName, mName), varHnds, key, rsltDict, root_grp)
+                    self._CVnc4('sph', 'Volume fraction of spherical particles in each mode', (tName, mName), varHnds, key, rsltDict, root_grp)
+                    self._CVnc4('vol', 'Volume concentration of aerosol in each mode', (tName, mName), varHnds, key, rsltDict, root_grp, units='μm3/μm2')
                     self._CVnc4('rv', 'Median volume radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp, units='μm')
                     self._CVnc4('sigma', 'Standard deviations of modes [ln(σg)]', (tName, mName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('rEffMode', 'Effective radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp)
@@ -938,10 +942,15 @@ class pixel():
         self.lon = lon
         self.lat = lat
         self.masl = masl
-        if np.isclose(land_prct,1): warnings.warn('land_prct provided was 1.0 – this value is a percentage (100 -> completely land)')
-        self.land_prct = land_prct
+        self.land_prct = self.set_land_prct(land_prct)
         self.nwl = 0
         self.measVals = []
+
+    def set_land_prct(self, newValue):
+        """ There is a special method for this so that we can warn user if not setting it as a percent """
+        if np.isclose(newValue, 1.0, rtol=1e-3, atol=1e-3):
+            warnings.warn('land_prct provided was %4.2f – this value is a percentage (100 => completely land)' % newValue)
+        self.land_prct = newValue
 
     def addMeas(self, wl, msTyp=[], nbvm=[], sza=[], thtv=[], phi=[], msrmnts=[], errModel=None): # this is called once for each wavelength of data (see frmtMsg below)
         """Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)"""
@@ -1000,7 +1009,7 @@ class pixel():
         if 'datetime' in rslt: self.dtObj = rslt['datetime']
         if 'latitude' in rslt: self.lat = rslt['latitude']
         if 'longitude' in rslt: self.lon = rslt['longitude']
-        if 'land_prct' in rslt: self.land_prct = rslt['land_prct']
+        if 'land_prct' in rslt: self.set_land_prct(rslt['land_prct'])
         if 'masl' in rslt: self.masl = rslt['masl']
 
     def formatMeas(self, newMeas, lowThresh=1e-10):

@@ -31,7 +31,7 @@ from architectureMap import returnPixel, addError
 basePath = '/Users/wrespino/Synced'
 bckYAMLpath = '/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes.yml'
 # bckYAMLpath = os.path.join(basePath, 'MADCAP_scripts','ACCP_ArchitectureAndCanonicalCases','settings_BCK_POLAR_2modes.yml') # location of retrieval YAML file
-dirGRASP = os.path.join(basePath, 'grasp_open/build/bin/grasp') # location of the GRASP binary to use for retrievals
+dirGRASP = '/Users/wrespino/Synced/Local_Code_MacBook/grasp_open/build/bin/grasp' # location of the GRASP binary to use for retrievals
 # krnlPath = os.path.join(basePath, 'local/share/grasp/kernels') # location of GRASP kernel files
 krnlPath = None
 # osseDataPath = '/discover/nobackup/projects/gmao/osse2/pub/c1440_NR/OBS/A-CCP/' # base path for A-CCP OSSE data (contains gpm and ss450 folders)
@@ -64,7 +64,7 @@ oceanOnly = False
 noiseFree = True
 
 # general version integer to distinguish output files of different runs
-vrsn = 100
+vrsn = 109
 
 # wavelengths (μm); if we only want specific λ set it here, otherwise use every λ found in the netCDF files
 wvls = [0.355, 0.36, 0.38, 0.41, 0.532, 0.55, 0.67, 0.87, 1.064, 1.55, 1.65]
@@ -77,10 +77,10 @@ pixInd = [7375, 1444, 1359, 929, 4654, 6574, 2786, 6461, 6897, 2010] # SS Aug 20
 customOutDir = os.path.join(basePath, 'synced', 'Working', 'OSSE_Test_Run')
 
 # create osseData instance w/ pixels from specified date/time (detail on these arguments in comment near top of osseData class's __init__ near readOSSEnetCDF.py:30)
-od = osseData(osseDataPath, orbit, year, month, day, hour, random=random, wvls=wvls,
-              lidarVersion=None, maxSZA=maxSZA, oceanOnly=oceanOnly, loadPSD=False, verbose=True)
+od = osseData(osseDataPath, orbit, year, month, day, hour, random=random, wvls=wvls, pixInd=pixInd,
+              lidarVersion=None, maxSZA=maxSZA, oceanOnly=oceanOnly, loadPSD=True, verbose=True)
 # extract the simulated observations and pack them in GRASP_scripts rslts dictionary format
-fwdData = od.osse2graspRslts(pixInd=pixInd, newLayers=None)
+fwdData = od.osse2graspRslts()
 
 # build file name to save the results
 savePath = od.fpDict['savePath'] % (vrsn, 'example', 'polarimeter07')
@@ -99,4 +99,4 @@ simA.runSim(fwdData, bckYAMLpath, maxCPU=maxCPU, maxT=20, savePath=savePath,
             rndIntialGuess=rndIntialGuess, radianceNoiseFun=radNoiseFun,
             workingFileSave=True, dryRun=False, verbose=True)
 
-simA.saveSim_netCDF(os.path.basename(savePath), verbose=True)
+simA.saveSim_netCDF(savePath[:-4], verbose=True)

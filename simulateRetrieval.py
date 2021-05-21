@@ -130,7 +130,7 @@ class simulation(object):
             pickle.dump(list(self.rsltFwd), f, pickle.HIGHEST_PROTOCOL)
 
     def saveSim_netCDF(self, savePath, verbose=False):
-        if not os.path.exists(os.path.dirname(savePath)):
+        if not os.path.exists(os.path.dirname(savePath)) and not len(os.path.dirname(savePath))==0:
             print('savePath (%s) did not exist, creating it...' % os.path.dirname(savePath))
             os.makedirs(os.path.dirname(savePath))
         gRun = rg.graspRun()
