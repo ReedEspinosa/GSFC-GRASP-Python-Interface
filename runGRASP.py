@@ -510,7 +510,10 @@ class graspRun():
             tName = 'pixNumber'
             root_grp.createDimension(tName, len(rsltDict))
             varHnds[tName] = root_grp.createVariable(tName, 'u2', (tName))
-            varHnds[tName][:] = np.r_[0:len(rsltDict)]
+            if 'pixNumber' in rsltDict[0]:
+                varHnds[tName][:] = np.array([rslt['pixNumber'] for rslt in rsltDict])
+            else:
+                varHnds[tName][:] = np.r_[0:len(rsltDict)]
             varHnds[tName].units = 'none'
             varHnds[tName].long_name = 'Index of pixel'
             λName = 'wavelength'
@@ -536,6 +539,18 @@ class graspRun():
             varHnds[visName][:] = np.r_[0:Nang]
             varHnds[visName].units = 'none'
             varHnds[visName].long_name = 'Viewing angle index'
+            inconsistRadii = rsltDict[0]['r'].ndim>1 and np.diff(rsltDict[0]['r'], axis=0).any()
+            if 'r' in rsltDict[0] and not inconsistRadii:
+                radiiName = 'radius'
+                Nradii = rsltDict[0]['r'].shape[1] if rsltDict[0]['r'].ndim==2 else rsltDict[0]['r'].shape[0]
+                root_grp.createDimension(radiiName, Nradii)
+                varHnds[radiiName] = root_grp.createVariable(radiiName, 'f4', (radiiName))
+                varHnds[radiiName][:] = rsltDict[0]['r'][0,:] if rsltDict[0]['r'].ndim==2 else rsltDict[0]['r']
+                varHnds[radiiName].units = 'μm'
+                varHnds[radiiName].long_name = 'Size distribution radius bin'
+                self._CVnc4('dVdlnr', 'Absolute size distribution in each mode', (tName, mName,radiiName), varHnds, 'dVdlnr', rsltDict, root_grp, units='μm3/μm2')
+            elif self.verbose:
+                print('Skipping radii dimension in NetCDF file because either there were none or they were not consistent between modes.')
             # write data variables
             for key in rsltDict[0].keys(): # loop over keys
                 if 'fit' in key or 'sca_ang' in key:
@@ -588,7 +603,6 @@ class graspRun():
                     self._CVnc4('sigma', 'Standard deviations of modes [ln(σg)]', (tName, mName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('rEffMode', 'Effective radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('rEff', 'Total effective radii', (tName,), varHnds, key, rsltDict, root_grp, units='μm')
-                    self._CVnc4('rEffCalc', 'Total effective radii', (tName,), varHnds, key, rsltDict, root_grp, nc4Key='rEff', units='μm') # might cause problems if rEff is also in rslts
                     self._CVnc4('LidarRatio', 'Total lidar ratio', (tName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('height', 'Gaussian layer median height', (tName, mName), varHnds, key, rsltDict, root_grp, units='m')
                     self._CVnc4('heightStd', 'Gaussian layer standard deviation', (tName, mName), varHnds, key, rsltDict, root_grp, units='m')
@@ -761,10 +775,11 @@ class graspRun():
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
                         rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
-        if ('r' in results[0]) and np.all(results[0]['r'][0]==results[0]['r']): # check if all r value are same at all lambda, may remove this condition later but makes logic much more complicated
+        if ('dVdlnr' in results[0]): # check if all r value are same at all lambda, may remove this condition later but makes logic much more complicated
             for rs in results:
-                dvdlnr = (rs['dVdlnr']*np.atleast_2d(rs['vol']).T).sum(axis=0)
-                rs['rEffCalc'] = (mf.effRadius(rs['r'][0], dvdlnr))
+                rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T
+                if np.all(results[0]['r'][0]==results[0]['r']) and not 'rEff' in rs:
+                    rs['rEff'] = (mf.effRadius(rs['r'][0], rs['dVdlnr'].sum(axis=0).T))
         return results, wavelengths
 
     def parseOutSurface(self, contents, Nλ=None):

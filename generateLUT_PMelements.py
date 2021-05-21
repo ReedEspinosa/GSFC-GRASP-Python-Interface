@@ -62,7 +62,7 @@ rBnds = [0.08, 0.5] # PSD integration bounds in μm
 msTyp = [12]
 nbvm = np.ones(len(msTyp))
 thtv = np.zeros(len(msTyp))
-phi = np.zeros(len(msTyp)) 
+phi = np.zeros(len(msTyp))
 sza = 0
 
 loaddVarNames = ['lambda', 'qext', 'qsca', 'refreal', 'refimag']
@@ -97,7 +97,7 @@ else: # perform calculations
             gspRunNow.yamlObj.access('retrieval.phase_matrix.radius.mode[1].max', rBnds[1])
             gspRunNow.yamlObj.access('retrieval.convergence.stop_before_performing_retrieval', True)
             gspRunNow.yamlObj.access(lgnrmfld, szVars[bn])
-            gspRunNow.yamlObj.access(RRIfld, n) 
+            gspRunNow.yamlObj.access(RRIfld, n)
             gspRunNow.yamlObj.access(IRIfld, k)
             gspRunNow.addPix(nowPix)
             gspRun.append(gspRunNow)
@@ -135,7 +135,7 @@ PMvars = dict()
 for varNm in PMvarNms:
     PMvars[varNm] = root_grp.createVariable(varNm, 'f8', ('sizeBin', 'lambda', 'angle'))
     PMvars[varNm].units = 'sr-1'
-    PMvars[varNm].long_name = varNm + ' phase matrix element' 
+    PMvars[varNm].long_name = varNm + ' phase matrix element'
 bext_vol = root_grp.createVariable('bext_vol', 'f8', ('sizeBin', 'lambda'))
 bext_vol.units = 'm2·m-3 '
 bext_vol.long_name = 'volume extinction efficiency'
@@ -178,7 +178,8 @@ for i,rslt in enumerate(rslts):
         rv[binInd] = rslt['rv'][0]
         sigma[binInd] = rslt['sigma'][0]
         sph[binInd] = np.atleast_1d(rslt['sph'])[0]
-        rEff[binInd] = np.atleast_1d(rslt['rEffCalc'])[0]
+        rEffVar = 'rEffCalc' if 'rEffCalc' in rslt else 'rEff'
+        rEff[binInd] = np.atleast_1d(rslt[rEffVar])[0]
     lInd = np.r_[lEdg[lEdgInd]:min(lEdg[lEdgInd]+maxL,Nlambda)]
     vol = scipy.integrate.simps(rslt['vol'][0]*rslt['dVdlnr'][0,:]/rslt['r'][0,:], rslt['r'][0,:]) # vol is volume of full lognormal! Need to integrate ourselves b/c some of the volume may be truncated.
     bext_vol[binInd, lInd] = rslt['aod']/vol
@@ -208,7 +209,7 @@ for i, vnm in enumerate(Vars):
     print(Scl)
     ax[i].plot(optTblNew['lambda'], optTblNew['b'+vnm].T/Scl)
     ax[i].set_xlim([0.3, 3.0])
-    ax[i].set_xlabel('wavelength')   
+    ax[i].set_xlabel('wavelength')
     ax[i].set_ylabel('$q_{' + vnm[:-4] + '}$')
 ax[0].legend(['Mode %d' % int(x+1) for x in range(optTblNew['b'+vnm].shape[0])])
 ax[0].set_prop_cycle(None)
