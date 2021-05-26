@@ -607,7 +607,8 @@ class graspRun():
                     self._CVnc4('vol', 'Volume concentration of aerosol in each mode', (tName, mName), varHnds, key, rsltDict, root_grp, units='μm3/μm2')
                     self._CVnc4('rv', 'Median volume radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp, units='μm')
                     self._CVnc4('sigma', 'Standard deviations of modes [ln(σg)]', (tName, mName), varHnds, key, rsltDict, root_grp)
-                    self._CVnc4('rEffMode', 'Effective radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp)
+                    if 'rEffMode' in rsltDict[0] and Nmodes==len(rsltDict[0]['rEffMode']): # b/c we have _addReffMode() method in simulateRetrieval the number of rEffModes does not always match other variables  
+                        self._CVnc4('rEffMode', 'Effective radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('rEff', 'Total effective radii', (tName,), varHnds, key, rsltDict, root_grp, units='μm')
                     self._CVnc4('LidarRatio', 'Total lidar ratio', (tName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('height', 'Gaussian layer median height', (tName, mName), varHnds, key, rsltDict, root_grp, units='m')
