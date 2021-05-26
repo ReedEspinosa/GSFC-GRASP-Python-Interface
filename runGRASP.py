@@ -88,9 +88,7 @@ class graspDB():
             failedRuns = np.array([pObj.returncode for pObj in pObjs])>0
             for flRn in failedRuns.nonzero()[0]:
                 print(' !!! Exit code %d in: %s' % (pObjs[flRn].returncode, self.grObjs[flRn].dirGRASP))
-                for line in iter(pObjs[flRn].stdout.readline, b''):
-                    errMtch = re.match('^ERROR:.*$', line.decode("utf-8"))
-                    if errMtch is not None: print(errMtch.group(0))
+                pObjs[flRn]._printError()
             [pObj.stdout.close() for pObj in pObjs]
         else:
             # N steps through self.grObjs maxCPU's at a time
@@ -405,10 +403,18 @@ class graspRun():
         if not parallel:
             print('Running GRASP...')
 #            self.pObj.wait()
-            self.pObj.communicate() # This seems to keep things from hanging if there is a lot of output...
+            output = self.pObj.communicate() # This seems to keep things from hanging if there is a lot of output...
+            if len(output)>0 and self.verbose: print('>>> GRASP SAYS:\n %s' % output[0].decode("utf-8"))
+            # if self.pObj.returncode > 0: self._printError()
             self.pObj.stdout.close()
             self.invRslt = self.readOutput() # Why store rsltDict only if not parallel? I guess to keep it from being stored twice in memory in graspDB case?
         return self.pObj # returns Popen object, (PopenObj.poll() is not None) == True when complete
+
+    def _printError(self):
+        print('>>> GRASP SAYS:')
+        for line in iter(self.pObj.stdout.readline, b''):
+            errMtch = re.match('^ERROR:.*$', line.decode("utf-8"))
+            if errMtch is not None: print(errMtch.group(0))
 
     def readOutput(self, customOUT=None): # customOUT is full path of unrelated output file to read
         if customOUT is None and not self.pObj:
@@ -881,7 +887,7 @@ class graspRun():
         #        wvlInd = int(pixMatch.group(2))-1
                 wvlVal = float(pixMatch.group(3))
                 try:
-                    wvlInd = np.nonzero(np.isclose(wavelengths, wvlVal, rtol=1e-3))[0][0]
+                    wvlInd = np.nonzero(np.isclose(wavelengths, wvlVal, atol=1e-3))[0][0] # this matches them if they are within 1 nm
                 except IndexError:
                     msg = 'λ = %5.3f μm on line %d of GRASP output contents was not found in wavelengths!' % (wvlVal, i)
                     print('\x1b[1;31m'+msg+'\x1b[0m')
@@ -957,7 +963,7 @@ class pixel():
         self.lon = lon
         self.lat = lat
         self.masl = masl
-        self.land_prct = self.set_land_prct(land_prct)
+        self.set_land_prct(land_prct)
         self.nwl = 0
         self.measVals = []
 
@@ -970,6 +976,7 @@ class pixel():
     def addMeas(self, wl, msTyp=[], nbvm=[], sza=[], thtv=[], phi=[], msrmnts=[], errModel=None): # this is called once for each wavelength of data (see frmtMsg below)
         """Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)"""
         assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!'
+        if type(msTyp) is int: msTyp=[msTyp]
         newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts, errorModel=errModel)
         newMeas = self.formatMeas(newMeas)
         insertInd = np.nonzero([z['wl'] > newMeas['wl'] for z in self.measVals])[0] # we want to insert in order

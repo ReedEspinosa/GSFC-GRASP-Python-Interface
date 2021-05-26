@@ -166,10 +166,10 @@ class simulation(object):
     def _addReffMode(self, modeCut=None):
         oneAdded = False
         if 'rEffMode' not in self.rsltFwd[0] and ('rv' in self.rsltFwd[0] or 'dVdlnr' in self.rsltFwd[0]):
-            for rf in self.rsltFwd: rf['rEffMode'] = self.ReffMode(rf, modeCut=modeCut)
+            for rf in self.rsltFwd: rf['rEffMode'] = self.ReffMode(rf, modeCut=modeCut).squeeze()
             oneAdded = not oneAdded
         if 'rEffMode' not in self.rsltBck[0] and ('rv' in self.rsltBck[0] or 'dVdlnr' in self.rsltBck[0]):
-            for rb in self.rsltBck: rb['rEffMode'] = self.ReffMode(rb, modeCut=modeCut)
+            for rb in self.rsltBck: rb['rEffMode'] = self.ReffMode(rb, modeCut=modeCut).squeeze()
             oneAdded = not oneAdded
         if oneAdded:
             warnings.warn('We added rEffMode to one of fwd/bck but not the other. This may cause inconsistency if definitions differ.')
