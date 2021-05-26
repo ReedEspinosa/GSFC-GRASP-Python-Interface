@@ -97,6 +97,8 @@ class simulation(object):
         if not dryRun:
             self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
             assert len(self.rsltBck)>0, 'Inversion output could not be read, halting the simulation (no data was saved).'
+            if 'pixNumber' in self.rsltFwd[0]: self._rsltFwdInd2rsltBck()
+            self._addReffMode(modeCut=0.5) # try to create mode resolved rEff with split at 0.5 μm (if it isn't already there)
             # SAVE RESULTS
             if savePath: self.saveSim(savePath, lightSave, verbose)
         else:
@@ -115,6 +117,19 @@ class simulation(object):
             shutil.make_archive(fullSaveDir, 'zip', fullSaveDir)
             shutil.rmtree(fullSaveDir)
         return gObjFwd, gDB.grObjs
+
+    def _rsltFwdInd2rsltBck(self):
+        assert len(self.rsltBck)==len(self.rsltFwd), 'rsltFwd (N=%d) and rsltBck (N=%d) must be same length to transfer pixNumber indices!' % (len(self.rsltBck), len(self.rsltFwd))
+        warned = False
+        for rb,rf in zip(self.rsltBck, self.rsltFwd):
+            latMisMatch = 'latitude' in rf and 'latitude' in rb and not np.isclose(rf['latitude'], rb['latitude'], rtol=0.001)
+            lonMisMatch = 'longitude' in rf and 'longitude' in rb and not np.isclose(rf['longitude'], rb['longitude'], rtol=0.001)
+            if lonMisMatch or latMisMatch:
+                if not warned: warnings.warn('rsltFwd and rsltBck LAT and/or LON did not match for at least one pixel, setting pixNumber=-1')
+                rb['pixNumber'] = -1
+                warned = True
+            else:
+                rb['pixNumber'] = rf['pixNumber']
 
     def saveSim(self, savePath, lightSave=False, verbose=False):
         if not os.path.exists(os.path.dirname(savePath)):
@@ -147,6 +162,17 @@ class simulation(object):
             except EOFError: # this was an older file (created before Jan 2020)
                 self.rsltFwd = [self.rsltBck[-1]] # resltFwd as a array of len==0 (not totaly backward compatible, it used to be straight dict)
                 self.rsltBck = self.rsltBck[:-1]
+
+    def _addReffMode(self, modeCut=None):
+        oneAdded = False
+        if 'rEffMode' not in self.rsltFwd[0] and ('rv' in self.rsltFwd[0] or 'dVdlnr' in self.rsltFwd[0]):
+            for rf in self.rsltFwd: rf['rEffMode'] = self.ReffMode(rf, modeCut=modeCut).squeeze()
+            oneAdded = not oneAdded
+        if 'rEffMode' not in self.rsltBck[0] and ('rv' in self.rsltBck[0] or 'dVdlnr' in self.rsltBck[0]):
+            for rb in self.rsltBck: rb['rEffMode'] = self.ReffMode(rb, modeCut=modeCut).squeeze()
+            oneAdded = not oneAdded
+        if oneAdded:
+            warnings.warn('We added rEffMode to one of fwd/bck but not the other. This may cause inconsistency if definitions differ.')
 
     def conerganceFilter(self, χthresh=None, σ=None, forceχ2Calc=False, verbose=False, minSaved=2): # TODO: LIDAR bins with ~0 concentration are dominating this metric...
         """ Only removes data from resltBck if χthresh is provided, χthresh=1.5 seems to work well
@@ -294,11 +320,7 @@ class simulation(object):
         varsMorph = ['rv', 'sigma', 'sph', 'rEffMode', 'rEffCalc', 'rEff', 'height']
         varsAodAvg = ['n', 'k'] # modal variables for which we will append aod weighted average RMSE and BIAS value at the FIRST element (expected to be spectral quantity)
         modalVars = ['rv', 'sigma', 'sph', 'aodMode', 'ssaMode','rEffMode', 'n', 'k', 'LidarRatioMode'] # variables for which we find fine/coarse or FT/PBL errors seperately
-        # calculate variables that weren't loaded (rEffMode)
-        if 'rEffMode' not in self.rsltFwd[0] and 'rv' in self.rsltFwd[0]:
-            for rf in self.rsltFwd: rf['rEffMode'] = self.ReffMode(rf)
-        if 'rEffMode' not in self.rsltBck[0] and 'rv' in self.rsltBck[0]:
-            for rb in self.rsltBck: rb['rEffMode'] = self.ReffMode(rb)
+        self._addReffMode() # calculate variables that weren't loaded (rEffMode)
         if hghtCut is not None:
             if not (type(hghtCut) is np.ndarray or type(hghtCut) is list):
                 hghtCut = np.full(len(self.rsltBck), hghtCut)
@@ -451,7 +473,7 @@ class simulation(object):
 
     def ReffMode(self, rs, modeCut=None):
         if 'rv' in rs and 'sigma' in rs:
-            if not modeCut:
+            if modeCut is None:
                 rv_dndr = rs['rv']/np.exp(3*rs['sigma']**2)
                 return rv_dndr*np.exp(5/2*rs['sigma']**2) # eq. 60 from Grainger's "Useful Formulae for Aerosol Size Distributions"
             Vfc = self.volWghtedAvg(None, [rs], modeCut)
@@ -459,11 +481,9 @@ class simulation(object):
             Afc = self.volWghtedAvg(None, [rs], modeCut, Amode)
             return Vfc/Afc # NOTE: ostensibly this should be Vfc/Afc/3 but we ommited the factor of 3 from Amode as well
         elif 'dVdlnr' in rs and 'r' in rs:
-            if not modeCut: return ms.effRadius(rs['r'], rs['dVdlnr'])
+            if modeCut is None: return ms.effRadius(rs['r'], rs['dVdlnr'])
             dvdlnr = np.atleast_2d(rs['dVdlnr'])
             radii = np.atleast_2d(rs['r'])[0,:] # we are assuming every mode has the same radii bins here...
-            for i,(vol,psd) in enumerate(zip(np.atleast_1d(rs['vol']), dvdlnr)): # loop through modes
-                dvdlnr[i] = psd*vol/np.trapz(psd/radii, x=radii) # scale to real units (i.e. "unnormalize" it)
             fnCrsReff = np.empty(2)
             for i,vldInd in enumerate([radii<=modeCut, radii>modeCut]): # loop twice, calculating fine then coarse result
                 fnCrsReff[i] = ms.effRadius(radii[vldInd], dvdlnr[:,vldInd].sum(axis=0)) # sum over modes to obtain total PSD, then calculate rEff

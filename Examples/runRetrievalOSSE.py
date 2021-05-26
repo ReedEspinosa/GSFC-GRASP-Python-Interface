@@ -57,17 +57,16 @@ oceanOnly = False
 noiseFree = True
 
 # general version integer to distinguish output files of different runs
-vrsn = 109
+vrsn = 111
 
 # wavelengths (μm); if we only want specific λ set it here, otherwise use every λ found in the netCDF files
 wvls = [0.355, 0.36, 0.38, 0.41, 0.532, 0.55, 0.67, 0.87, 1.064, 1.55, 1.65]
 
 # specific pixels to run; set to None to run all pixels (likely very slow)
-# [NOTE: I think these indices correspond to the data after filtering for SZA, oceanOnly, etc. (Thus, changing filtering will change which number index goes with what pixel)]
-pixInd = [7375, 1444, 1359, 929, 4654, 6574, 2786, 6461, 6897, 2010] # SS Aug 2006
+pixInd = [0, 2, 4, 6, 335, 6738, 6876, 9702] # SS Random Aug 2006 ind>6 are high AOD
 
 # save output here instead of within osseDataPath (None to disable)
-customOutDir = os.path.join(basePath, 'synced', 'Working', 'OSSE_Test_Run')
+customOutDir = os.path.join(basePath, 'Synced', 'Working', 'OSSE_Test_Run')
 
 # create osseData instance w/ pixels from specified date/time (detail on these arguments in comment near top of osseData class's __init__ near readOSSEnetCDF.py:30)
 od = osseData(osseDataPath, orbit, year, month, day, hour, random=random, wvls=wvls, pixInd=pixInd,
