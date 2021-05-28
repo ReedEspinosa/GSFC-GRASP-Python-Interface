@@ -122,8 +122,8 @@ class simulation(object):
         assert len(self.rsltBck)==len(self.rsltFwd), 'rsltFwd (N=%d) and rsltBck (N=%d) must be same length to transfer pixNumber indices!' % (len(self.rsltBck), len(self.rsltFwd))
         warned = False
         for rb,rf in zip(self.rsltBck, self.rsltFwd):
-            latMisMatch = 'latitude' in rf and 'latitude' in rb and not np.isclose(rf['latitude'], rb['latitude'], rtol=0.001)
-            lonMisMatch = 'longitude' in rf and 'longitude' in rb and not np.isclose(rf['longitude'], rb['longitude'], rtol=0.001)
+            latMisMatch = 'latitude' in rf and 'latitude' in rb and not np.isclose(rf['latitude'], rb['latitude'], atol=0.01)
+            lonMisMatch = 'longitude' in rf and 'longitude' in rb and not np.isclose(rf['longitude'], rb['longitude'], atol=0.01)
             if lonMisMatch or latMisMatch:
                 if not warned: warnings.warn('rsltFwd and rsltBck LAT and/or LON did not match for at least one pixel, setting pixNumber=-1')
                 rb['pixNumber'] = -1
