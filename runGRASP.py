@@ -545,8 +545,7 @@ class graspRun():
             varHnds[visName][:] = np.r_[0:Nang]
             varHnds[visName].units = 'none'
             varHnds[visName].long_name = 'Viewing angle index'
-            inconsistRadii = rsltDict[0]['r'].ndim>1 and np.diff(rsltDict[0]['r'], axis=0).any()
-            if 'r' in rsltDict[0] and not inconsistRadii:
+            if 'r' in rsltDict[0] and not (rsltDict[0]['r'].ndim>1 and np.diff(rsltDict[0]['r'], axis=0).any()):
                 radiiName = 'radius'
                 Nradii = rsltDict[0]['r'].shape[1] if rsltDict[0]['r'].ndim==2 else rsltDict[0]['r'].shape[0]
                 root_grp.createDimension(radiiName, Nradii)
@@ -607,7 +606,7 @@ class graspRun():
                     self._CVnc4('vol', 'Volume concentration of aerosol in each mode', (tName, mName), varHnds, key, rsltDict, root_grp, units='μm3/μm2')
                     self._CVnc4('rv', 'Median volume radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp, units='μm')
                     self._CVnc4('sigma', 'Standard deviations of modes [ln(σg)]', (tName, mName), varHnds, key, rsltDict, root_grp)
-                    if 'rEffMode' in rsltDict[0] and Nmodes==len(rsltDict[0]['rEffMode']): # b/c we have _addReffMode() method in simulateRetrieval the number of rEffModes does not always match other variables  
+                    if 'rEffMode' in rsltDict[0] and Nmodes==len(rsltDict[0]['rEffMode']): # b/c we have _addReffMode() method in simulateRetrieval the number of rEffModes does not always match other variables
                         self._CVnc4('rEffMode', 'Effective radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('rEff', 'Total effective radii', (tName,), varHnds, key, rsltDict, root_grp, units='μm')
                     self._CVnc4('LidarRatio', 'Total lidar ratio', (tName, λName), varHnds, key, rsltDict, root_grp)
