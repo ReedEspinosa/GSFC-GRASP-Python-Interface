@@ -421,7 +421,7 @@ class simulation(object):
             self.addProfFromGuassian(self.rsltBck, rsltRange)
             return
         if 'range' in rslts[0]: return # profiles are already there
-        if rsltRange is None: rsltRange = np.linspace(1, 2e4, 1e3)
+        if rsltRange is None: rsltRange = np.linspace(1, 2e4, int(1e3))
         for rslt in rslts:
             Nmodes = len(rslt['height'])
             rslt['range'] = np.empty([Nmodes,len(rsltRange)])
