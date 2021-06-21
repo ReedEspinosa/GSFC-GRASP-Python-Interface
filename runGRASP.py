@@ -88,7 +88,7 @@ class graspDB():
             failedRuns = np.array([pObj.returncode for pObj in pObjs])>0
             for flRn in failedRuns.nonzero()[0]:
                 print(' !!! Exit code %d in: %s' % (pObjs[flRn].returncode, self.grObjs[flRn].dirGRASP))
-                pObjs[flRn]._printError()
+                self.grObjs[flRn]._printError()
             [pObj.stdout.close() for pObj in pObjs]
         else:
             # N steps through self.grObjs maxCPU's at a time
