@@ -163,12 +163,12 @@ class simulation(object):
                 self.rsltFwd = [self.rsltBck[-1]] # resltFwd as a array of len==0 (not totaly backward compatible, it used to be straight dict)
                 self.rsltBck = self.rsltBck[:-1]
 
-    def _addReffMode(self, modeCut=None):
+    def _addReffMode(self, modeCut=None, Force=False):
         oneAdded = False
-        if 'rEffMode' not in self.rsltFwd[0] and ('rv' in self.rsltFwd[0] or 'dVdlnr' in self.rsltFwd[0]):
+        if Force or ('rEffMode' not in self.rsltFwd[0] and ('rv' in self.rsltFwd[0] or 'dVdlnr' in self.rsltFwd[0])):
             for rf in self.rsltFwd: rf['rEffMode'] = self.ReffMode(rf, modeCut=modeCut).squeeze()
             oneAdded = not oneAdded
-        if 'rEffMode' not in self.rsltBck[0] and ('rv' in self.rsltBck[0] or 'dVdlnr' in self.rsltBck[0]):
+        if Force or ('rEffMode' not in self.rsltBck[0] and ('rv' in self.rsltBck[0] or 'dVdlnr' in self.rsltBck[0])):
             for rb in self.rsltBck: rb['rEffMode'] = self.ReffMode(rb, modeCut=modeCut).squeeze()
             oneAdded = not oneAdded
         if oneAdded:
@@ -505,7 +505,7 @@ class simulation(object):
                 r = np.logspace(np.log10(lwr),np.log10(upr),N)
                 crsWght.append([np.trapz(ms.logNormal(mu, σ, r)[0],r) for mu,σ in zip(rslt['rv'],rslt['sigma'])]) # integrated r 0->inf this will sum to unity
             if not np.isclose(np.sum(crsWght, axis=0), 1, rtol=0.001).all():
-                warnings.warn('The sum of the crsWght values across all modes was greater than 0.1% from unity') # probably need to adjust N or sigma4 above
+                warnings.warn('The sum of the crsWght values across all modes deviated more than 0.1% from unity') # probably need to adjust N or sigma4 above
             if val is None: # we just want volume (or area if vol arugment contains area) concentration of each mode
                 if vol is None:
                     crsWght = np.array(crsWght)*rslt['vol']
