@@ -39,7 +39,7 @@ class simulation(object):
         Nsims -> number of noise perturbations applied to each fwd model [Nsims*len(fwdData) total retrievals]
         maxCPU -> the retrieval load will be spread accross maxCPU processes
         binPathGRASP -> path to GRASP binary, if None default from graspRun is used
-        savePath -> path to save pickle w/ simulated retrieval results, lightSave -> remove PM data to save space
+        savePath -> path to save pickle w/ simulated retrieval results, lightSave -> remove PM and extinction profile data to save space
         intrnlFileGRASP -> alternative path to GRASP kernels, overwrites value in YAML files
         releaseYAML=True -> auto adjust back yaml Nλ and number of vertical bins to match the forward simulated data
         rndIntialGuess=True -> overwrite initial guesses in bckYAML w/ uniformly distributed random values between min & max
@@ -136,7 +136,7 @@ class simulation(object):
             print('savePath (%s) did not exist, creating it...' % os.path.dirname(savePath))
             os.makedirs(os.path.dirname(savePath))
         if lightSave:
-            for pmStr in ['p11','p12','p22','p33','p34','p44']:
+            for pmStr in ['angle', 'p11','p12','p22','p33','p34','p44','range','βext']:
                 [rb.pop(pmStr, None) for rb in self.rsltBck]
                 if len(self.rsltFwd) > 1: [rf.pop(pmStr, None) for rf in self.rsltFwd]
         if verbose: print('Saving simulation results to %s' %  savePath)
