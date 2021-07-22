@@ -102,7 +102,7 @@ else: # perform calculations
             gspRunNow.addPix(nowPix)
             gspRun.append(gspRunNow)
     gDB = rg.graspDB(gspRun, maxCPU)
-    rslts = gDB.processData(savePath=savePath_netCDF[0:-2]+'pkl', binPathGRASP=binPathGRASP, krnlPathGRASP=GRASPkrnls)
+    rslts = gDB.processData(savePath=savePath_netCDF[0:-2]+'pkl', binPathGRASP=binPathGRASP, krnlPathGRASP=GRASPkrnls)[0]
 root_grp = Dataset(savePath_netCDF, 'w', format='NETCDF4')
 #root_grp = Dataset('/Users/wrespino/Desktop/netCDF_TEST.nc', 'w', format='NETCDF4')
 root_grp.description = 'Single scattering properties of dust bins derived with GRASP'

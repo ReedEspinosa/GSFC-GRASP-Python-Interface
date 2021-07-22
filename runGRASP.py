@@ -81,6 +81,7 @@ class graspDB():
                 if sum([pObj.poll() is None for pObj in pObjs]) < maxCPUs:
                     print('Starting a new thread for graspRun index %d/%d' % (i+1, Nobjs))
                     if rndGuess: self.grObjs[i].yamlObj.scrambleInitialGuess(rndGuess)
+                    if i=1: self.grObjs[i].pixels[0].masl = 1e9 # HACK TO BREAK GRASP AND TEST GRACEFULL EXIT
                     pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP, krnlPathGRASP))
                     i += 1
                 time.sleep(0.1)
@@ -99,15 +100,15 @@ class graspDB():
             # failedRuns = [bool with true for grObjs that failed to run with exit code 0]
             assert False, 'DIRECT USE OF SLURM IS NOT YET SUPPORTED'
         self.rslts = []
-#        [self.rslts.extend(grObj.readOutput()) for grObj in self.grObjs[~failedRuns]]
         [self.rslts.extend(self.grObjs[i].readOutput()) for i in np.nonzero(~failedRuns)[0]]
+        failedRunsPixLev = np.hstack([np.repeat(failed, len(grObj.pixels)) for grObj,failed in zip(grObjs,failedRuns)])
         dtSec = time.time() - t0
         print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dtSec, len(self.rslts)/dtSec))
         if savePath:
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
         self.rslts = np.array(self.rslts) # numpy lists indexed w/ only assignment (no copy) but prior code built for std. list
-        return self.rslts
+        return self.rslts, failedRunsPixLev
 
     def loadResults(self, loadPath):
         try:

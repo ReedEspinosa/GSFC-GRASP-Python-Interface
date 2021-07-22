@@ -67,14 +67,12 @@ class simulation(object):
                 gObjFwd.append(rg.graspRun(fd))
                 gObjFwd[-1].addPix(pix)
             gDBFwd = rg.graspDB(gObjFwd, maxCPU=maxCPU)
-            self.rsltFwd = gDBFwd.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=False)
+            self.rsltFwd = gDBFwd.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=False)[0]
             assert len(self.rsltFwd)==len(fwdData), 'Forward calucation was not fully successfull, halting the simulation.'
         elif type(fwdData[0]) == dict: # likely OSSE from netCDF
             self.rsltFwd = fwdData
         else:
             assert False, 'Unrecognized data type, fwdModelYAMLpath should be path to YAML file or a DICT!'
-        gObjFwd = rg.graspRun()
-        gObjFwd.invRslt = self.rsltFwd # just for output
         if self.nowPix is None: self.nowPix = [rg.pixel()] # nowPix is optional argument in OSSE case, make sure it exists <<<<<
         loopInd = np.tile(np.r_[0:len(self.rsltFwd)], Nsims)
         if verbose: print('Forward model "truth" obtained')
@@ -95,8 +93,9 @@ class simulation(object):
         if len(self.rsltFwd)>1: self.rsltFwd = np.tile(self.rsltFwd, Nsims) # make len(rsltBck)==len(rsltFwd)... very memory inefficient though so only do it in more complicated len(self.rstlFwd)>1 cases
         gDB = rg.graspDB(gObjBck, maxCPU=maxCPU, maxT=maxT)
         if not dryRun:
-            self.rsltBck = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
-            assert len(self.rsltBck)>0, 'Inversion output could not be read, halting the simulation (no data was saved).'
+            self.rsltBck, failedRuns = gDB.processData(maxCPU, binPathGRASP, krnlPathGRASP=intrnlFileGRASP, rndGuess=rndIntialGuess)
+            assert len(self.rsltBck)>0, 'No inversion output could be read, halting the simulation (no data was saved).'
+            if failedRuns.any():  self.rsltFwd = [rf for rf,failed in zip(self.rsltFwd, failedRuns) if failed==False] # remove runs from rsltFwd for which the inversion was not succesful
             if 'pixNumber' in self.rsltFwd[0]: self._rsltFwdInd2rsltBck()
             self._addReffMode(modeCut=0.5) # try to create mode resolved rEff with split at 0.5 μm (if it isn't already there)
             # SAVE RESULTS
@@ -116,7 +115,7 @@ class simulation(object):
                 shutil.copytree(gb.dirGRASP, os.path.join(fullSaveDir,'inversion%03d' % i))
             shutil.make_archive(fullSaveDir, 'zip', fullSaveDir)
             shutil.rmtree(fullSaveDir)
-        return gObjFwd, gDB.grObjs
+        return
 
     def _rsltFwdInd2rsltBck(self):
         assert len(self.rsltBck)==len(self.rsltFwd), 'rsltFwd (N=%d) and rsltBck (N=%d) must be same length to transfer pixNumber indices!' % (len(self.rsltFwd), len(self.rsltBck))
