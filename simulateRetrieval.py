@@ -39,7 +39,7 @@ class simulation(object):
         Nsims -> number of noise perturbations applied to each fwd model [Nsims*len(fwdData) total retrievals]
         maxCPU -> the retrieval load will be spread accross maxCPU processes
         binPathGRASP -> path to GRASP binary, if None default from graspRun is used
-        savePath -> path to save pickle w/ simulated retrieval results, lightSave -> remove PM data to save space
+        savePath -> path to save pickle w/ simulated retrieval results, lightSave -> remove PM and extinction profile data to save space
         intrnlFileGRASP -> alternative path to GRASP kernels, overwrites value in YAML files
         releaseYAML=True -> auto adjust back yaml Nλ and number of vertical bins to match the forward simulated data
         rndIntialGuess=True -> overwrite initial guesses in bckYAML w/ uniformly distributed random values between min & max
@@ -119,11 +119,11 @@ class simulation(object):
         return gObjFwd, gDB.grObjs
 
     def _rsltFwdInd2rsltBck(self):
-        assert len(self.rsltBck)==len(self.rsltFwd), 'rsltFwd (N=%d) and rsltBck (N=%d) must be same length to transfer pixNumber indices!' % (len(self.rsltBck), len(self.rsltFwd))
+        assert len(self.rsltBck)==len(self.rsltFwd), 'rsltFwd (N=%d) and rsltBck (N=%d) must be same length to transfer pixNumber indices!' % (len(self.rsltFwd), len(self.rsltBck))
         warned = False
         for rb,rf in zip(self.rsltBck, self.rsltFwd):
-            latMisMatch = 'latitude' in rf and 'latitude' in rb and not np.isclose(rf['latitude'], rb['latitude'], rtol=0.001)
-            lonMisMatch = 'longitude' in rf and 'longitude' in rb and not np.isclose(rf['longitude'], rb['longitude'], rtol=0.001)
+            latMisMatch = 'latitude' in rf and 'latitude' in rb and not np.isclose(rf['latitude'], rb['latitude'], atol=0.01)
+            lonMisMatch = 'longitude' in rf and 'longitude' in rb and not np.isclose(rf['longitude'], rb['longitude'], atol=0.01)
             if lonMisMatch or latMisMatch:
                 if not warned: warnings.warn('rsltFwd and rsltBck LAT and/or LON did not match for at least one pixel, setting pixNumber=-1')
                 rb['pixNumber'] = -1
@@ -136,7 +136,7 @@ class simulation(object):
             print('savePath (%s) did not exist, creating it...' % os.path.dirname(savePath))
             os.makedirs(os.path.dirname(savePath))
         if lightSave:
-            for pmStr in ['p11','p12','p22','p33','p34','p44']:
+            for pmStr in ['angle', 'p11','p12','p22','p33','p34','p44','range','βext']:
                 [rb.pop(pmStr, None) for rb in self.rsltBck]
                 if len(self.rsltFwd) > 1: [rf.pop(pmStr, None) for rf in self.rsltFwd]
         if verbose: print('Saving simulation results to %s' %  savePath)
@@ -163,12 +163,12 @@ class simulation(object):
                 self.rsltFwd = [self.rsltBck[-1]] # resltFwd as a array of len==0 (not totaly backward compatible, it used to be straight dict)
                 self.rsltBck = self.rsltBck[:-1]
 
-    def _addReffMode(self, modeCut=None):
+    def _addReffMode(self, modeCut=None, Force=False):
         oneAdded = False
-        if 'rEffMode' not in self.rsltFwd[0] and ('rv' in self.rsltFwd[0] or 'dVdlnr' in self.rsltFwd[0]):
+        if Force or ('rEffMode' not in self.rsltFwd[0] and ('rv' in self.rsltFwd[0] or 'dVdlnr' in self.rsltFwd[0])):
             for rf in self.rsltFwd: rf['rEffMode'] = self.ReffMode(rf, modeCut=modeCut).squeeze()
             oneAdded = not oneAdded
-        if 'rEffMode' not in self.rsltBck[0] and ('rv' in self.rsltBck[0] or 'dVdlnr' in self.rsltBck[0]):
+        if Force or ('rEffMode' not in self.rsltBck[0] and ('rv' in self.rsltBck[0] or 'dVdlnr' in self.rsltBck[0])):
             for rb in self.rsltBck: rb['rEffMode'] = self.ReffMode(rb, modeCut=modeCut).squeeze()
             oneAdded = not oneAdded
         if oneAdded:
@@ -421,7 +421,7 @@ class simulation(object):
             self.addProfFromGuassian(self.rsltBck, rsltRange)
             return
         if 'range' in rslts[0]: return # profiles are already there
-        if rsltRange is None: rsltRange = np.linspace(1, 2e4, 1e3)
+        if rsltRange is None: rsltRange = np.linspace(1, 2e4, int(1e3))
         for rslt in rslts:
             Nmodes = len(rslt['height'])
             rslt['range'] = np.empty([Nmodes,len(rsltRange)])
@@ -505,7 +505,7 @@ class simulation(object):
                 r = np.logspace(np.log10(lwr),np.log10(upr),N)
                 crsWght.append([np.trapz(ms.logNormal(mu, σ, r)[0],r) for mu,σ in zip(rslt['rv'],rslt['sigma'])]) # integrated r 0->inf this will sum to unity
             if not np.isclose(np.sum(crsWght, axis=0), 1, rtol=0.001).all():
-                warnings.warn('The sum of the crsWght values across all modes was greater than 0.1% from unity') # probably need to adjust N or sigma4 above
+                warnings.warn('The sum of the crsWght values across all modes deviated more than 0.1% from unity') # probably need to adjust N or sigma4 above
             if val is None: # we just want volume (or area if vol arugment contains area) concentration of each mode
                 if vol is None:
                     crsWght = np.array(crsWght)*rslt['vol']

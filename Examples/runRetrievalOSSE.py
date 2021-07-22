@@ -11,11 +11,8 @@ import functools
 parentDir = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) # obtain THIS_FILE_PATH/../ in POSIX
 sys.path.append(parentDir) # that should be GRASP_Scripts – add it to Python path
 grandParentDir = os.path.dirname(parentDir)# THIS_FILE_PATH/../../ in POSIX (this is folder that contains GRASP_scripts and MADCAP_scripts
-# sys.path.append(os.path.join(grandParentDir, "MADCAP_scripts"))
-# sys.path.append(os.path.join(grandParentDir, "MADCAP_scripts","ACCP_ArchitectureAndCanonicalCases"))
-sys.path.append(os.path.join(grandParentDir, "MADCAP_Analysis"))
-sys.path.append(os.path.join(grandParentDir, "MADCAP_Analysis","ACCP_ArchitectureAndCanonicalCases"))
-
+sys.path.append(os.path.join(grandParentDir, "MADCAP_scripts"))
+sys.path.append(os.path.join(grandParentDir, "MADCAP_scripts","ACCP_ArchitectureAndCanonicalCases"))
 
 # import top level class that peforms the actual retrieval simulation; defined in THIS_FILE_PATH/../simulateRetrieval.py
 import simulateRetrieval as rs
@@ -27,17 +24,13 @@ from readOSSEnetCDF import osseData
 from architectureMap import returnPixel, addError
 
 # define other paths not having to do with the python code itself
-# basePath = os.environ['NOBACKUP']
-basePath = '/Users/wrespino/'
-bckYAMLpath = '/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes.yml'
-# bckYAMLpath = os.path.join(basePath, 'MADCAP_scripts','ACCP_ArchitectureAndCanonicalCases','settings_BCK_POLAR_2modes.yml') # location of retrieval YAML file
-dirGRASP = '/Users/wrespino/Synced/Local_Code_MacBook/grasp_open/build/bin/grasp' # location of the GRASP binary to use for retrievals
-# krnlPath = os.path.join(basePath, 'local/share/grasp/kernels') # location of GRASP kernel files
-krnlPath = None
-# osseDataPath = '/discover/nobackup/projects/gmao/osse2/pub/c1440_NR/OBS/A-CCP/' # base path for A-CCP OSSE data (contains gpm and ss450 folders)
-osseDataPath = '/Users/wrespino/Synced/MADCAP_CAPER/testCase_Aug01_0000Z_VersionJune2020'
+basePath = os.environ['NOBACKUP']
+bckYAMLpath = os.path.join(basePath, 'MADCAP_scripts','ACCP_ArchitectureAndCanonicalCases','settings_BCK_POLAR_2modes.yml') # location of retrieval YAML file
+dirGRASP = os.path.join(basePath, 'grasp_open/build/bin/grasp') # location of the GRASP binary to use for retrievals
+krnlPath = os.path.join(basePath, 'local/share/grasp/kernels') # location of GRASP kernel files
+osseDataPath = '/discover/nobackup/projects/gmao/osse2/pub/c1440_NR/OBS/A-CCP/' # base path for A-CCP OSSE data (contains gpm and ss450 folders)
 # if retrievals are divided up into multiple calls to GRASP, ensure the number of simultaneous processes is always ≤maxCPU
-maxCPU = 2
+maxCPU = 14
 
 # randomize initial guess in YAML file before retrieving
 rndIntialGuess = False
@@ -55,7 +48,7 @@ hour = 0
 orbit = 'ss450'
 
 # filter out pixels with mean SZA above this value (degrees)
-maxSZA = 70
+maxSZA = 90
 
 # true to skip retrievals on land pixels
 oceanOnly = False
@@ -70,7 +63,6 @@ vrsn = 111
 wvls = [0.355, 0.36, 0.38, 0.41, 0.532, 0.55, 0.67, 0.87, 1.064, 1.55, 1.65]
 
 # specific pixels to run; set to None to run all pixels (likely very slow)
-# [NOTE: I think these indices correspond to the data after filtering for SZA, oceanOnly, etc. (Thus, changing filtering will change which number index goes with what pixel)]
 pixInd = [0, 2, 4, 6, 335, 6738, 6876, 9702] # SS Random Aug 2006 ind>6 are high AOD
 
 # save output here instead of within osseDataPath (None to disable)
