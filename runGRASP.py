@@ -68,6 +68,7 @@ class graspDB():
             maxCPUs = self.maxCPU if self.maxCPU else 2
         usedDirs = []
         t0 = time.time()
+        # self.grObjs[1].pixels[0].masl = 1e9 # HACK TO BREAK GRASP AND TEST GRACEFULL EXIT
         for grObj in self.grObjs:
             if grObj.dirGRASP: # If not it will be deduced later when writing SDATA
                 assert (grObj.dirGRASP not in usedDirs), "Each graspRun instance must use a unique directory!"
@@ -81,7 +82,6 @@ class graspDB():
                 if sum([pObj.poll() is None for pObj in pObjs]) < maxCPUs:
                     print('Starting a new thread for graspRun index %d/%d' % (i+1, Nobjs))
                     if rndGuess: self.grObjs[i].yamlObj.scrambleInitialGuess(rndGuess)
-                    if i=1: self.grObjs[i].pixels[0].masl = 1e9 # HACK TO BREAK GRASP AND TEST GRACEFULL EXIT
                     pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP, krnlPathGRASP))
                     i += 1
                 time.sleep(0.1)
@@ -101,7 +101,7 @@ class graspDB():
             assert False, 'DIRECT USE OF SLURM IS NOT YET SUPPORTED'
         self.rslts = []
         [self.rslts.extend(self.grObjs[i].readOutput()) for i in np.nonzero(~failedRuns)[0]]
-        failedRunsPixLev = np.hstack([np.repeat(failed, len(grObj.pixels)) for grObj,failed in zip(grObjs,failedRuns)])
+        failedRunsPixLev = np.hstack([np.repeat(failed, len(grObj.pixels)) for grObj,failed in zip(self.grObjs,failedRuns)])
         dtSec = time.time() - t0
         print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dtSec, len(self.rslts)/dtSec))
         if savePath:
