@@ -63,7 +63,7 @@ cstmFwdYAML = setupConCaseYAML(conCase, nowPix, fwdModelYAMLpath, caseLoadFctr=Ï
 simA = rs.simulation(nowPix)
 
 # run the simulation, see below the definition of runSIM in simulateRetrieval.py for more input argument explanations
-gObjFwd, gObjBck = simA.runSim(cstmFwdYAML, bckYAMLpath, Nsims, maxCPU=maxCPU, savePath=savePath, \
+simA.runSim(cstmFwdYAML, bckYAMLpath, Nsims, maxCPU=maxCPU, savePath=savePath, \
             binPathGRASP=binGRASP, intrnlFileGRASP=krnlPath, releaseYAML=True, lightSave=True, \
             rndIntialGuess=False, dryRun=False, workingFileSave=True, verbose=True)
 
@@ -73,5 +73,5 @@ wavelengthValue = simA.rsltFwd[0]['lambda'][wavelengthIndex]
 print('RMS deviations (retrieved-truth) at wavelength of %5.3f Î¼m:' % wavelengthValue)
 pprint.pprint(simA.analyzeSim(0)[0])
 
-# save the some simulated truth data to a NetCDF file (this functionality needs expanding)
-gObjFwd.output2netCDF(savePath[:-4] + '_truth.nc4')
+# save simulated truth data to a NetCDF file
+simA.saveSim_netCDF(savePath[:-4], verbose=True)
