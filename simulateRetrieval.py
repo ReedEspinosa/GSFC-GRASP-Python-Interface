@@ -119,7 +119,7 @@ class simulation(object):
         return gObjFwd, gDB.grObjs
 
     def _rsltFwdInd2rsltBck(self):
-        assert len(self.rsltBck)==len(self.rsltFwd), 'rsltFwd (N=%d) and rsltBck (N=%d) must be same length to transfer pixNumber indices!' % (len(self.rsltBck), len(self.rsltFwd))
+        assert len(self.rsltBck)==len(self.rsltFwd), 'rsltFwd (N=%d) and rsltBck (N=%d) must be same length to transfer pixNumber indices!' % (len(self.rsltFwd), len(self.rsltBck))
         warned = False
         for rb,rf in zip(self.rsltBck, self.rsltFwd):
             latMisMatch = 'latitude' in rf and 'latitude' in rb and not np.isclose(rf['latitude'], rb['latitude'], atol=0.01)

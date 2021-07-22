@@ -10,11 +10,10 @@ from glob import glob
 waveInd = 3
 waveInd2 = 5
 fnPtrnList = []
-fnPtrn = 'ss450-g5nr.leV210.GRASP.example.polarimeter07.20060802_*z.pkl'
-# fnPtrn = 'ss450-g5nr.leV120.GRASP.example.polarimeter07.20060802_1200z.pkl'
-# fnPtrn = 'ss450-g5nr.leV901.GRASP.example.polarimeter07.random.20060801_0000z.pkl'
-inDirPath = '/Users/wrespino/Synced/Working/OSSE_Test_Run'
-surf2plot = 'ocean' # land, ocean or both
+#fnPtrn = 'ss450-g5nr.leV212.GRASP.example.polarimeter07.200608*_*z.pkl'
+fnPtrn = 'ss450-g5nr.leV30*.GRASP.example.polarimeter07.random.20060801_0000z.pkl'
+inDirPath = '/discover/nobackup/wrespino/OSSE_results_working/'
+surf2plot = 'land' # land, ocean or both
 aodMin = 0.1 # does not apply to first AOD plot
 
 xlabel = 'Simulated Truth'
@@ -270,8 +269,6 @@ tHnd = ax[1,2].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoor
 ttlStr = '%s (λ=%5.3fμm, %s surface, AOD≥%4.2f)' % (saveFN, simBase.rsltFwd[0]['lambda'][waveInd], surf2plot, aodMin)
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 plt.suptitle(ttlStr.replace('MERGED_',''))
-plt.ion()
-plt.show()
 
 # n
 true = np.asarray([rf['n'][waveInd] for rf in simBase.rsltFwd])[keepInd]
@@ -314,3 +311,10 @@ tHnd = ax[1,4].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(105, -154), va='
 textstr = frmt % (Rcoef, RMSE, bias)
 tHnd = ax[1,4].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
                     textcoords='offset points', color=clrText, fontsize=FS)
+
+
+figSavePath = saveFN.replace('pkl','png')
+print('Saving figure to: %s' % figSavePath)
+plt.savefig('/discover/nobackup/wrespino/synced/Working/OSSE_Test_Run/' + figSavePath)
+#plt.show()
+
