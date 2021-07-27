@@ -1,5 +1,3 @@
-#  `git clone /srv/git/GRASP_scripts.git` to get this code...
-
 from runGRASP import graspRun, pixel
 from matplotlib import pyplot as plt
 import os
@@ -11,10 +9,6 @@ import datetime as dt
 fwdModelYAMLpath = '/home/respinosa/Documents/settings_BiomassBurning.yml'
 
 # paths to GRASP binary and kernels
-# On Uranus, GRASP can be obtained and built with the three commands:
-# $ git clone /srv/git/GRASP_GSFC.git --branch VLIDORTMatch
-# $ cd GRASP_GSFC
-# $ make
 binPathGRASP = '/home/respinosa/GRASP_GSFC/build/bin/grasp'
 krnlPathGRASP = '/home/respinosa/GRASP_GSFC/src/retrieval/internal_files'
 
@@ -27,9 +21,10 @@ wvls = [0.34, 0.550] # wavelengths in μm
 msTyp = [41, 42, 43] # grasp measurements types (I, Q, U) [must be in ascending order]
 azmthΑng = np.r_[0:180:10] # azimuth angles to simulate (0,10,...,175)
 vza = np.r_[0:75:5] # viewing zenith angles to simulate [in GRASP cord. sys.]
+upwardLooking = False # False -> downward looking imagers, True -> upward looking
+
 clrMapReg = plt.cm.jet # color map for base value plots
 clrMapDiff = plt.cm.seismic # color map for difference plots
-upwardLooking = False # False -> downward looking imagers, True -> upward looking
 logOfReflectance = True # Plot the base 10 log of reflectance instead of actual value
 ttlStr = None # Top Title as string or None to skip
 wvStrFrmt =  '($%4.2f\\mu m$)' # Format of Y-axis labels 
@@ -47,7 +42,7 @@ nbvm = len(thtv_g)/len(msTyp)*np.ones(len(msTyp), int) # number of view angles p
 meas = np.r_[np.repeat(0.1, nbvm[0]), np.repeat(0.01, nbvm[1]), np.repeat(0.01, nbvm[2])] # dummy measurement values for I, Q and U, respectively 
 
 # initiate the "pixel" object we want to simulate
-nowPix = pixel(dt.datetime.now(), 1, 1, 0, 0, masl=0, land_prct=100)
+nowPix = pixel(dt.datetime.now(), 1, 1, 0, 0, masl=0, land_prct=0)
 for wvl in wvls: nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv_g, phi_g, meas)
 
 # setup "graspRun" object and run GRASP binary
@@ -83,7 +78,7 @@ for i in range(2): # loop over reflectance (i=0) and DoLP (i=1)
             clrMin = data[-1].min()
             clrMax = data[-1].max()
             clrMap = clrMapReg
-        else: # this is a difference plot      
+        else: # this is a difference plot  
             data.append(data[l-Nwvl+1] - data[0])
             labels.append(labels[l-Nwvl+1] + " – " + labels[0])
             clrMax = np.abs(data[-1]).max()
