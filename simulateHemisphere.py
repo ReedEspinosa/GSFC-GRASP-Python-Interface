@@ -2,23 +2,25 @@
 
 from runGRASP import graspRun, pixel
 from matplotlib import pyplot as plt
+import os
+if os.uname()[1]=='uranus': plt.switch_backend('agg')
 import numpy as np
 import datetime as dt
 
 # Path to the YAML file you want to use for the aerosol and surface definition
-fwdModelYAMLpath = '/Users/wrespino/Downloads/settings_Dust.yml'
+fwdModelYAMLpath = '/home/respinosa/Documents/settings_BiomassBurning.yml'
 
 # paths to GRASP binary and kernels
 # On Uranus, GRASP can be obtained and built with the three commands:
 # $ git clone /srv/git/GRASP_GSFC.git --branch VLIDORTMatch
 # $ cd GRASP_GSFC
 # $ make
-binPathGRASP = '/Users/wrespino/Synced/Local_Code_MacBook/grasp_open/build/bin/grasp'
-krnlPathGRASP = '/Users/wrespino/Synced/Local_Code_MacBook/grasp_open/src/retrieval/internal_files'
+binPathGRASP = '/home/respinosa/GRASP_GSFC/build/bin/grasp'
+krnlPathGRASP = '/home/respinosa/GRASP_GSFC/src/retrieval/internal_files'
 
 # path to save the figure (None to just display to screen)
-figSavePath = '/Users/wrespino/Downloads/dust_hemisphere.png'
-figSavePath = None
+figSavePath = '/home/respinosa/Documents/dust_hemisphere.png'
+# figSavePath = None
 
 sza = 30 # solar zenith angle
 wvls = [0.34, 0.550] # wavelengths in μm
@@ -97,13 +99,10 @@ for i in range(2): # loop over reflectance (i=0) and DoLP (i=1)
         ax[l,i].set_ylim([0, r.max()])
         if i==0: ax[l,i].set_ylabel(labels[-1], labelpad=30)
 Rtitle = 'log10(Reflectance)' if logOfReflectance else 'Reflectance'
-ax[0,0].set_title(Rtitle)
-ax[0,1].set_title('DoLP [%]')
-if ttlStr is not None: 
-    plt.suptitle(ttlStr)
-    plt.tight_layout(rect=[0.01, 0.01,0.98, 0.98])
-else:
-    plt.tight_layout()
+ax[0,0].set_title(Rtitle, y=1.2) # placement not consistent across all backends
+ax[0,1].set_title('DoLP [%]', y=1.2)
+if ttlStr is not None: plt.suptitle(ttlStr)
+plt.tight_layout(rect=[0.01, 0.01,0.98, 0.98])
 
 # display or save the new plots
 if figSavePath is None:
