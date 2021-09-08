@@ -1064,7 +1064,7 @@ class pixel():
             newMeas['thetav'] = np.abs(newMeas['thetav'])
         else:
             assert len(newMeas['phi'])==0 and len(newMeas['thetav'])==0, 'Angles were given but no measurement were present'
-        if np.any(newMeas['phi'] < 0): warnings.warn('GRASP RT performance is hindered when phi < 0, values in the range 0 < phi < 360 are preferred.')
+        if np.any(newMeas['phi'] < 0): warnings.warn('Minimum φ found was %5.2f. GRASP RT performance is hindered when phi < 0, values in the range 0 < phi < 360 are preferred.' % newMeas['phi'].min())
         assert newMeas['thetav'].shape[0]==newMeas['phi'].shape[0] and \
             newMeas['meas_type'].shape[0]==newMeas['nbvm'].shape[0] and \
             newMeas['nbvm'].sum()==newMeas['thetav'].shape[0], \
