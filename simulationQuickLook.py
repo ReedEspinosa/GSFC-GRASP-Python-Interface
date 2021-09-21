@@ -10,17 +10,18 @@ from glob import glob
 waveInd = 3
 waveInd2 = 5
 fnPtrnList = []
-#fnPtrn = 'ss450-g5nr.leV212.GRASP.example.polarimeter07.200608*_*z.pkl'
-fnPtrn = 'ss450-g5nr.leV30*.GRASP.example.polarimeter07.random.20060801_0000z.pkl'
+fnPtrn = 'ss450-g5nr.leV36*.GRASP.baseCase.polarimeter07.random.2006*.pkl'
+#fnPtrn = 'gpm-g5nr.leV30*.GRASP.example.polarimeter07.random.2006*_0000z.pkl'
 inDirPath = '/discover/nobackup/wrespino/OSSE_results_working/'
-surf2plot = 'land' # land, ocean or both
+surf2plot = 'ocean' # land, ocean or both
 aodMin = 0.1 # does not apply to first AOD plot
 
+fnTag = 'AllCases'
 xlabel = 'Simulated Truth'
 MS = 1
 FS = 10
 LW121 = 1
-pointAlpha = 0.15
+pointAlpha = 0.10
 clrText = [0.5,0,0.0]
 fig, ax = plt.subplots(2,5, figsize=(15.4,6.9))
 plt.locator_params(nbins=3)
@@ -90,6 +91,12 @@ tHnd = ax[0,0].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoor
 keepInd = np.logical_and(keepInd, [rf['aod'][waveInd]>=aodMin for rf in simBase.rsltFwd])
 print('%d/%d fit surface type %s and aod≥%4.2f' % (keepInd.sum(), len(simBase.rsltBck), surf2plot, aodMin))
 clrVar = np.sqrt([rb['costVal'] for rb in simBase.rsltBck[keepInd]])
+
+# apply Reff min
+simBase._addReffMode(0.008, True) # reframe so pretty much all of the PSD is in the second "coarse" mode
+#keepInd = np.logical_and(keepInd, [rf['rEffMode']>=2.0 for rf in simBase.rsltBck])
+#print('%d/%d fit surface type %s and aod≥%4.2f AND retrieved Reff>2.0μm' % (keepInd.sum(), len(simBase.rsltBck), surf2plot, aodMin))
+#clrVar = np.sqrt([rb['rEff']/rf['rEff']-1 for rb,rf in zip(simBase.rsltBck[keepInd], simBase.rsltFwd[keepInd])])
 
 
 # ANGSTROM
@@ -245,7 +252,7 @@ tHnd = ax[1,1].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoor
                     textcoords='offset points', color=clrText, fontsize=FS)
 
 # rEff
-simBase._addReffMode(0.008, True) # reframe so pretty much all of the PSD is in the second "coarse" mode
+#simBase._addReffMode(0.008, True) # reframe so pretty much all of the PSD is in the second "coarse" mode
 true = np.asarray([rf['rEffMode'][1] for rf in simBase.rsltFwd])[keepInd]
 rtrv = np.asarray([rf['rEffMode'][1] for rf in simBase.rsltBck])[keepInd]
 minAOD = np.min(true)*0.95
@@ -313,7 +320,7 @@ tHnd = ax[1,4].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoor
                     textcoords='offset points', color=clrText, fontsize=FS)
 
 
-figSavePath = saveFN.replace('pkl','png')
+figSavePath = saveFN.replace('.pkl',('_%s_%s_%04dnm.png' % (surf2plot, fnTag, simBase.rsltFwd[0]['lambda'][waveInd]*1000)))
 print('Saving figure to: %s' % figSavePath)
 plt.savefig('/discover/nobackup/wrespino/synced/Working/OSSE_Test_Run/' + figSavePath)
 #plt.show()
