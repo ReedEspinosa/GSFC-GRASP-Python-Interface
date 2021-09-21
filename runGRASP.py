@@ -14,11 +14,16 @@ from datetime import timedelta
 from shutil import copyfile
 from subprocess import Popen,PIPE
 import pandas as pd
-from netCDF4 import Dataset
 from scipy.stats import gaussian_kde
 import numpy as np
 import yaml # may require `conda install pyyaml`
 import miscFunctions as mf
+
+try:
+    from netCDF4 import Dataset
+    NC4_LOADED = True
+except ImportError:
+    NC4_LOADED = False
 
 try:
     import matplotlib.pyplot as plt
@@ -509,6 +514,9 @@ class graspRun():
             If customOUT is provided, data from GRASP output text file specified will be written to netCDF.
             If neither are provided the output text file associated with current instance will be written.
             seaLevel=True should be used with caution, see assumed ROD and depol. below. """
+        if not NC4_LOADED:
+            print('netCDF4 module failed to import, file could not be written.')
+            return
         rsltDict = self._findRslts(rsltDict, customOUT)
         with Dataset(nc4Path, 'w', format='NETCDF4') as root_grp: # open/create netCDF4 data file
             root_grp.description = 'Results of a GRASP run'
@@ -1056,7 +1064,7 @@ class pixel():
             newMeas['thetav'] = np.abs(newMeas['thetav'])
         else:
             assert len(newMeas['phi'])==0 and len(newMeas['thetav'])==0, 'Angles were given but no measurement were present'
-        if np.any(newMeas['phi'] < 0): warnings.warn('GRASP RT performance is hindered when phi < 0, values in the range 0 < phi < 360 are preferred.')
+        if np.any(newMeas['phi'] < 0): warnings.warn('Minimum φ found was %5.2f. GRASP RT performance is hindered when phi < 0, values in the range 0 < phi < 360 are preferred.' % newMeas['phi'].min())
         assert newMeas['thetav'].shape[0]==newMeas['phi'].shape[0] and \
             newMeas['meas_type'].shape[0]==newMeas['nbvm'].shape[0] and \
             newMeas['nbvm'].sum()==newMeas['thetav'].shape[0], \
