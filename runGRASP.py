@@ -40,7 +40,7 @@ class graspDB():
         The graspDB class is designed to run many instances of GRASP in parallel/sequence (depending on maxCPU and maxT below).
         It also contains a variety of (rather old) plotting functions to apply to many grasp results
         INPUTS: graspRunObjs - what it sounds like, a list of grasp run objects
-                maxCPU - the maximum number of GRASP process to run at any given time (each process consumes one core); None for no max
+                maxCPU - the maximum number of GRASP process to run at any given time (each process consumes one core); Default is 2
                 maxT - the maximum number of pixels to include in a single GRASP process; None for no max (not used if graspRunObjs is list)
         """
         self.maxCPU = maxCPU
@@ -453,6 +453,7 @@ class graspRun():
             for aero, surf, fit, pm in zip(rsltAeroDict, rsltSurfDict, rsltFitDict, rsltPMDict):
                 rsltDict.append({**aero, **surf, **fit, **pm})
         self.calcAsymParam(rsltDict)
+        self.invRslt = rsltDict
         return rsltDict
 
     def _findRslts(self, rsltDict=None, customOUT=None):
