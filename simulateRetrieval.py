@@ -514,3 +514,72 @@ class simulation(object):
             else:
                 Bimode[i] = np.sum(crsWght*val[i], axis=1)
         return Bimode
+        
+    def classifyAerosolType(self, verbose=False):
+        """
+        0 Dust
+        1 PolDust (only detected if vol_DU is available)
+        2 Marine
+        3 DevUrb
+        4 BB-White
+        5 BB-Dark
+        """
+        
+        mu = np.array([
+             [0.930, 1.51, -0.10],  # Dust
+             [999.9, 1.51, -0.10],  # Pol Dust XXX
+             [1.000, 1.40,  0.25],  # Marine (we'll set pol dust using dust frac)
+             [0.985, 1.37,  1.60],  # Urban/Industrial
+             [0.930, 1.49,  1.80],  # BB-White
+             [0.850, 1.53,  1.70]]) # BB-Dark 
+
+        s = np.array([
+             [0.015, 0.06, 0.05],  # Dust
+             [0.015, 0.06, 0.05],  # pol. Dust
+             [0.010, 0.02, 0.25],  # Marine
+             [0.010, 0.02, 0.15],  # Urban/Industrial
+             [0.025, 0.04, 0.20],  # BB-White
+             [0.035, 0.04, 0.20]]) # BB-Dark
+        
+        modeInd = 0 # use these mode resolved parameters (this method will currently produce strange results for multimodal data)
+        blui = np.abs(self.rsltFwd[0]['lambda']-0.41).argmin()
+        redi = np.abs(self.rsltFwd[0]['lambda']-0.670).argmin()
+        niri = np.abs(self.rsltFwd[0]['lambda']-0.870).argmin()
+        assert redi is not niri, 'Red and NIR wavelengths were the same. Can not calculate AE!'
+        for rf in self.rsltFwd:
+            if 'vol_DU' in rf: # use this to ID dust types if available
+                dustVolFrac = rf['vol_DU']/rf['vol']
+                if dustVolFrac > 0.65:
+                    rf['aeroType'] = 0
+                    continue
+                elif dustVolFrac > 0.16:
+                    rf['aeroType'] = 1
+                    continue
+            ssa = rf['ssa'][blui]
+            rri = np.atleast_2d(rf['n'])[modeInd, redi]
+            ae  = np.log(rf['aod'][blui]/rf['aod'][niri])/np.log(rf['lambda'][niri]/rf['lambda'][blui])
+            x = np.r_[ssa, rri, ae]
+            typeDist = [np.sqrt((x-mu[ti,:])**2/s[ti,:]).sum() for ti in range(mu.shape[0])]
+            rf['aeroType'] = np.argmin(typeDist)
+            if verbose and rf['aeroType'] == 1 and 'vol_DU' in rf:
+                print('Dust volume fraction was %f and we still IDed as dust' % (dustVolFrac))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
