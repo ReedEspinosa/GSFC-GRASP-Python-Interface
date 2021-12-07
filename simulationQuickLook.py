@@ -94,8 +94,8 @@ tHnd = ax[0,0].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoor
                     textcoords='offset points', color=clrText, fontsize=FS)
 
 # AAOD
-true = np.asarray([(1-rf['ssa'][waveInd])*rf['ssa'][waveInd] for rf in simBase.rsltFwd])[keepInd]
-rtrv = np.asarray([(1-rb['ssa'][waveInd])*rb['ssa'][waveInd] for rb in simBase.rsltBck])[keepInd]
+true = np.asarray([(1-rf['ssa'][waveInd])*rf['aod'][waveInd] for rf in simBase.rsltFwd])[keepInd]
+rtrv = np.asarray([(1-rb['ssa'][waveInd])*rb['aod'][waveInd] for rb in simBase.rsltBck])[keepInd]
 minAOD = np.min(true)*0.95
 # minAOD = 0.735
 maxAOD = 0.15
