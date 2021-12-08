@@ -7,7 +7,7 @@ from mpl_toolkits.basemap import Basemap
 # simBase = simulation(picklePath=savePATH)
 # simBase.classifyAerosolType(verbose=True)
 
-plt.figure(figsize=(10, 5.5))
+fig = plt.figure(figsize=(10, 5.5))
 m = Basemap(projection='merc', resolution='c', lon_0=0, llcrnrlon=-180, llcrnrlat=-40, urcrnrlon=180, urcrnrlat=80)
 # m.bluemarble(scale=1, alpha=0.5);
 # m.shadedrelief(scale=0.2)
@@ -28,26 +28,17 @@ x, y = m(lon, lat)
 
 cmapOrg = plt.get_cmap('Set1', 9)
 cmap = plt.get_cmap('Set1', 6)
-# cmap.colors = np.sqrt(cmapOrg.colors[[0,4,1,7,8,2],:])
 cmap.colors = cmapOrg.colors[[0,4,1,7,8,2],:]
-# cmap.colors[0,0] = cmap.colors[0,0] + 0.054
-# cmap.colors[0,1] = cmap.colors[0,1] - 0.04
-# cmap.colors[0,2] = cmap.colors[0,2] - 0.04
-# cmap.colors[1,1] = cmap.colors[1,1] - 0.2
-# cmap.colors[3] = np.sqrt(cmap.colors[3])
-# cmap.colors[4,0] = cmap.colors[4,0] - 0.05
-# cmap.colors[4,1] = cmap.colors[4,1] + 0.08
-# cmap.colors[4,2] = cmap.colors[4,2] - 0.05
-# cmap.colors[5,0] = cmap.colors[5,0] - 0.2
-# cmap.colors[5,2] = cmap.colors[5,2] - 0.2
 
 cmap.colors[1,1] = cmap.colors[1,1] - 0.05
 cmap.colors[1,2] = cmap.colors[1,2] + 0.05
+cmap.colors[1,3] = 0.7
 cmap.colors[4,0] = cmap.colors[4,0] - 0.0005
 cmap.colors[4,1] = cmap.colors[4,1] + 0.18
 cmap.colors[4,2] = cmap.colors[4,2] - 0.0005
-cmap.colors[5,0] = cmap.colors[5,0] - 0.2
-cmap.colors[5,2] = cmap.colors[5,2] - 0.2
+cmap.colors[5,0] = 0.35
+cmap.colors[5,1] = 0.42
+cmap.colors[5,2] = 0.2
 cmap.colors = cmap.colors**1.3
 cmap.colors[3] = np.sqrt(cmap.colors[3])
 
@@ -96,6 +87,9 @@ plt.tight_layout()
 # plt.tight_layout()
 # 
 
+fn = 'Aerosol_type_map_globe_V1.pdf'
+fig.savefig('/discover/nobackup/wrespino/synced/Working/AGU2021_Plots/%s' % fn)
+print('Plot saved as %s' % fn)
 
 plt.ion()
 plt.show()

@@ -1,5 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
+import matplotlib as mplb
 from simulateRetrieval import simulation
 from mpl_toolkits.basemap import Basemap
 
@@ -34,19 +35,19 @@ lat = [rb['latitude'] for rb in simBase.rsltBck]
 # label = 'Reff Error'
 # vals = np.array([np.log(rf['aod'][2]/rf['aod'][5])/np.log(rf['lambda'][5]/rf['lambda'][2]) for rf in simBase.rsltFwd])
 # label = 'True EAE'
-vals = [rf['ssa'][2] for rf in simBase.rsltFwd]
-label = 'True SSA'
+vals = [rf['aod'][3] for rf in simBase.rsltFwd]
+label = 'G5NR 0.55μm AOD'
 # vals = [rf['n'][4] for rf in simBase.rsltFwd]
 # label = 'True RRI'
 
 x, y = m(lon, lat)
-plt.scatter(x, y, c=vals, s=3, cmap='YlOrRd', alpha=0.05) # 'YlOrRd', 'seismic'
+plt.scatter(x, y, c=vals, s=3, cmap='YlOrRd', alpha=0.05, norm=mplb.colors.LogNorm()) # 'YlOrRd', 'seismic'
 cbar = plt.colorbar()
 cbar.set_label(label, fontsize=14)
 cbar.solids.set(alpha=1)
 plt.tight_layout()
 
-figSaveName = mergePATH.replace('.pkl', '_MAP.png')
+figSaveName = mergePATH.replace('.pkl', '_V2_MAP.png')
 print('Saving map to: %s' % figSaveName)
 plt.savefig(figSaveName)
 plt.ion()
