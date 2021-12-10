@@ -9,14 +9,14 @@ from simulateRetrieval import simulation
 from glob import glob
 
 
-waveInd = 3
+waveInd = 2
 waveInd2 = 5
 waveIndAOD = 3
 saveFN = 'MERGED_ss450-g5nr.leV210.GRASP.example.polarimeter07.200608ALL_ALLz.pkl'
 inDirPath = '/discover/nobackup/wrespino/OSSE_results_working/'
 surf2plot = 'ocean' # land, ocean or both
 aodMax = 0.801 # only for plot limits
-Nbins = 50 # NbinsxNbins bins in hist density plots
+Nbins = 350 # NbinsxNbins bins in hist density plots
 
 fnTag = 'AllCases'
 xlabel = 'Simulated Truth'
@@ -30,11 +30,11 @@ fig, ax = plt.subplots(1,2, figsize=(7.7,3.5))
 plt.locator_params(nbins=3)
 errFun = lambda t,r : np.abs(r-t)
 aodWght = lambda x,τ : np.sum(x*τ)/np.sum(τ)
-version = 'V1' # for PDF file name
+version = 'V10' # for PDF file name
 
-savePATH = os.path.join(inDirPath,saveFN)
-simBase = simulation(picklePath=savePATH)
-print('Loading from %s - %d' % (saveFN, len(simBase.rsltBck)))
+# savePATH = os.path.join(inDirPath,saveFN)
+# simBase = simulation(picklePath=savePATH)
+# print('Loading from %s - %d' % (saveFN, len(simBase.rsltBck)))
 print('--')
 
 # print general stats to console
@@ -65,27 +65,27 @@ trueAOD = np.asarray([rf['aod'][waveIndAOD] for rf in simBase.rsltFwd])[keepInd]
 # maxVar = None
 # aodMin = 0.0 # does not apply to AOD plot
 # AAOD
-# ylabel = 'Coalbedo (λ=%4.2fμm)' % wavelng
+# ylabel = 'AAOD (λ=%4.2fμm)' % wavelng
 # true = np.asarray([(1-rf['ssa'][waveInd])*rf['aod'][waveInd] for rf in simBase.rsltFwd])[keepInd]
 # rtrv = np.asarray([(1-rb['ssa'][waveInd])*rb['aod'][waveInd] for rb in simBase.rsltBck])[keepInd]
-# maxVar = 0.05
+maxVar = 0.05
 # 1-SSA
-# ylabel = 'Coalbedo (λ=%4.2fμm)' % wavelng
-# true = np.asarray([(1-rf['ssa'][waveInd]) for rf in simBase.rsltFwd])[keepInd]
-# rtrv = np.asarray([(1-rb['ssa'][waveInd]) for rb in simBase.rsltBck])[keepInd]
-# maxVar = 0.2
-# aodMin = 0.3 # does not apply to AOD plot
+ylabel = 'Coalbedo (λ=%4.2fμm)' % wavelng
+true = np.asarray([(1-rf['ssa'][waveInd]) for rf in simBase.rsltFwd])[keepInd]
+rtrv = np.asarray([(1-rb['ssa'][waveInd]) for rb in simBase.rsltBck])[keepInd]
+maxVar = 0.2
+aodMin = 0.3 # does not apply to AOD plot
 # ANGSTROM
-ylabel = 'AE (%4.2f/%4.2f μm)' % (wavelng, simBase.rsltFwd[0]['lambda'][waveInd2])
-aod1 = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltFwd])[keepInd]
-aod2 = np.asarray([rf['aod'][waveInd2] for rf in simBase.rsltFwd])[keepInd]
-logLamdRatio = np.log(simBase.rsltFwd[0]['lambda'][waveInd]/simBase.rsltFwd[0]['lambda'][waveInd2])
-true = -np.log(aod1/aod2)/logLamdRatio
-aod1 = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltBck])[keepInd]
-aod2 = np.asarray([rf['aod'][waveInd2] for rf in simBase.rsltBck])[keepInd]
-rtrv = -np.log(aod1/aod2)/logLamdRatio
-maxVar = 2.25
-aodMin = 0.05 # does not apply to AOD plot
+# ylabel = 'AE (%4.2f/%4.2f μm)' % (wavelng, simBase.rsltFwd[0]['lambda'][waveInd2])
+# aod1 = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltFwd])[keepInd]
+# aod2 = np.asarray([rf['aod'][waveInd2] for rf in simBase.rsltFwd])[keepInd]
+# logLamdRatio = np.log(simBase.rsltFwd[0]['lambda'][waveInd]/simBase.rsltFwd[0]['lambda'][waveInd2])
+# true = -np.log(aod1/aod2)/logLamdRatio
+# aod1 = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltBck])[keepInd]
+# aod2 = np.asarray([rf['aod'][waveInd2] for rf in simBase.rsltBck])[keepInd]
+# rtrv = -np.log(aod1/aod2)/logLamdRatio
+# maxVar = 2.25
+# aodMin = 0.05 # does not apply to AOD plot
 # g
 # ylabel = 'Asym. Param. (λ=%4.2fμm)' % wavelng
 # true = np.asarray([(rf['g'][waveInd]) for rf in simBase.rsltFwd])[keepInd]
@@ -164,7 +164,14 @@ tHnd = ax[1].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords
 
 # Variable Vs AOD
 vldI = trueAOD<=aodMax
+# rtrv = true + np.random.normal(0,0.1,len(true))
 err = errFun(true[vldI], rtrv[vldI])
+Ndx = 10
+dx = aodMax/round(Ndx)
+aodsX = np.r_[0:aodMax:dx]
+aodsX = np.linspace(0, aodMax - dx, round(Ndx))
+rmseOfX = [(np.sqrt(np.mean(err[np.logical_and(trueAOD[vldI]>x, trueAOD[vldI]<(x+dx))]**2))) for x in aodsX]
+# rmseOfX = [np.percentile(err[np.logical_and(trueAOD[vldI]>x, trueAOD[vldI]<(x+dx))], 84) for x in aodsX]
 if findMaxVar:
     minVar = np.min(err)
     maxVar = np.max(err)
@@ -174,7 +181,8 @@ ax[0].set_ylabel('Error in ' + ylabel)
 ax[0].set_xlabel('G5NR AOD (λ=%4.2fμm)' % simBase.rsltFwd[0]['lambda'][waveIndAOD])
 cnt = ax[0].hist2d(trueAOD[vldI], err, (Nbins,Nbins), norm=mpl.colors.LogNorm(), cmap=cmap)
 cnt[3].set_edgecolor("face")
-ax[0].plot([aodMin,aodMin],[minVar, maxVar], '--', color='b', alpha=0.5, linewidth=3)
+ax[0].plot(aodsX,rmseOfX, '-', color='m', alpha=0.99997, linewidth=2)
+ax[0].plot([aodMin,aodMin],[minVar, maxVar], '--', color='k', alpha=0.4, linewidth=2)
 ax[0].set_xlim(0, aodMax)
 ax[0].set_xticks(np.r_[0:aodMax:0.2])
 ax[0].set_ylim(minVar, maxVar)
