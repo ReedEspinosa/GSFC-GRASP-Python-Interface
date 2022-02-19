@@ -13,12 +13,12 @@ discover = checkDiscover()
 if discover:
     nobackup = os.environ['NOBACKUP']
     syncPath = os.path.join(nobackup, 'synced')
-    sys.path.append(os.path.join(nobackup, 'MADCAP_scripts'))
+    sys.path.append(os.path.join(nobackup, 'GSFC-Retrieval-Simulators'))
     binPathGRASP = os.path.join(nobackup, 'grasp_open/build/bin/grasp')
     GRASPkrnls = os.path.join(nobackup, 'local/share/grasp/kernels')
 else:
     syncPath = '/Users/wrespino/Synced/'
-    sys.path.append('/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis')
+    sys.path.append('/Users/wrespino/Synced/Local_Code_MacBook/GSFC-Retrieval-Simulators')
     binPathGRASP = '/usr/local/bin/grasp'
     GRASPkrnls = '/usr/local/share/grasp/kernels/'
 from MADCAP_functions import loadVARSnetCDF

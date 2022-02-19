@@ -6,7 +6,7 @@ import numpy as np
 import datetime as dt
 
 # Path to the YAML file you want to use for the aerosol and surface definition
-fwdModelYAMLpath = '/Users/wrespino/Synced/Local_Code_MacBook/MADCAP_Analysis/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_POLAR_1lambda_PCA.yml'
+fwdModelYAMLpath = '/Users/wrespino/Synced/Local_Code_MacBook/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_POLAR_1lambda_PCA.yml'
 
 # paths to GRASP binary and kernels
 # binPathGRASP = '/home/respinosa/GRASP_GSFC/build/bin/grasp'
