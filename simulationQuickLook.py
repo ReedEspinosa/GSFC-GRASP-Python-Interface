@@ -7,23 +7,25 @@ from matplotlib import pyplot as plt
 from simulateRetrieval import simulation
 from glob import glob
 
-waveInd = 3
-waveInd2 = 5
+waveInd = 1
+waveInd2 = 3
 fnPtrnList = []
-fnPtrn = 'ss450-g5nr.leV210.GRASP.example.polarimeter07.200608*_*z.pkl'
+#fnPtrn = 'ss450-g5nr.leV210.GRASP.example.polarimeter07.200608*_*z.pkl'
+fnPtrn = 'harp02_2modes_AOD_*_550nm*.pkl'
 # fnPtrn = 'ss450-g5nr.leV210.GRASP.example.polarimeter07.200608*_1000z.pkl'
-inDirPath = '/discover/nobackup/wrespino/OSSE_results_working/'
+inDirPath = '/Users/aputhukkudy/Working_Data/ACCDAM/2022/Campex_Simulations/Mar2022/'\
+            'All_Flights/Spherical/Linear/2modes/'
 surf2plot = 'ocean' # land, ocean or both
 aodMin = 0.1 # does not apply to first AOD plot
 
 fnTag = 'AllCases'
 xlabel = 'Simulated Truth'
-MS = 1
+MS = 2
 FS = 10
 LW121 = 1
-pointAlpha = 0.10
+pointAlpha = 0.30
 clrText = [0.5,0,0.0]
-fig, ax = plt.subplots(2,5, figsize=(15.4,6.9))
+fig, ax = plt.subplots(2,5, figsize=(15,6))
 plt.locator_params(nbins=3)
 lightSave = True # Omit PM elements and extinction profiles from MERGED files to save space
 
@@ -56,7 +58,8 @@ print('--')
 # print general stats to console
 print('Showing results for %5.3f μm' % simBase.rsltFwd[0]['lambda'][waveInd])
 pprint(simBase.analyzeSim(waveInd)[0])
-lp = np.array([rf['land_prct'] for rf in simBase.rsltFwd])
+# lp = np.array([rf['land_prct'] for rf in simBase.rsltFwd])
+lp = np.array([0 for rf in simBase.rsltFwd])
 keepInd = lp>99 if surf2plot=='land' else lp<1 if surf2plot=='ocean' else lp>-1
 
 # apply convergence filter
@@ -87,7 +90,7 @@ Rcoef = np.corrcoef(true, rtrv)[0,1]
 RMSE = np.sqrt(np.median((true - rtrv)**2))
 bias = np.mean((rtrv-true))
 frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
-tHnd = ax[0,0].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(105, -154), va='top', xycoords='axes fraction',
+tHnd = ax[0,0].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
             textcoords='offset points', color=clrText, fontsize=FS)
 textstr = frmt % (Rcoef, RMSE, bias)
 tHnd = ax[0,0].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
@@ -110,7 +113,7 @@ ax[0,2].scatter(true, rtrv, c=clrVar, s=MS, alpha=pointAlpha)
 Rcoef = np.corrcoef(true, rtrv)[0,1]
 RMSE = np.sqrt(np.median((true - rtrv)**2))
 bias = np.mean((rtrv-true))
-tHnd = ax[0,2].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(105, -154), va='top', xycoords='axes fraction',
+tHnd = ax[0,2].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
             textcoords='offset points', color=clrText, fontsize=FS)
 textstr = frmt % (Rcoef, RMSE, bias)
 tHnd = ax[0,2].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
@@ -151,7 +154,7 @@ ax[0,1].scatter(true, rtrv, c=clrVar, s=MS, alpha=pointAlpha)
 Rcoef = np.corrcoef(true, rtrv)[0,1]
 RMSE = np.sqrt(np.median((true - rtrv)**2))
 bias = np.mean((rtrv-true))
-tHnd = ax[0,1].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(105, -154), va='top', xycoords='axes fraction',
+tHnd = ax[0,1].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
             textcoords='offset points', color=clrText, fontsize=FS)
 textstr = frmt % (Rcoef, RMSE, bias)
 tHnd = ax[0,1].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
@@ -179,7 +182,7 @@ Rcoef = np.corrcoef(true, rtrv)[0,1]
 RMSE = np.sqrt(np.median((true - rtrv)**2))
 bias = np.mean((rtrv-true))
 frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
-tHnd = ax[0,3].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(105, -154), va='top', xycoords='axes fraction',
+tHnd = ax[0,3].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
             textcoords='offset points', color=clrText, fontsize=FS)
 textstr = frmt % (Rcoef, RMSE, bias)
 tHnd = ax[0,3].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
@@ -191,50 +194,78 @@ def fmfCalc(r,dvdlnr):
     fInd = r<=cutRadius
     logr = np.log(r)
     return np.trapz(dvdlnr[fInd],logr[fInd])/np.trapz(dvdlnr,logr)
-true = np.asarray([fmfCalc(rf['r'], rf['dVdlnr']) for rf in simBase.rsltFwd])[keepInd]
-rtrv = np.asarray([fmfCalc(rb['r'][0,:], rb['dVdlnr'].sum(axis=0)) for rb in simBase.rsltBck])[keepInd]
-minAOD = 0.01
-maxAOD = 1.0
-ax[0,4].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
-ax[0,4].set_title('Volume FMF')
-ax[0,4].set_xscale('log')
-ax[0,4].set_yscale('log')
-ax[0,4].set_xlim(minAOD,maxAOD)
-ax[0,4].set_ylim(minAOD,maxAOD)
-ax[0,4].set_xticks([minAOD, maxAOD])
-ax[0,4].set_yticks([minAOD, maxAOD])
-ax[0,4].scatter(true, rtrv, c=clrVar, s=MS, alpha=pointAlpha)
-Rcoef = np.corrcoef(true, rtrv)[0,1]
-RMSE = np.sqrt(np.median((true - rtrv)**2))
-bias = np.mean((rtrv-true))
-frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
-tHnd = ax[0,4].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(105, -154), va='top', xycoords='axes fraction',
-            textcoords='offset points', color=clrText, fontsize=FS)
-textstr = frmt % (Rcoef, RMSE, bias)
-tHnd = ax[0,4].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
-                    textcoords='offset points', color=clrText, fontsize=FS)
-
-# g
-true = np.asarray([rf['g'][waveInd] for rf in simBase.rsltFwd])[keepInd]
-rtrv = np.asarray([rf['g'][waveInd] for rf in simBase.rsltBck])[keepInd]
-minAOD = np.min(true)*0.95
-maxAOD = np.max(true)*1.05
-ax[1,0].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
-ax[1,0].set_title('g')
-ax[1,0].set_xlabel(xlabel)
-ax[1,0].set_ylabel('Retrieved')
-ax[1,0].set_xlim(minAOD,maxAOD)
-ax[1,0].set_ylim(minAOD,maxAOD)
-ax[1,0].scatter(true, rtrv, c=clrVar, s=MS, alpha=pointAlpha)
-Rcoef = np.corrcoef(true, rtrv)[0,1]
-RMSE = np.sqrt(np.median((true - rtrv)**2))
-bias = np.mean((rtrv-true))
-frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
-tHnd = ax[1,0].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(105, -154), va='top', xycoords='axes fraction',
-            textcoords='offset points', color=clrText, fontsize=FS)
-textstr = frmt % (Rcoef, RMSE, bias)
-tHnd = ax[1,0].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
-                    textcoords='offset points', color=clrText, fontsize=FS)
+try:
+    true = np.asarray([fmfCalc(rf['r'], rf['dVdlnr']) for rf in simBase.rsltFwd])[keepInd]
+    rtrv = np.asarray([fmfCalc(rb['r'][0,:], rb['dVdlnr'].sum(axis=0)) for rb in simBase.rsltBck])[keepInd]
+    minAOD = 0.01
+    maxAOD = 1.0
+    ax[0,4].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
+    ax[0,4].set_title('Volume FMF')
+    ax[0,4].set_xscale('log')
+    ax[0,4].set_yscale('log')
+    ax[0,4].set_xlim(minAOD,maxAOD)
+    ax[0,4].set_ylim(minAOD,maxAOD)
+    ax[0,4].set_xticks([minAOD, maxAOD])
+    ax[0,4].set_yticks([minAOD, maxAOD])
+    ax[0,4].scatter(true, rtrv, c=clrVar, s=MS, alpha=pointAlpha)
+    Rcoef = np.corrcoef(true, rtrv)[0,1]
+    RMSE = np.sqrt(np.median((true - rtrv)**2))
+    bias = np.mean((rtrv-true))
+    frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
+    tHnd = ax[0,4].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
+                textcoords='offset points', color=clrText, fontsize=FS)
+    textstr = frmt % (Rcoef, RMSE, bias)
+    tHnd = ax[0,4].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
+                        textcoords='offset points', color=clrText, fontsize=FS)
+    
+    # g
+    true = np.asarray([rf['g'][waveInd] for rf in simBase.rsltFwd])[keepInd]
+    rtrv = np.asarray([rf['g'][waveInd] for rf in simBase.rsltBck])[keepInd]
+    minAOD = np.min(true)*0.95
+    maxAOD = np.max(true)*1.05
+    ax[1,0].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
+    ax[1,0].set_title('g')
+    ax[1,0].set_xlabel(xlabel)
+    ax[1,0].set_ylabel('Retrieved')
+    ax[1,0].set_xlim(minAOD,maxAOD)
+    ax[1,0].set_ylim(minAOD,maxAOD)
+    ax[1,0].scatter(true, rtrv, c=clrVar, s=MS, alpha=pointAlpha)
+    Rcoef = np.corrcoef(true, rtrv)[0,1]
+    RMSE = np.sqrt(np.median((true - rtrv)**2))
+    bias = np.mean((rtrv-true))
+    frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
+    tHnd = ax[1,0].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
+                textcoords='offset points', color=clrText, fontsize=FS)
+    textstr = frmt % (Rcoef, RMSE, bias)
+    tHnd = ax[1,0].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
+                        textcoords='offset points', color=clrText, fontsize=FS)
+except Exception as err:
+    print('Error in plotting FMF: \n error: %s' %err)
+    
+    # try plotting bland altman
+    true = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltFwd])[keepInd]
+    rtrv = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltBck])[keepInd]
+    rtrv = true - rtrv
+    minAOD = np.min(true)*0.9
+    maxAOD = np.max(true)*1.1
+    ax[1,0].plot([minAOD,maxAOD], [0,0], 'k', linewidth=LW121)
+    ax[1,0].set_title('difference in AOD')
+    ax[1,0].set_xlabel(xlabel)
+    ax[1,0].set_ylabel('true-retrieved')
+    ax[1,0].set_xlim(minAOD,maxAOD)
+    ax[1,0].set_ylim(-maxAOD/10,maxAOD/10)
+    # ax[1,0].set_yscale('log')
+    ax[1,0].set_xscale('log')
+    ax[1,0].scatter(true, rtrv, c=clrVar, s=MS, alpha=pointAlpha)
+    Rcoef = np.corrcoef(true, rtrv)[0,1]
+    RMSE = np.sqrt(np.median((true - rtrv)**2))
+    bias = np.mean((rtrv-true))
+    # frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
+    tHnd = ax[1,0].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
+                textcoords='offset points', color=clrText, fontsize=FS)
+    # textstr = frmt % (Rcoef, RMSE, bias)
+    # tHnd = ax[1,0].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
+    #                     textcoords='offset points', color=clrText, fontsize=FS)    
 
 
 # sph
@@ -254,7 +285,7 @@ Rcoef = np.corrcoef(true, rtrv)[0,1]
 RMSE = np.sqrt(np.median((true - rtrv)**2))
 bias = np.mean((rtrv-true))
 frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
-tHnd = ax[1,1].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(105, -154), va='top', xycoords='axes fraction',
+tHnd = ax[1,1].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
             textcoords='offset points', color=clrText, fontsize=FS)
 textstr = frmt % (Rcoef, RMSE, bias)
 tHnd = ax[1,1].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
@@ -277,7 +308,7 @@ Rcoef = np.corrcoef(true, rtrv)[0,1]
 RMSE = np.sqrt(np.median((true - rtrv)**2))
 bias = np.mean((rtrv-true))
 frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
-tHnd = ax[1,2].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(105, -154), va='top', xycoords='axes fraction',
+tHnd = ax[1,2].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
             textcoords='offset points', color=clrText, fontsize=FS)
 textstr = frmt % (Rcoef, RMSE, bias)
 tHnd = ax[1,2].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
@@ -302,7 +333,7 @@ Rcoef = np.corrcoef(true, rtrv)[0,1]
 RMSE = np.sqrt(np.median((true - rtrv)**2))
 bias = np.mean((rtrv-true))
 frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
-tHnd = ax[1,3].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(105, -154), va='top', xycoords='axes fraction',
+tHnd = ax[1,3].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
             textcoords='offset points', color=clrText, fontsize=FS)
 textstr = frmt % (Rcoef, RMSE, bias)
 tHnd = ax[1,3].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
@@ -323,7 +354,7 @@ Rcoef = np.corrcoef(true, rtrv)[0,1]
 RMSE = np.sqrt(np.median((true - rtrv)**2))
 bias = np.mean((rtrv-true))
 frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
-tHnd = ax[1,4].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(105, -154), va='top', xycoords='axes fraction',
+tHnd = ax[1,4].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
             textcoords='offset points', color=clrText, fontsize=FS)
 textstr = frmt % (Rcoef, RMSE, bias)
 tHnd = ax[1,4].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
@@ -332,6 +363,6 @@ tHnd = ax[1,4].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoor
 
 figSavePath = saveFN.replace('.pkl',('_%s_%s_%04dnm.png' % (surf2plot, fnTag, simBase.rsltFwd[0]['lambda'][waveInd]*1000)))
 print('Saving figure to: %s' % figSavePath)
-plt.savefig('/discover/nobackup/wrespino/synced/Working/OSSE_Test_Run/' + figSavePath)
+# plt.savefig('' + figSavePath)
 #plt.show()
 

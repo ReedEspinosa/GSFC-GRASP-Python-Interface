@@ -8,12 +8,15 @@ import os
 from simulateRetrieval import simulation
 from glob import glob
 import re
-inDirPath = '/Users/wrespino/Synced/Working/SIM16_SITA_JuneAssessment/'
-outDirPath = '/Users/wrespino/Synced/Working/SIM17_SITA_SeptAssessment/'
+inDirPath = '/Users/aputhukkudy/Working_Data/ACCDAM/2022/Campex_Simulations/Mar2022/'\
+            'Flight#1/Non-Spherical/Linear/16bins/'
+outDirPath = '/Users/aputhukkudy/Working_Data/ACCDAM/2022/Campex_Simulations/Mar2022/'\
+            'Flight#1/Non-Spherical/Linear/16bins_combined/'
 # fnPtrn = 'DRS_V11_*_orb*_tFct0.*_sza*_phi*_n%d_nAng*.pkl' # %d -> n
 # DRS_V10_Lidar05_case08k2_tFct1.00_orbSS_sza22_phi104_n*_nAng0.pkl
-fnPtrn = 'TEST_V06_*_case*_tFct*_orb*_sza*_phi*_n%d_nAng*.pkl' # %d -> n
-nVals = np.r_[0:240]
+fnPtrn ='Camp2ex_16bins_AOD_*_550nm.pkl'
+# fnPtrn = 'TEST_V06_*_case*_tFct*_orb*_sza*_phi*_n%d_nAng*.pkl' # %d -> n
+nVals = np.r_[0:10]
 for n in nVals: # loop over n
     files = glob(os.path.join(inDirPath, fnPtrn % n))
     if len(files)>0:

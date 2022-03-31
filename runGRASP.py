@@ -1294,7 +1294,7 @@ class graspYAML():
         with open(self.YAMLpath, 'w') as outfile:
             yaml.dump(self.dl, outfile, default_flow_style=None, indent=4, width=1000, sort_keys=False)
             # debug
-            print('yaml file:%s' %self.YAMLpath)
+            # print('yaml file:%s' %self.YAMLpath)
     def loadYAML(self):
         assert self.YAMLpath, 'You must provide a YAML file path to perform a task utilizing a YAML file!'
         if not self.dl:
