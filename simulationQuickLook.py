@@ -7,14 +7,13 @@ from matplotlib import pyplot as plt
 from simulateRetrieval import simulation
 from glob import glob
 
-waveInd = 1
-waveInd2 = 3
+waveInd = 3
+waveInd2 = 5
 fnPtrnList = []
 #fnPtrn = 'ss450-g5nr.leV210.GRASP.example.polarimeter07.200608*_*z.pkl'
-fnPtrn = 'harp02_2modes_AOD_*_550nm*.pkl'
+fnPtrn = 'polar07*_2modes_AOD_*_550nm*.pkl'
 # fnPtrn = 'ss450-g5nr.leV210.GRASP.example.polarimeter07.200608*_1000z.pkl'
-inDirPath = '/Users/aputhukkudy/Working_Data/ACCDAM/2022/Campex_Simulations/Mar2022/'\
-            'All_Flights/Spherical/Linear/2modes/'
+inDirPath = '/Users/aputhukkudy/Working_Data/ACCDAM/2022/Campex_Simulations/Apr2022/All_Flights/Spherical/2modes/SZA30/'
 surf2plot = 'ocean' # land, ocean or both
 aodMin = 0.1 # does not apply to first AOD plot
 
@@ -66,10 +65,12 @@ keepInd = lp>99 if surf2plot=='land' else lp<1 if surf2plot=='ocean' else lp>-1
 # simBase.conerganceFilter(forceχ2Calc=True) # ours looks more normal, but GRASP's produces slightly lower RMSE
 costThresh = np.percentile([rb['costVal'] for rb in simBase.rsltBck[keepInd]], 90)
 keepInd = np.logical_and(keepInd, [rb['costVal']<costThresh for rb in simBase.rsltBck])
+keepIndAll = keepInd
 
 # variable to color point by in all subplots
 # clrVar = np.sqrt([rb['costVal'] for rb in simBase.rsltBck[keepInd]]) # this is slow!
-clrVar = np.asarray([rb['costVal'] for rb in simBase.rsltBck[keepInd]]) 
+clrVar = np.asarray([rb['costVal'] for rb in simBase.rsltBck[keepInd]])
+clrVarAll = clrVar
 print('%d/%d fit surface type %s and convergence filter' % (keepInd.sum(), len(simBase.rsltBck), surf2plot))
 
 # AOD
@@ -243,8 +244,8 @@ except Exception as err:
     print('Error in plotting FMF: \n error: %s' %err)
     
     # try plotting bland altman
-    true = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltFwd])[keepInd]
-    rtrv = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltBck])[keepInd]
+    true = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltFwd])[keepIndAll]
+    rtrv = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltBck])[keepIndAll]
     rtrv = true - rtrv
     minAOD = np.min(true)*0.9
     maxAOD = np.max(true)*1.1
@@ -256,7 +257,7 @@ except Exception as err:
     ax[1,0].set_ylim(-maxAOD/10,maxAOD/10)
     # ax[1,0].set_yscale('log')
     ax[1,0].set_xscale('log')
-    ax[1,0].scatter(true, rtrv, c=clrVar, s=MS, alpha=pointAlpha)
+    ax[1,0].scatter(true, rtrv, c=clrVarAll, s=MS, alpha=pointAlpha)
     Rcoef = np.corrcoef(true, rtrv)[0,1]
     RMSE = np.sqrt(np.median((true - rtrv)**2))
     bias = np.mean((rtrv-true))
@@ -363,6 +364,6 @@ tHnd = ax[1,4].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoor
 
 figSavePath = saveFN.replace('.pkl',('_%s_%s_%04dnm.png' % (surf2plot, fnTag, simBase.rsltFwd[0]['lambda'][waveInd]*1000)))
 print('Saving figure to: %s' % figSavePath)
-# plt.savefig('' + figSavePath)
-#plt.show()
+plt.savefig(inDirPath + figSavePath, dpi=330)
+# plt.show()
 
