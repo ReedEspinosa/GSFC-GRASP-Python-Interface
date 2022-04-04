@@ -13,9 +13,9 @@ fnPtrnList = []
 #fnPtrn = 'ss450-g5nr.leV210.GRASP.example.polarimeter07.200608*_*z.pkl'
 fnPtrn = 'polar07*_2modes_AOD_*_550nm*.pkl'
 # fnPtrn = 'ss450-g5nr.leV210.GRASP.example.polarimeter07.200608*_1000z.pkl'
-inDirPath = '/Users/aputhukkudy/Working_Data/ACCDAM/2022/Campex_Simulations/Apr2022/All_Flights/Spherical/2modes/SZA30/'
+inDirPath = '/Users/aputhukkudy/ACCDAM/2022/Campex_Simulations/Apr2022/All_Flights/Spherical/2modes'
 surf2plot = 'ocean' # land, ocean or both
-aodMin = 0.1 # does not apply to first AOD plot
+aodMin = 0.2 # does not apply to first AOD plot
 
 fnTag = 'AllCases'
 xlabel = 'Simulated Truth'
@@ -165,9 +165,16 @@ tHnd = ax[0,1].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoor
 aodWght = lambda x,τ : np.sum(x*τ)/np.sum(τ)
 true = np.asarray([rf['k'][waveInd] for rf in simBase.rsltFwd])[keepInd]
 rtrv = np.asarray([aodWght(rf['k'][:,waveInd], rf['aodMode'][:,waveInd]) for rf in simBase.rsltBck])[keepInd]
+# Modifying the true value based on the NDIM
+# if 5 modes present, for the case of ACCDAM-CAMP2EX four modes have one refractive index
+# and the coarse mode 'sea salt' have different value. So based on the dimension of the var
+# We can distinguish each run type and generalize the code
+if true.ndim >1:
+    true = true[:,0]
 # rtrv = 1-np.asarray([rf['ssa'][waveInd] for rf in simBase.rsltFwd])[keepInd]
 # true = 1-np.asarray([rb['ssa'][waveInd] for rb in simBase.rsltBck])[keepInd]
 # minAOD = np.min(true)*0.95
+
 minAOD = 0.0005
 maxAOD = np.max(true)*1.05
 ax[0,3].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
@@ -272,6 +279,12 @@ except Exception as err:
 # sph
 true = np.asarray([rf['sph'] for rf in simBase.rsltFwd])[keepInd]
 rtrv = np.asarray([aodWght(rf['sph'], rf['vol']) for rf in simBase.rsltBck])[keepInd]
+# Modifying the true value based on the NDIM
+# if 5 modes present, for the case of ACCDAM-CAMP2EX four modes have one refractive index
+# and the coarse mode 'sea salt' have different value. So based on the dimension of the var
+# We can distinguish each run type and generalize the code
+if true.ndim >1:
+    true = true[:,0]
 minAOD = 0
 maxAOD = 100.1
 ax[1,1].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
@@ -322,6 +335,12 @@ plt.suptitle(ttlStr.replace('MERGED_',''))
 # n
 true = np.asarray([rf['n'][waveInd] for rf in simBase.rsltFwd])[keepInd]
 rtrv = np.asarray([aodWght(rf['n'][:,waveInd], rf['aodMode'][:,waveInd]) for rf in simBase.rsltBck])[keepInd]
+# Modifying the true value based on the NDIM
+# if 5 modes present, for the case of ACCDAM-CAMP2EX four modes have one refractive index
+# and the coarse mode 'sea salt' have different value. So based on the dimension of the var
+# We can distinguish each run type and generalize the code
+if true.ndim >1:
+    true = true[:,0]
 minAOD = np.min(true)
 maxAOD = np.max(true)
 ax[1,3].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
