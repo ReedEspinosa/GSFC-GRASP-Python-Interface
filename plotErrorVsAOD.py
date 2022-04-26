@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 from simulateRetrieval import simulation
+from miscFunctions import calculatePM
 from glob import glob
 
 
@@ -15,20 +16,23 @@ waveIndAOD = 3
 fineIndFwd = [0,2]
 fineIndBck = [0]
 # pklDataPath = '/Users/wrespino/Synced/Working/OSSE_Test_Run/MERGED_ss450-g5nr.leV210.GRASP.example.polarimeter07.200608ALL_ALLz.pkl' # None to skip reloading of data
-# pklDataPath = '/Users/wrespino/Synced/AOS/A-CCP/Assessment_8K_Sept2020/SIM17_SITA_SeptAssessment_AllResults_MERGED/DRS_V01_polar07_caseAll_tFct1.00_orbSS_multiAngles_nAll_nAngALL.pkl' # None to skip reloading of data
+pklDataPath = '/Users/wrespino/Synced/AOS/A-CCP/Assessment_8K_Sept2020/SIM17_SITA_SeptAssessment_AllResults_MERGED/DRS_V01_polar07_caseAll_tFct1.00_orbSS_multiAngles_nAll_nAngALL.pkl' # None to skip reloading of data
+# pklDataPath = '/Users/wrespino/Synced/AOS/A-CCP/Assessment_8K_Sept2020/SIM17_SITA_SeptAssessment_AllResults_MERGED/DRS_V01_Lidar050+polar07_caseAll_tFct1.00_orbSS_multiAngles_nAll_nAngALL.pkl'
+# pklDataPath = '/Users/wrespino/Synced/AOS/A-CCP/Assessment_8K_Sept2020/SIM17_SITA_SeptAssessment_AllResults_MERGED/DRS_V01_Lidar090+polar07_caseAll_tFct1.00_orbSS_multiAngles_nAll_nAngALL.pkl'
 pklDataPath = None # None to skip reloading of data
-plotSaveDir = '/Users/wrespino/Synced/AOS/PLRA/Figures_AODF_bugFixApr11'
+# plotSaveDir = '/Users/wrespino/Synced/AOS/PLRA/Figures_AODF_bugFixApr11'
+plotSaveDir = '/Users/wrespino/Synced/Presentations/UMBC_Earthday_2022/figs'
 surf2plot = 'ocean' # land, ocean or both
 aodMax = 9990.801 # only for plot limits
-hist2D = True
+hist2D = False
 Nbins = 300 # NbinsxNbins bins in hist density plots
 
 varVsAOD = False
 saveScatter = True # This can be slow (?)
 fineAOD = False # use fine mode for varVsAOD plots AND AOD threshold for intensives
 fnTag = 'AllCases'
-scatAlpha = 0.01
-scatSize = 7
+scatAlpha = 0.1
+scatSize = 5
 MS = 1
 FS = 10
 LW121 = 1
@@ -38,15 +42,17 @@ errFun = lambda t,r : np.abs(r-t)
 aodWght = lambda x,τ : np.sum(x*τ)/np.sum(τ)
 
 inst = 'polar07'
-orb = 'SS'
-simType = 'CanonicalCases'
+orb = 'Alt800'
+simType = 'CanCase'
 # simType = 'G5NR' 
-version = 'Apr11_aodf-only_PLRA-%s-%s-%s-V00' % (inst, orb, simType) # for PDF file names
+version = 'PM25_UMBC_EDS2022-%s-%s-%s-V11' % (inst, orb, simType) # for PDF file names
 
 # waveSeries = [0,3,5,0,3,0]
 # gvSeries = ['aod', 'aod', 'aod', 'aaod', 'aaod', 'reff']
-waveSeries = [0,3,5]
-gvSeries = ['aodf', 'aodf', 'aodf']
+# waveSeries = [0,3,5]
+# gvSeries = ['aodf', 'aodf', 'aodf']
+waveSeries = [5]
+gvSeries = ['pm25']
 
 
 # CDF error plot
@@ -60,7 +66,6 @@ if pklDataPath is not None:
         print('Calculcating fine-mode effective radii')
         simBase._addReffMode(0.5, True) # reframe with cut at 1 micron diameter
 print('--')
-
 
 if 'land_prct' not in simBase.rsltFwd[0] or surf2plot=='both':
     keepInd = range(len(simBase.rsltFwd))
@@ -81,7 +86,7 @@ for waveInd, gv in zip(waveSeries, gvSeries):
     if varVsAOD:
         fig, ax = plt.subplots(1,2, figsize=(7.7,3.5))
     else:
-        fig, ax = plt.subplots(1,1, figsize=(4.5,5))
+        fig, ax = plt.subplots(1,1, figsize=(4.5,4))
         ax = [ax]
     ax[0].locator_params(nbins=3)
 
@@ -121,6 +126,19 @@ for waveInd, gv in zip(waveSeries, gvSeries):
         EE_fun = lambda t : np.maximum(0.003, t*0.5) # NEEDS updating 
         EEttlTxt = EEttlTxt + ', EE=max(0.003, 50%)'
         GVlegTxt.append('AAOD-%s' % waveName)
+    elif gv=='pm25': # AAOD
+        logScatPlot = True
+        ylabel = 'PM2.5 (μg/m3)'
+#         true = calculatePM(simBase.rsltFwd[keepInd], alt=2)
+#         rtrv = calculatePM(simBase.rsltBck[keepInd], alt=2)
+        true = calculatePM(simBase.rsltFwd[keepInd], alt=800)
+        rtrv = calculatePM(simBase.rsltBck[keepInd], alt=800)
+        maxVar = 180
+        aodMin = 0.0
+        EE_fun = lambda t : np.maximum(5, t*0.1)
+        EEttlTxt = EEttlTxt + ', EE=max(5 μg/m3, 10%)'
+        GVlegTxt.append('PM2.5 (μg/m3)')
+
     # 1-SSA
     # ylabel = 'Coalbedo (λ=%4.2fμm)' % wavelng
     # true = np.asarray([(1-rf['ssa'][waveInd]) for rf in simBase.rsltFwd])[keepInd]
@@ -195,21 +213,25 @@ for waveInd, gv in zip(waveSeries, gvSeries):
     vldI = np.logical_and(trueAOD>=aodMin, trueAOD<=aodMax)
     if maxVar is None:
         findMaxVar = True
-        minVar = np.min(true[vldI])*0.9
+        minVar = np.min(true[vldI])-0.1*np.mean(true[vldI])
         maxVar = np.max(true[vldI])*1.1
     else:
         findMaxVar = False
-        minVar = 0
+        minVar = 4 if logScatPlot else 0
     ax[0].plot([minVar,maxVar], [minVar,maxVar], 'k', linewidth=LW121)
     EE_color = [0.5,0.5,0.5]
-    ax[0].plot([minVar,maxVar], [minVar-EE_fun(minVar),maxVar-EE_fun(maxVar)], '--', color=EE_color, linewidth=LW121)
-    ax[0].plot([minVar,maxVar], [minVar+EE_fun(minVar),maxVar+EE_fun(maxVar)], '--', color=EE_color, linewidth=LW121)
+    errX = np.linspace(minVar,maxVar,100)
+    errX-EE_fun(errX)
+    ax[0].plot(errX, errX+EE_fun(errX), '--', color=EE_color, linewidth=LW121)
+    ax[0].plot(errX, errX-EE_fun(errX), '--', color=EE_color, linewidth=LW121)
+#     ax[0].plot([minVar,maxVar], [minVar-EE_fun(minVar),maxVar-EE_fun(maxVar)], '--', color=EE_color, linewidth=LW121)
+#     ax[0].plot([minVar,maxVar], [minVar+EE_fun(minVar),maxVar+EE_fun(maxVar)], '--', color=EE_color, linewidth=LW121)
     if hist2D:
         cnt = ax[0].hist2d(true[vldI], rtrv[vldI], (Nbins,Nbins), norm=mpl.colors.LogNorm(), cmap=cmap)
         cnt[3].set_edgecolor("face")
     else:
         ax[0].scatter(true[vldI], rtrv[vldI], c='r', s=scatSize, alpha=scatAlpha)
-    ax[0].set_xlabel('True %s' % ylabel)
+    ax[0].set_xlabel('Simulated True %s' % ylabel)
     ax[0].set_ylabel('Retrieved %s' % ylabel)
     if logScatPlot:
         ax[0].set_xscale('log')
@@ -225,7 +247,7 @@ for waveInd, gv in zip(waveSeries, gvSeries):
     prctInEE.append(inEE)
     frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f\nIn EE=%%%4.1f'
     aodStr = 'AOD_fine' if fineAOD else 'AOD'
-    tHnd = ax[0].annotate('N=%4d\n(%s>%g)' % (sum(vldI), aodStr, aodMin), xy=(0, 1), xytext=(200, -260), va='top', xycoords='axes fraction',
+    tHnd = ax[0].annotate('N=%4d\n(%s>%g)' % (sum(vldI), aodStr, aodMin), xy=(0, 1), xytext=(190, -190), va='top', xycoords='axes fraction',
                 textcoords='offset points', color=clrText, fontsize=FS)
     textstr = frmt % (Rcoef, RMSE, bias, inEE)
     tHnd = ax[0].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
@@ -251,7 +273,7 @@ for waveInd, gv in zip(waveSeries, gvSeries):
             minVar = np.min(err)
             maxVar = np.max(err)
         else:
-            minVar = 0
+            minVar = 0.01 if logScatPlot else 0
         ax[1].set_ylabel('Error in ' + ylabel)
         ax[1].set_xlabel('True %s (λ=%4.2fμm)' % (aodStr, simBase.rsltFwd[0]['lambda'][waveIndAOD]))
         cnt = ax[1].hist2d(trueAOD[vldI], err, (Nbins,Nbins), norm=mpl.colors.LogNorm(), cmap=cmap)
