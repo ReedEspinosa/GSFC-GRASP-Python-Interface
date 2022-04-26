@@ -95,11 +95,103 @@ def logNormal(mu, sig, r=None):
 
 
 def effRadius(r, dvdlnr):
+    # WE NEED TO DEPRECIATE THIS FUNCTION IN FAVOR OF integeratePSD() BELOW
     vol = np.trapz(dvdlnr/r,r)
     area = np.trapz(dvdlnr/r**2,r)
     return vol/area
+    
+def calculatePM(rsltList, upperSize=2.5, rho_mass=1, alt=2):
+    Nmodes = rsltList[0]['aodMode'].shape[0]
+    Nrslts = len(rsltList)
+    grndConcFrac = np.empty((Nrslts, Nmodes))
+    totVolConc = np.empty((Nrslts, Nmodes))
+    for mode in range(Nmodes):
+         grndConcFrac[:,mode] = integrateProfile(rsltList, mode, lowBnd=alt-0.5, upBnd=alt+0.5)
+         totVolConc[:,mode] = integeratePSD(rsltList, upBnd=upperSize, sizeMode=mode)
+    particulateVol = np.sum(grndConcFrac*totVolConc, axis=1)
+    return rho_mass*1e6*particulateVol # return in μg/m^3; rho_mass should have units of g/cm^3 (e.g. rho_mass(H2O)=1)
 
 
+def integrateProfile(rsltList, mode, lowBnd=1.5, upBnd=2.5):
+    # Single mode retrievals may break this function (probably could be fixed with some atleast_Nd's below)
+    if 'heightStd' in rsltList[0]: from scipy.stats import norm as spyNorm
+    output = np.empty(len(rsltList))
+    for i,rs in enumerate(rsltList):
+        if 'height' in rs.keys() and 'heightStd' in rs.keys():
+            hgt = rs['height'][mode]
+            std = rs['heightStd'][mode]
+            output[i] = spyNorm.cdf(upBnd,scale=std,loc=hgt) - spyNorm.cdf(lowBnd,scale=std,loc=hgt)
+        elif 'βext' in rs.keys():
+            if rs['range'].shape[0]<=mode: # TODO: This is ugly and could lead to unexpected behavior but Nmodes varies in some canonical cases; needs better handling though
+                output[i] = 0
+            else:
+                rng = rs['range'][mode,::-1]
+                ext = rs['βext'][mode,::-1]
+                assert np.all(rng[:-1] <= rng[1:]), 'Extinction profile and range arrays should be increasing from the ground (range=0) up.'
+                if min(rng)<lowBnd or max(rng)>upBnd: # We only integrate within existing vertical profile; i.e., βext=0 for z<[z_grasp] and z>[z_grasp]
+                    if max(rng) <= upBnd: # only trim low end of radii
+                        rngNew = np.r_[lowBnd, rng[rng>lowBnd]]
+                    elif min(rng) >= lowBnd: # only trim high end of radii
+                        rngNew = np.r_[rng[r<upBnd], upBnd]   
+                    else: # trim low and high ends of radii            
+                        midIndKeep = np.logical_and(rng>lowBnd, rng<upBnd)
+                        rngNew = np.r_[lowBnd, rng[midIndKeep], upBnd]
+                indKeep = np.logical_and(rng>lowBnd, rng<upBnd)
+                ext = np.interp(rngNew, rng, ext, left=0, right=0)
+                λ550Ind = np.argmin(np.abs(rs['lambda']-0.55)) # in runGRASP we scale βext to 1/Mm at λ=550nm (or next closest λ)
+                output[i] = np.trapz(ext, rngNew)/1e6/rs['aodMode'][mode, λ550Ind] # units of βext are 1/Mm; we convert to 1/m
+        elif 'height' in rs.keys():
+            assert False, 'This is likely exp profile which integrateProfile() does not currently support.'
+        else:
+            assert False, 'Could not determine profile type present in this rsltList.'
+    return output
+
+def integeratePSD(rsltList, momement='vol', lowBnd=0, upBnd=np.inf, sizeMode=None):
+    import scipy.stats
+    # volume returned in μm3/μm2; conveniently, this is also g/m3 for ρ_mass_H20
+    if momement.lower()=='reff':
+# NEED TO IMPLEMENT THIS IN CALLER FUNCTIONS...
+#         if 'rEff' in rsltList[0]:
+#             print('Warning this method will not calculate! Returning list of np.nan...')
+#             return [rs['rEff'] for rs in rsltList]    
+        vol = integeratePSD(rsltList, 'vol', lowBnd, upBnd) # we actually want int(area*r*dr)=3*V for area weighted radius but...
+        area = integeratePSD(rsltList, 'area_pure', lowBnd, upBnd) # pure argument here skips the 3x in area calculation so the two cancel in ratio
+        return vol/area
+    output = np.empty(len(rsltList))
+    for i,rs in enumerate(rsltList):
+        if sizeMode is None:
+            if not np.all(rs['r'][0]==rs['r']):
+                print('Warning assumption that all modes specfified over the same radii was violated! Returning list of np.nan...')
+                return np.full(len(rsltList), np.nan)
+            r = rs['r'][0]
+            dVdlnr = (rs['dVdlnr']*np.atleast_2d(rs['vol']).T).sum(axis=0)
+        elif rs['r'].shape[0]>sizeMode:
+            r = rs['r'][sizeMode]
+            dVdlnr = rs['dVdlnr'][sizeMode]*np.atleast_1d(rs['vol'])[sizeMode]
+        else: # TODO: This is ugly and could lead to unexpected behavior but Nmodes varies in some canonical cases; needs better handling though
+            r = rs['r'][0]
+            dVdlnr = np.zeros(len(r))
+        if min(r)<lowBnd or max(r)>upBnd: # We only integrate within existing PSD; i.e., PSD=0 for r<r_grasp and r>r_grasp
+            if max(r) <= upBnd: # only trim low end of radii
+                rNew = np.r_[lowBnd, r[r>lowBnd]]
+            elif min(r) >= lowBnd: # only trim high end of radii
+                rNew = np.r_[r[r<upBnd], upBnd]            
+            else: # trim low and high ends of radii            
+                midIndKeep = np.logical_and(r>lowBnd, r<upBnd)
+                rNew = np.r_[lowBnd, r[midIndKeep], upBnd]
+            dVdlnr = np.interp(rNew, r, dVdlnr)
+            r = rNew
+        if momement.lower()=='vol':
+            output[i] = np.trapz(dVdlnr/r,r)
+        elif momement.lower()=='area' or momement.lower()=='area_pure':
+            area = np.trapz(dVdlnr/r**2,r)
+            output[i] = area if 'pure' in momement else 3*area
+        elif momement.lower()=='num':
+            output[i] = 3/4/np.pi*np.trapz(dVdlnr/r**4,r)
+        else:
+            assert False, "%s momement not recognized. Options are 'vol', 'area', 'num', or 'reff'." % moment
+    return output
+    
 def phaseMat(r, dvdlnr, n, k, wav=0.550):
     """
     # https://pymiescatt.readthedocs.io

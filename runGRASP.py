@@ -14,11 +14,16 @@ from datetime import timedelta
 from shutil import copyfile
 from subprocess import Popen,PIPE
 import pandas as pd
-from netCDF4 import Dataset
 from scipy.stats import gaussian_kde
 import numpy as np
 import yaml # may require `conda install pyyaml`
 import miscFunctions as mf
+
+try:
+    from netCDF4 import Dataset
+    NC4_LOADED = True
+except ImportError:
+    NC4_LOADED = False
 
 try:
     import matplotlib.pyplot as plt
@@ -35,7 +40,7 @@ class graspDB():
         The graspDB class is designed to run many instances of GRASP in parallel/sequence (depending on maxCPU and maxT below).
         It also contains a variety of (rather old) plotting functions to apply to many grasp results
         INPUTS: graspRunObjs - what it sounds like, a list of grasp run objects
-                maxCPU - the maximum number of GRASP process to run at any given time (each process consumes one core); None for no max
+                maxCPU - the maximum number of GRASP process to run at any given time (each process consumes one core); Default is 2
                 maxT - the maximum number of pixels to include in a single GRASP process; None for no max (not used if graspRunObjs is list)
         """
         self.maxCPU = maxCPU
@@ -448,6 +453,7 @@ class graspRun():
             for aero, surf, fit, pm in zip(rsltAeroDict, rsltSurfDict, rsltFitDict, rsltPMDict):
                 rsltDict.append({**aero, **surf, **fit, **pm})
         self.calcAsymParam(rsltDict)
+        self.invRslt = rsltDict
         return rsltDict
 
     def _findRslts(self, rsltDict=None, customOUT=None):
@@ -509,6 +515,9 @@ class graspRun():
             If customOUT is provided, data from GRASP output text file specified will be written to netCDF.
             If neither are provided the output text file associated with current instance will be written.
             seaLevel=True should be used with caution, see assumed ROD and depol. below. """
+        if not NC4_LOADED:
+            print('netCDF4 module failed to import, file could not be written.')
+            return
         rsltDict = self._findRslts(rsltDict, customOUT)
         with Dataset(nc4Path, 'w', format='NETCDF4') as root_grp: # open/create netCDF4 data file
             root_grp.description = 'Results of a GRASP run'
@@ -1056,7 +1065,7 @@ class pixel():
             newMeas['thetav'] = np.abs(newMeas['thetav'])
         else:
             assert len(newMeas['phi'])==0 and len(newMeas['thetav'])==0, 'Angles were given but no measurement were present'
-        if np.any(newMeas['phi'] < 0): warnings.warn('GRASP RT performance is hindered when phi < 0, values in the range 0 < phi < 360 are preferred.')
+        if np.any(newMeas['phi'] < 0): warnings.warn('Minimum φ found was %5.2f. GRASP RT performance is hindered when phi < 0, values in the range 0 < phi < 360 are preferred.' % newMeas['phi'].min())
         assert newMeas['thetav'].shape[0]==newMeas['phi'].shape[0] and \
             newMeas['meas_type'].shape[0]==newMeas['nbvm'].shape[0] and \
             newMeas['nbvm'].sum()==newMeas['thetav'].shape[0], \
@@ -1118,7 +1127,9 @@ class graspYAML():
 
     def setMultipleCharacteristics(self, vals, setField='value', Nlambda=None):
         fldNms = {
-            'lgrnm':'size_distribution_lognormal',
+            'triaPSD':'size_distribution_triangle_bins',                  # For triangular bins
+            'prelgnrm':'size_distribution_precalculated_lognormal',         # For precomputed lognormal bins
+            'lgrnm':'size_distribution_lognormal',                          # For log-normal distribution
             'sph':'sphere_fraction',
             'vol':'aerosol_concentration',
             'vrtHght':'vertical_profile_parameter_height',
@@ -1141,8 +1152,29 @@ class graspYAML():
                 else:
                     assert Nlambda==shapeValsKey[1], '%s had a differnt Nλ than a previous characteristic!'
             for m in range(np.array(vals[key]).shape[0]): # loop over aerosol modes
-                fldNm = '%s.%d.%s' % (fldNms[key], m+1, setField)
-                self.access(fldNm, newVal=vals[key][m], write2disk=False, verbose=False) # verbose=False -> no wanrnings about creating a new mode
+                
+                
+                if key=='triaPSD':
+                    # We have to edit this area to accomodate the custom PSD bins
+                    fldNm = '%s.%d.%s' % (fldNms[key], m+1, setField)
+                    newVal_ = vals[key][m]
+                    # lean the data to be within min max value
+                    newVal_[newVal_ < 1e-5] = 0.00001
+                    self.access(fldNm, newVal=newVal_, write2disk=False, verbose=False)
+                    # Updating the max, min and wavelength indeces
+                    # This part of the script can be modified to use the same YAML template file
+                    fldNm = '%s.%d.%s' % (fldNms[key], m+1, 'index_of_wavelength_involved')
+                    self.access(fldNm, newVal=np.repeat(0, len(vals[key][m])),
+                                write2disk=False, verbose=False) # verbose=False -> no warnings about creating a new mode
+                    fldNm = '%s.%d.%s' % (fldNms[key], m+1, 'max')
+                    self.access(fldNm, newVal=np.concatenate(([0.0001], np.repeat(5, len(vals[key][m])-1))),
+                                write2disk=False, verbose=False)
+                    fldNm = '%s.%d.%s' % (fldNms[key], m+1, 'min')
+                    self.access(fldNm, newVal=np.repeat(0.00000001, len(vals[key][m])),
+                                write2disk=False, verbose=False)
+                else:
+                    fldNm = '%s.%d.%s' % (fldNms[key], m+1, setField)
+                    self.access(fldNm, newVal=vals[key][m], write2disk=False, verbose=False) # verbose=False -> no wanrnings about creating a new mode
                 if key=='vrtProf' and setField=='value': # adjust lambda will not fix this guy – NOTE: this overwrites min/max!
                     fldNm = '%s.%d.index_of_wavelength_involved' % (fldNms[key], m+1)
                     self.access(fldNm, newVal=np.zeros(len(vals[key][m]), dtype=int), write2disk=False)
@@ -1171,7 +1203,7 @@ class graspYAML():
     def adjustLambda(self, Nlambda):
         """Change YAML settings to match a specific number of wavelenths, cutting and adding from the longest wavelength."""
         for lt in self.lambdaTypes: self._repeatElementsInField(fldName=lt, Nrepeats=Nlambda, λonly=True)  # loop over constraint types
-        assert self.access('retrieval.inversion.noises') is not None, 'Could not find YAML field for noises! Note that only GRASP version 1.0 or later YAML files work with this verison of grasp_scripts.'
+        assert self.access('retrieval.inversion.noises') is not None, 'Could not find YAML field for noises! Note that only GRASP version 1.0 or later YAML files work with this verison of GSFC-GRASP-Python-Interface.'
         for n in range(len(self.access('retrieval.inversion.noises'))): # adjust the noise lambda as well
             m = 1
             while self.access('retrieval.inversion.noises.noise[%d].measurement_type[%d]' % (n+1, m)):
@@ -1212,7 +1244,7 @@ class graspYAML():
         self.writeYAML()
 
     def access(self, fldPath, newVal=None, write2disk=True, verbose=True): # will also return fldPath value if newVal=None
-        if isinstance(newVal, np.ndarray):  # yaml module doesn't handle numby array gracefully
+        if isinstance(newVal, np.ndarray):  # yaml module doesn't handle numpy array gracefully
             newVal = newVal.tolist()
         elif isinstance(newVal, list): # check for regular list with numpy values
             for i, val in enumerate(newVal):
@@ -1261,7 +1293,8 @@ class graspYAML():
     def writeYAML(self):
         with open(self.YAMLpath, 'w') as outfile:
             yaml.dump(self.dl, outfile, default_flow_style=None, indent=4, width=1000, sort_keys=False)
-
+            # debug
+            # print('yaml file:%s' %self.YAMLpath)
     def loadYAML(self):
         assert self.YAMLpath, 'You must provide a YAML file path to perform a task utilizing a YAML file!'
         if not self.dl:
