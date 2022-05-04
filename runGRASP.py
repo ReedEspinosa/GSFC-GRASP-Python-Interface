@@ -123,6 +123,17 @@ class graspDB():
         except EnvironmentError:
             warnings.warn('Could not load valid pickle data from %s.' % loadPath)
             return []
+    
+    def frmtLoadedRslts(self, rslts_raw):
+        rslts = np.array(rslts_raw)
+        if 'version' in rslts[0]: return rslts # rslts loaded are ≥v1.0
+        if 'dVdlnr' in rslts[0]: # prior to 21/05/2021 we saved normalized; we now use absolute
+            # PSDs that get truncated to no integrate to within 1% of unity... need to check for large values at ends.
+            # ALSO, this is a strong argument against renormalizing what comes out of GRASP.
+            np.concatenate([np.trapz(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts]) # THIS WILL ONLY MOSTLY BE ≈1 (see above)
+            for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
+        return rslts
+        
 
     def histPlot(self, VarNm, Ind=0, customAx=False, FS=14, rsltInds=slice(None),
                  pltLabel=False, clnLayout=True): # clnLayout==False produces some speed up
@@ -791,11 +802,11 @@ class graspRun():
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
                         rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
-        if ('dVdlnr' in results[0]): # check if all r value are same at all lambda, may remove this condition later but makes logic much more complicated
-            for rs in results:
-                rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T
-                if np.all(results[0]['r'][0]==results[0]['r']) and not 'rEff' in rs:
-                    rs['rEff'] = (mf.effRadius(rs['r'][0], rs['dVdlnr'].sum(axis=0).T))
+        if ('dVdlnr' in results[0]):
+            for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
+            if 'rEff' not in results[0]:
+                integeratePSD(results, momement='rEff')
+                for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
         return results, wavelengths
 
     def parseOutSurface(self, contents, Nλ=None):

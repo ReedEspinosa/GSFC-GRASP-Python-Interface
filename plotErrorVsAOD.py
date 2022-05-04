@@ -19,7 +19,7 @@ fineIndBck = [0]
 pklDataPath = '/Users/wrespino/Synced/AOS/A-CCP/Assessment_8K_Sept2020/SIM17_SITA_SeptAssessment_AllResults_MERGED/DRS_V01_polar07_caseAll_tFct1.00_orbSS_multiAngles_nAll_nAngALL.pkl' # None to skip reloading of data
 # pklDataPath = '/Users/wrespino/Synced/AOS/A-CCP/Assessment_8K_Sept2020/SIM17_SITA_SeptAssessment_AllResults_MERGED/DRS_V01_Lidar050+polar07_caseAll_tFct1.00_orbSS_multiAngles_nAll_nAngALL.pkl'
 # pklDataPath = '/Users/wrespino/Synced/AOS/A-CCP/Assessment_8K_Sept2020/SIM17_SITA_SeptAssessment_AllResults_MERGED/DRS_V01_Lidar090+polar07_caseAll_tFct1.00_orbSS_multiAngles_nAll_nAngALL.pkl'
-pklDataPath = None # None to skip reloading of data
+# pklDataPath = None # None to skip reloading of data
 # plotSaveDir = '/Users/wrespino/Synced/AOS/PLRA/Figures_AODF_bugFixApr11'
 plotSaveDir = '/Users/wrespino/Synced/Presentations/UMBC_Earthday_2022/figs'
 surf2plot = 'ocean' # land, ocean or both
@@ -129,10 +129,10 @@ for waveInd, gv in zip(waveSeries, gvSeries):
     elif gv=='pm25': # AAOD
         logScatPlot = True
         ylabel = 'PM2.5 (μg/m3)'
-#         true = calculatePM(simBase.rsltFwd[keepInd], alt=2)
-#         rtrv = calculatePM(simBase.rsltBck[keepInd], alt=2)
-        true = calculatePM(simBase.rsltFwd[keepInd], alt=800)
-        rtrv = calculatePM(simBase.rsltBck[keepInd], alt=800)
+        true = calculatePM(simBase.rsltFwd[keepInd], alt=2)
+        rtrv = calculatePM(simBase.rsltBck[keepInd], alt=2)
+#         true = calculatePM(simBase.rsltFwd[keepInd], alt=800)
+#         rtrv = calculatePM(simBase.rsltBck[keepInd], alt=800)
         maxVar = 180
         aodMin = 0.0
         EE_fun = lambda t : np.maximum(5, t*0.1)

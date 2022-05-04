@@ -149,11 +149,7 @@ def integrateProfile(rsltList, mode, lowBnd=1.5, upBnd=2.5):
 def integeratePSD(rsltList, momement='vol', lowBnd=0, upBnd=np.inf, sizeMode=None):
     import scipy.stats
     # volume returned in μm3/μm2; conveniently, this is also g/m3 for ρ_mass_H20
-    if momement.lower()=='reff':
-# NEED TO IMPLEMENT THIS IN CALLER FUNCTIONS...
-#         if 'rEff' in rsltList[0]:
-#             print('Warning this method will not calculate! Returning list of np.nan...')
-#             return [rs['rEff'] for rs in rsltList]    
+    if momement.lower()=='reff': 
         vol = integeratePSD(rsltList, 'vol', lowBnd, upBnd) # we actually want int(area*r*dr)=3*V for area weighted radius but...
         area = integeratePSD(rsltList, 'area_pure', lowBnd, upBnd) # pure argument here skips the 3x in area calculation so the two cancel in ratio
         return vol/area
