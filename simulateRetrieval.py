@@ -155,9 +155,9 @@ class simulation(object):
 
     def loadSim(self, picklePath):
         with open(picklePath, 'rb') as f:
-            self.rsltBck = np.array(pickle.load(f))
+            self.rsltBck = rg.frmtLoadedRslts(pickle.load(f))
             try:
-                self.rsltFwd = np.array(pickle.load(f))
+                self.rsltFwd = rg.frmtLoadedRslts(pickle.load(f))
             except EOFError: # this was an older file (created before Jan 2020)
                 self.rsltFwd = [self.rsltBck[-1]] # resltFwd as a array of len==0 (not totaly backward compatible, it used to be straight dict)
                 self.rsltBck = self.rsltBck[:-1]
