@@ -49,7 +49,7 @@ def frmtLoadedRslts(rslts_raw):
             return rslts
         trp = np.concatenate([np.trapz(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
         if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
-            for rs in results: 
+            for rs in rslts: 
                 rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
     return rslts
 
@@ -814,7 +814,7 @@ class graspRun():
         if ('dVdlnr' in results[0]):
             for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
             if 'rEff' not in results[0]:
-                integeratePSD(results, momement='rEff')
+                integratePSD(results, momement='rEff')
                 for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
         return results, wavelengths
 

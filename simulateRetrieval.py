@@ -480,13 +480,14 @@ class simulation(object):
             Afc = self.volWghtedAvg(None, [rs], modeCut, Amode)
             return Vfc/Afc # NOTE: ostensibly this should be Vfc/Afc/3 but we ommited the factor of 3 from Amode as well
         elif 'dVdlnr' in rs and 'r' in rs:
-            if modeCut is None: return ms.effRadius(rs['r'], rs['dVdlnr'])
-            dvdlnr = np.atleast_2d(rs['dVdlnr'])
-            radii = np.atleast_2d(rs['r'])[0,:] # we are assuming every mode has the same radii bins here...
-            fnCrsReff = np.empty(2)
-            for i,vldInd in enumerate([radii<=modeCut, radii>modeCut]): # loop twice, calculating fine then coarse result
-                fnCrsReff[i] = ms.effRadius(radii[vldInd], dvdlnr[:,vldInd].sum(axis=0)) # sum over modes to obtain total PSD, then calculate rEff
-            return fnCrsReff
+            fnCrsReff = []
+            if modeCut is None: 
+                for i in range(rs['r'].shape[0]):
+                    fnCrsReff.append(ms.integratePSD([rs], momement='reff', sizeMode=i))
+            else:
+                fnCrsReff.append(ms.integratePSD([rs], momement='reff', upBnd=modeCut))
+                fnCrsReff.append(ms.integratePSD([rs], momement='reff', lowBnd=modeCut))
+            return np.squeeze(fnCrsReff) # integratePSD above was return 1 element np.arrays before each append to fnCrsReff
         else:
             assert False, 'Can not calculate effective radius without either rv & σ OR dVdlnr & r!'
 
