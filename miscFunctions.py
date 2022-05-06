@@ -94,12 +94,6 @@ def logNormal(mu, sig, r=None):
     return dxdr,r # random note: rEff = mu*np.exp(-sig**2/2)
 
 
-def effRadius(r, dvdlnr):
-    # WE NEED TO DEPRECIATE THIS FUNCTION IN FAVOR OF integratePSD() BELOW
-    vol = np.trapz(dvdlnr/r,r)
-    area = np.trapz(dvdlnr/r**2,r)
-    return vol/area
-    
 def calculatePM(rsltList, upperSize=2.5, rho_mass=1, alt=2):
     Nmodes = rsltList[0]['aodMode'].shape[0]
     Nrslts = len(rsltList)
