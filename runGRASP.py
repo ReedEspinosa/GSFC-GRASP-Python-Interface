@@ -33,6 +33,28 @@ except ImportError:
 
 vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
 
+def frmtLoadedRslts(rslts_raw):
+    # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
+    # If a rslts list of dicts is loaded from a file it should be filtered through this function
+    rslts = np.array(rslts_raw)
+    if 'version' in rslts[0] and float(rslts[0]['version'])>1: return rslts # rslts loaded are ≥v1.01
+    if 'dVdlnr' in rslts[0]: # prior to 21/05/2021 we saved normalized; we now use absolute
+        psdNormUnityRTOL = 1e-2 # if relative difference between unity and integral of PSD over r is greater than this we assume PSD is absolute
+        psdTruncThresh = 1e-3 # if first or last PSD bin is greater than this fraction of max(PSD[:]) then this particular PSD is significantly truncated and we ignore it when checking for normalization b/c it is expected to integrate to <1 in normalized case
+#             ra = np.concatenate([[dv[[0,-1]]/dv.max() for dv in rs['dVdlnr']] for rs in rslts]).max(axis=1) # %timeit -> 600 ms
+        ra = np.concatenate([rs['dVdlnr'][:,[0,-1]].max(axis=1)/rs['dVdlnr'].max(axis=1) for rs in rslts]) # %timeit -> 229 ms
+        nonTruncInd = ra < psdTruncThresh
+        if not nonTruncInd.any():
+            print('WARNING: All PSDs were significantly truncated and normalization could not be detemrined. dVdlnr may or may not be in absolute units.')
+            return rslts
+        trp = np.concatenate([np.trapz(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
+        if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
+            for rs in rslts: 
+                rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
+    return rslts
+
+RSLT_DICT_VERSION = '1.01' # Need to increment this if any meaningful changes made to rslts list of dicts
+
 class graspDB():
 
     def __init__(self, graspRunObjs=[], maxCPU=None, maxT=None):
@@ -110,6 +132,7 @@ class graspDB():
         dtSec = time.time() - t0
         print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dtSec, len(self.rslts)/dtSec))
         if savePath:
+            self.rslts[0]['version'] = RSLT_DICT_VERSION
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
         self.rslts = np.array(self.rslts) # numpy lists indexed w/ only assignment (no copy) but prior code built for std. list
@@ -118,12 +141,12 @@ class graspDB():
     def loadResults(self, loadPath):
         try:
             with open(loadPath, 'rb') as f:
-                self.rslts = np.array(pickle.load(f))
+                self.rslts = frmtLoadedRslts(pickle.load(f))
             return self.rslts
         except EnvironmentError:
             warnings.warn('Could not load valid pickle data from %s.' % loadPath)
             return []
-
+    
     def histPlot(self, VarNm, Ind=0, customAx=False, FS=14, rsltInds=slice(None),
                  pltLabel=False, clnLayout=True): # clnLayout==False produces some speed up
         assert PLOT_LOADED, 'matplotlib could not be loaded, plotting features unavailable.'
@@ -791,11 +814,11 @@ class graspRun():
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
                         rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
-        if ('dVdlnr' in results[0]): # check if all r value are same at all lambda, may remove this condition later but makes logic much more complicated
-            for rs in results:
-                rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T
-                if np.all(results[0]['r'][0]==results[0]['r']) and not 'rEff' in rs:
-                    rs['rEff'] = (mf.effRadius(rs['r'][0], rs['dVdlnr'].sum(axis=0).T))
+        if ('dVdlnr' in results[0]):
+            for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
+            if 'rEff' not in results[0]:
+                rEffs = mf.integratePSD(results, moment='rEff')
+                for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
         return results, wavelengths
 
     def parseOutSurface(self, contents, Nλ=None):

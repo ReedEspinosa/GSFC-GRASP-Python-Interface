@@ -94,12 +94,6 @@ def logNormal(mu, sig, r=None):
     return dxdr,r # random note: rEff = mu*np.exp(-sig**2/2)
 
 
-def effRadius(r, dvdlnr):
-    # WE NEED TO DEPRECIATE THIS FUNCTION IN FAVOR OF integeratePSD() BELOW
-    vol = np.trapz(dvdlnr/r,r)
-    area = np.trapz(dvdlnr/r**2,r)
-    return vol/area
-    
 def calculatePM(rsltList, upperSize=2.5, rho_mass=1, alt=2):
     Nmodes = rsltList[0]['aodMode'].shape[0]
     Nrslts = len(rsltList)
@@ -107,7 +101,7 @@ def calculatePM(rsltList, upperSize=2.5, rho_mass=1, alt=2):
     totVolConc = np.empty((Nrslts, Nmodes))
     for mode in range(Nmodes):
          grndConcFrac[:,mode] = integrateProfile(rsltList, mode, lowBnd=alt-0.5, upBnd=alt+0.5)
-         totVolConc[:,mode] = integeratePSD(rsltList, upBnd=upperSize, sizeMode=mode)
+         totVolConc[:,mode] = integratePSD(rsltList, upBnd=upperSize, sizeMode=mode)
     particulateVol = np.sum(grndConcFrac*totVolConc, axis=1)
     return rho_mass*1e6*particulateVol # return in μg/m^3; rho_mass should have units of g/cm^3 (e.g. rho_mass(H2O)=1)
 
@@ -146,28 +140,24 @@ def integrateProfile(rsltList, mode, lowBnd=1.5, upBnd=2.5):
             assert False, 'Could not determine profile type present in this rsltList.'
     return output
 
-def integeratePSD(rsltList, momement='vol', lowBnd=0, upBnd=np.inf, sizeMode=None):
+def integratePSD(rsltList, moment='vol', lowBnd=0, upBnd=np.inf, sizeMode=None):
     import scipy.stats
     # volume returned in μm3/μm2; conveniently, this is also g/m3 for ρ_mass_H20
-    if momement.lower()=='reff':
-# NEED TO IMPLEMENT THIS IN CALLER FUNCTIONS...
-#         if 'rEff' in rsltList[0]:
-#             print('Warning this method will not calculate! Returning list of np.nan...')
-#             return [rs['rEff'] for rs in rsltList]    
-        vol = integeratePSD(rsltList, 'vol', lowBnd, upBnd) # we actually want int(area*r*dr)=3*V for area weighted radius but...
-        area = integeratePSD(rsltList, 'area_pure', lowBnd, upBnd) # pure argument here skips the 3x in area calculation so the two cancel in ratio
+    if moment.lower()=='reff': 
+        vol = integratePSD(rsltList, 'vol', lowBnd, upBnd) # we actually want int(area*r*dr)=3*V for area weighted radius but...
+        area = integratePSD(rsltList, 'area_pure', lowBnd, upBnd) # pure argument here skips the 3x in area calculation so the two cancel in ratio
         return vol/area
     output = np.empty(len(rsltList))
     for i,rs in enumerate(rsltList):
-        if sizeMode is None:
+        if sizeMode is None: # we want to sum over them all
             if not np.all(rs['r'][0]==rs['r']):
                 print('Warning assumption that all modes specfified over the same radii was violated! Returning list of np.nan...')
                 return np.full(len(rsltList), np.nan)
             r = rs['r'][0]
-            dVdlnr = (rs['dVdlnr']*np.atleast_2d(rs['vol']).T).sum(axis=0)
-        elif rs['r'].shape[0]>sizeMode:
+            dVdlnr = rs['dVdlnr'].sum(axis=0)
+        elif rs['r'].shape[0]>sizeMode: # we take dVdlnr from just one of the modes
             r = rs['r'][sizeMode]
-            dVdlnr = rs['dVdlnr'][sizeMode]*np.atleast_1d(rs['vol'])[sizeMode]
+            dVdlnr = rs['dVdlnr'][sizeMode]
         else: # TODO: This is ugly and could lead to unexpected behavior but Nmodes varies in some canonical cases; needs better handling though
             r = rs['r'][0]
             dVdlnr = np.zeros(len(r))
@@ -181,17 +171,17 @@ def integeratePSD(rsltList, momement='vol', lowBnd=0, upBnd=np.inf, sizeMode=Non
                 rNew = np.r_[lowBnd, r[midIndKeep], upBnd]
             dVdlnr = np.interp(rNew, r, dVdlnr)
             r = rNew
-        if momement.lower()=='vol':
+        if moment.lower()=='vol':
             output[i] = np.trapz(dVdlnr/r,r)
-        elif momement.lower()=='area' or momement.lower()=='area_pure':
+        elif moment.lower()=='area' or moment.lower()=='area_pure':
             area = np.trapz(dVdlnr/r**2,r)
-            output[i] = area if 'pure' in momement else 3*area
-        elif momement.lower()=='num':
+            output[i] = area if 'pure' in moment else 3*area
+        elif moment.lower()=='num':
             output[i] = 3/4/np.pi*np.trapz(dVdlnr/r**4,r)
         else:
-            assert False, "%s momement not recognized. Options are 'vol', 'area', 'num', or 'reff'." % moment
+            assert False, "%s moment not recognized. Options are 'vol', 'area', 'num', or 'reff'." % moment
     return output
-    
+
 def phaseMat(r, dvdlnr, n, k, wav=0.550):
     """
     # https://pymiescatt.readthedocs.io

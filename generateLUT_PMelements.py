@@ -181,7 +181,7 @@ for i,rslt in enumerate(rslts):
         rEffVar = 'rEffCalc' if 'rEffCalc' in rslt else 'rEff'
         rEff[binInd] = np.atleast_1d(rslt[rEffVar])[0]
     lInd = np.r_[lEdg[lEdgInd]:min(lEdg[lEdgInd]+maxL,Nlambda)]
-    vol = scipy.integrate.simps(rslt['vol'][0]*rslt['dVdlnr'][0,:]/rslt['r'][0,:], rslt['r'][0,:]) # vol is volume of full lognormal! Need to integrate ourselves b/c some of the volume may be truncated.
+    vol = scipy.integrate.simps(rslt['dVdlnr'][0,:]/rslt['r'][0,:], rslt['r'][0,:]) # vol is volume of full lognormal! Need to integrate ourselves b/c some of the volume may be truncated.
     bext_vol[binInd, lInd] = rslt['aod']/vol
     bsca_vol[binInd, lInd] = rslt['ssa']*rslt['aod']/vol
     refreal[binInd, lInd] = rslt['n']  # HINT: WE DID NOT HAVE MODE SPECIFIC REF IND IN YAML
