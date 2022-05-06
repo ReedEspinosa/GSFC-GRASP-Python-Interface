@@ -814,7 +814,7 @@ class graspRun():
         if ('dVdlnr' in results[0]):
             for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
             if 'rEff' not in results[0]:
-                integratePSD(results, momement='rEff')
+                rEffs = mf.integratePSD(results, moment='rEff')
                 for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
         return results, wavelengths
 

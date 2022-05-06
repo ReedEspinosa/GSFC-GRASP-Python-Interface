@@ -140,10 +140,10 @@ def integrateProfile(rsltList, mode, lowBnd=1.5, upBnd=2.5):
             assert False, 'Could not determine profile type present in this rsltList.'
     return output
 
-def integratePSD(rsltList, momement='vol', lowBnd=0, upBnd=np.inf, sizeMode=None):
+def integratePSD(rsltList, moment='vol', lowBnd=0, upBnd=np.inf, sizeMode=None):
     import scipy.stats
     # volume returned in μm3/μm2; conveniently, this is also g/m3 for ρ_mass_H20
-    if momement.lower()=='reff': 
+    if moment.lower()=='reff': 
         vol = integratePSD(rsltList, 'vol', lowBnd, upBnd) # we actually want int(area*r*dr)=3*V for area weighted radius but...
         area = integratePSD(rsltList, 'area_pure', lowBnd, upBnd) # pure argument here skips the 3x in area calculation so the two cancel in ratio
         return vol/area
@@ -171,15 +171,15 @@ def integratePSD(rsltList, momement='vol', lowBnd=0, upBnd=np.inf, sizeMode=None
                 rNew = np.r_[lowBnd, r[midIndKeep], upBnd]
             dVdlnr = np.interp(rNew, r, dVdlnr)
             r = rNew
-        if momement.lower()=='vol':
+        if moment.lower()=='vol':
             output[i] = np.trapz(dVdlnr/r,r)
-        elif momement.lower()=='area' or momement.lower()=='area_pure':
+        elif moment.lower()=='area' or moment.lower()=='area_pure':
             area = np.trapz(dVdlnr/r**2,r)
-            output[i] = area if 'pure' in momement else 3*area
-        elif momement.lower()=='num':
+            output[i] = area if 'pure' in moment else 3*area
+        elif moment.lower()=='num':
             output[i] = 3/4/np.pi*np.trapz(dVdlnr/r**4,r)
         else:
-            assert False, "%s momement not recognized. Options are 'vol', 'area', 'num', or 'reff'." % moment
+            assert False, "%s moment not recognized. Options are 'vol', 'area', 'num', or 'reff'." % moment
     return output
 
 def phaseMat(r, dvdlnr, n, k, wav=0.550):
