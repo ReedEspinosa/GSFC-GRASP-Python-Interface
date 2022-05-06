@@ -7,17 +7,16 @@ from matplotlib import pyplot as plt
 from simulateRetrieval import simulation
 from glob import glob
 
-waveInd = 1
-waveInd2 = 3
+waveInd = 3
+waveInd2 = 5
 fnPtrnList = []
 #fnPtrn = 'ss450-g5nr.leV210.GRASP.example.polarimeter07.200608*_*z.pkl'
-fnPtrn = 'harp02_2modes_AOD_*_550nm*.pkl'
+fnPtrn = 'SZA*_2modes_AOD_*_550nm*.pkl'
 # fnPtrn = 'ss450-g5nr.leV210.GRASP.example.polarimeter07.200608*_1000z.pkl'
-inDirPath = '/Users/aputhukkudy/Working_Data/ACCDAM/2022/Campex_Simulations/Mar2022/'\
-            'All_Flights/Spherical/Linear/2modes/'
+inDirPath = '/Users/aputhukkudy/ACCDAM/2022/Campex_Simulations/Apr2022/All_Flights/Spherical/2modes'
 surf2plot = 'ocean' # land, ocean or both
 aodMin = 0.1 # does not apply to first AOD plot
-
+nMode = 0 # Select which layer or mode to plot
 fnTag = 'AllCases'
 xlabel = 'Simulated Truth'
 MS = 2
@@ -66,10 +65,12 @@ keepInd = lp>99 if surf2plot=='land' else lp<1 if surf2plot=='ocean' else lp>-1
 # simBase.conerganceFilter(forceχ2Calc=True) # ours looks more normal, but GRASP's produces slightly lower RMSE
 costThresh = np.percentile([rb['costVal'] for rb in simBase.rsltBck[keepInd]], 90)
 keepInd = np.logical_and(keepInd, [rb['costVal']<costThresh for rb in simBase.rsltBck])
+keepIndAll = keepInd
 
 # variable to color point by in all subplots
 # clrVar = np.sqrt([rb['costVal'] for rb in simBase.rsltBck[keepInd]]) # this is slow!
-clrVar = np.asarray([rb['costVal'] for rb in simBase.rsltBck[keepInd]]) 
+clrVar = np.asarray([rb['costVal'] for rb in simBase.rsltBck[keepInd]])
+clrVarAll = clrVar
 print('%d/%d fit surface type %s and convergence filter' % (keepInd.sum(), len(simBase.rsltBck), surf2plot))
 
 # AOD
@@ -164,9 +165,16 @@ tHnd = ax[0,1].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoor
 aodWght = lambda x,τ : np.sum(x*τ)/np.sum(τ)
 true = np.asarray([rf['k'][waveInd] for rf in simBase.rsltFwd])[keepInd]
 rtrv = np.asarray([aodWght(rf['k'][:,waveInd], rf['aodMode'][:,waveInd]) for rf in simBase.rsltBck])[keepInd]
+# Modifying the true value based on the NDIM
+# if 5 modes present, for the case of ACCDAM-CAMP2EX four modes have one refractive index
+# and the coarse mode 'sea salt' have different value. So based on the dimension of the var
+# We can distinguish each run type and generalize the code
+if true.ndim >1:
+    true = np.asarray([rf['k'][:,waveInd] for rf in simBase.rsltFwd])[keepInd][:,nMode]
 # rtrv = 1-np.asarray([rf['ssa'][waveInd] for rf in simBase.rsltFwd])[keepInd]
 # true = 1-np.asarray([rb['ssa'][waveInd] for rb in simBase.rsltBck])[keepInd]
 # minAOD = np.min(true)*0.95
+
 minAOD = 0.0005
 maxAOD = np.max(true)*1.05
 ax[0,3].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
@@ -243,8 +251,8 @@ except Exception as err:
     print('Error in plotting FMF: \n error: %s' %err)
     
     # try plotting bland altman
-    true = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltFwd])[keepInd]
-    rtrv = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltBck])[keepInd]
+    true = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltFwd])[keepIndAll]
+    rtrv = np.asarray([rf['aod'][waveInd] for rf in simBase.rsltBck])[keepIndAll]
     rtrv = true - rtrv
     minAOD = np.min(true)*0.9
     maxAOD = np.max(true)*1.1
@@ -256,7 +264,7 @@ except Exception as err:
     ax[1,0].set_ylim(-maxAOD/10,maxAOD/10)
     # ax[1,0].set_yscale('log')
     ax[1,0].set_xscale('log')
-    ax[1,0].scatter(true, rtrv, c=clrVar, s=MS, alpha=pointAlpha)
+    ax[1,0].scatter(true, rtrv, c=clrVarAll, s=MS, alpha=pointAlpha)
     Rcoef = np.corrcoef(true, rtrv)[0,1]
     RMSE = np.sqrt(np.median((true - rtrv)**2))
     bias = np.mean((rtrv-true))
@@ -266,11 +274,38 @@ except Exception as err:
     # textstr = frmt % (Rcoef, RMSE, bias)
     # tHnd = ax[1,0].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
     #                     textcoords='offset points', color=clrText, fontsize=FS)    
-
+    
+    # g
+    true = np.asarray([rf['ssa'][waveInd] for rf in simBase.rsltFwd])[keepInd]
+    rtrv = np.asarray([rf['ssa'][waveInd] for rf in simBase.rsltBck])[keepInd]
+    minAOD = np.min(true)*0.95
+    maxAOD = np.max(true)*1.05
+    ax[0,4].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
+    ax[0,4].set_title('SSA')
+    ax[0,4].set_xlabel(xlabel)
+    ax[0,4].set_ylabel('Retrieved')
+    ax[0,4].set_xlim(minAOD,maxAOD)
+    ax[0,4].set_ylim(minAOD,maxAOD)
+    ax[0,4].scatter(true, rtrv, c=clrVar, s=MS, alpha=pointAlpha)
+    Rcoef = np.corrcoef(true, rtrv)[0,1]
+    RMSE = np.sqrt(np.median((true - rtrv)**2))
+    bias = np.mean((rtrv-true))
+    frmt = 'R=%5.3f\nRMS=%5.3f\nbias=%5.3f'
+    tHnd = ax[0,4].annotate('N=%4d' % len(true), xy=(0, 1), xytext=(85, -124), va='top', xycoords='axes fraction',
+                textcoords='offset points', color=clrText, fontsize=FS)
+    textstr = frmt % (Rcoef, RMSE, bias)
+    tHnd = ax[0,4].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoords='axes fraction',
+                        textcoords='offset points', color=clrText, fontsize=FS)
 
 # sph
 true = np.asarray([rf['sph'] for rf in simBase.rsltFwd])[keepInd]
 rtrv = np.asarray([aodWght(rf['sph'], rf['vol']) for rf in simBase.rsltBck])[keepInd]
+# Modifying the true value based on the NDIM
+# if 5 modes present, for the case of ACCDAM-CAMP2EX four modes have one refractive index
+# and the coarse mode 'sea salt' have different value. So based on the dimension of the var
+# We can distinguish each run type and generalize the code
+if true.ndim >1:
+    true = np.asarray([rf['sph']for rf in simBase.rsltFwd])[keepInd][:,nMode]
 minAOD = 0
 maxAOD = 100.1
 ax[1,1].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
@@ -321,6 +356,12 @@ plt.suptitle(ttlStr.replace('MERGED_',''))
 # n
 true = np.asarray([rf['n'][waveInd] for rf in simBase.rsltFwd])[keepInd]
 rtrv = np.asarray([aodWght(rf['n'][:,waveInd], rf['aodMode'][:,waveInd]) for rf in simBase.rsltBck])[keepInd]
+# Modifying the true value based on the NDIM
+# if 5 modes present, for the case of ACCDAM-CAMP2EX four modes have one refractive index
+# and the coarse mode 'sea salt' have different value. So based on the dimension of the var
+# We can distinguish each run type and generalize the code
+if true.ndim >1:
+    true = np.asarray([rf['n'][:,waveInd] for rf in simBase.rsltFwd])[keepInd][:,nMode]
 minAOD = np.min(true)
 maxAOD = np.max(true)
 ax[1,3].plot([minAOD,maxAOD], [minAOD,maxAOD], 'k', linewidth=LW121)
@@ -363,6 +404,6 @@ tHnd = ax[1,4].annotate(textstr, xy=(0, 1), xytext=(5.5, -4.5), va='top', xycoor
 
 figSavePath = saveFN.replace('.pkl',('_%s_%s_%04dnm.png' % (surf2plot, fnTag, simBase.rsltFwd[0]['lambda'][waveInd]*1000)))
 print('Saving figure to: %s' % figSavePath)
-# plt.savefig('' + figSavePath)
-#plt.show()
+plt.savefig(inDirPath + figSavePath, dpi=330)
+# plt.show()
 
