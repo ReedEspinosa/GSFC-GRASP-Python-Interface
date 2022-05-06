@@ -53,6 +53,8 @@ def frmtLoadedRslts(rslts_raw):
                 rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
     return rslts
 
+RSLT_DICT_VERSION = '1.0.0' # Need to increment this if any meaningful changes made to rslts list of dicts
+
 class graspDB():
 
     def __init__(self, graspRunObjs=[], maxCPU=None, maxT=None):
@@ -130,6 +132,7 @@ class graspDB():
         dtSec = time.time() - t0
         print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dtSec, len(self.rslts)/dtSec))
         if savePath:
+            self.rslts[0]['version'] = RSLT_DICT_VERSION
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
         self.rslts = np.array(self.rslts) # numpy lists indexed w/ only assignment (no copy) but prior code built for std. list
