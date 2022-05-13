@@ -1129,6 +1129,7 @@ class graspYAML():
         """
         assert not (workingYAMLpath and not baseYAMLpath), 'baseYAMLpath must be provided to create a new YAML file at workingYAMLpath!'
         self.lambdaTypes = ['surface_water_CxMnk_iso_noPol',
+                            'surface_water_cxmnk_iso_nopol', # this seems to have change case at one point
                             'surface_water_cox_munk_iso',
                             'surface_land_brdf_ross_li',
                             'surface_land_polarized_maignan_breon',
