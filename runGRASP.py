@@ -37,6 +37,10 @@ def frmtLoadedRslts(rslts_raw):
     # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
     # If a rslts list of dicts is loaded from a file it should be filtered through this function
     rslts = np.array(rslts_raw)
+    if rslts[0]['r'].ndim == 1:
+        for i, rs in enumerate(rslts): 
+            rslts[i]['r'] = rs['r'][None, :]
+            rslts[i]['dVdlnr'] = rs['dVdlnr'][None, :]
     if 'version' in rslts[0] and float(rslts[0]['version'])>1: return rslts # rslts loaded are ≥v1.01
     if 'dVdlnr' in rslts[0]: # prior to 21/05/2021 we saved normalized; we now use absolute
         psdNormUnityRTOL = 1e-2 # if relative difference between unity and integral of PSD over r is greater than this we assume PSD is absolute

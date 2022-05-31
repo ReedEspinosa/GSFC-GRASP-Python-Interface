@@ -90,7 +90,7 @@ def logNormal(mu, sig, r=None):
         top = np.log10(mu) + Nfct*sig/np.log(10)
         r = np.logspace(bot,top,Nr)
     nrmFct = 1/(sig*np.sqrt(2*np.pi))
-    dxdr = nrmFct*(r**-1)*np.exp(-((np.log(r)-np.log(mu))**2)/(2*sig**2))
+    dxdr = nrmFct*(1/r)*np.exp(-((np.log(r)-np.log(mu))**2)/(2*sig**2))
     return dxdr,r # random note: rEff = mu*np.exp(-sig**2/2)
 
 
