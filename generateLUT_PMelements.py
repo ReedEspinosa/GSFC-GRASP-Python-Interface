@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+ 
+"""
+NOTE: graspRun.output2netCDF() will now export all these variables.
+        We will keep this script around though incase we ever want to read the relevant values from GOCART tables.
+        (although those are also becoming outdated with OSku's new tables)
+"""  
+ 
 import numpy as np
 import scipy.integrate
 import runGRASP as rg
