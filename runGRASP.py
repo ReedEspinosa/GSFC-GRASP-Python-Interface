@@ -1330,7 +1330,7 @@ class graspYAML():
                         # not a generalizedway to run this (needs fix, talk to Reed)
                         if int(mtch.group(1)) > 4:
                             # added this to change the max radius of mode[5] and above to 15 um. Not the best way to implement it, but can be genralized later to bug proof the code
-                            self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]'  %int(mtch.group(1))] = {'max': 15, 'min': lstModeRadius['min']}
+                            self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]'  %int(mtch.group(1))] = {'max': 15, 'min': 0.1}
                         else:
                             # needs to modify this to change the r_min and r_max limits
                             self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lstModeRadius)
