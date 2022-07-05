@@ -376,7 +376,11 @@ class graspRun():
             self.dirGRASP = None
             self.yamlObj = graspYAML()
             return
-        self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP # set working dir
+        if 'discover' in os.uname()[1]:
+            self.dirGRASP = 'temp'+tempfile.mkdtemp() if not dirGRASP else dirGRASP
+            os.makedirs(self.dirGRASP)
+        else:
+            self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP # set working dir
         if type(pathYAML)==str:
             if os.path.dirname(pathYAML) == self.dirGRASP: # if YAML is in specified working dir
                 self.yamlObj = graspYAML(pathYAML)
@@ -385,7 +389,7 @@ class graspRun():
                 self.yamlObj = graspYAML(pathYAML, newPathYAML)
         elif type(pathYAML)==graspYAML:
             if pathYAML.dl is not None: pathYAML.writeYAML() # incase there are unsaved changes
-            if releaseYAML: # copy so we don't overwrite orinal
+            if releaseYAML: # copy so we don't overwrite orginal
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
                 self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
             elif os.path.dirname(pathYAML.YAMLpath) == self.dirGRASP: # if YAML is in specified working dir:
@@ -1181,9 +1185,13 @@ class graspYAML():
             # To avoid the overuage of storage (temp space in discover)
             if 'discover' in os.uname()[1]:
                 # creating a temp space in DISCOVER NOBACKUP drive
-                if not os.path.exists('temp'):
-                    os.mkdir('temp')
-                self.YAMLpath = os.path.join('temp', newFn)
+                # if not os.path.exists('temp'):
+                #     os.mkdir('temp')
+                #     print('Creating temp directory')
+                newPat = 'temp'+ tempfile.gettempdir()
+                self.YAMLpath = os.path.join(newPat, newFn)
+                os.makedirs(newPat)
+                print('Yes')
             else:
                 self.YAMLpath = os.path.join(tempfile.gettempdir(), newFn)
             copyfile(baseYAMLpath, self.YAMLpath)
