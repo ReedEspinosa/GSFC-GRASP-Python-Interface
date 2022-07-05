@@ -1178,7 +1178,14 @@ class graspYAML():
             randomID = hex(np.random.randint(0, 2**63-1))[2:] # needed to prevent identical FN w/ many parallel runs
             tag = newTmpFile if type(newTmpFile)==str else 'NEW'
             newFn = '%s_%s_%s.yml' % (os.path.basename(baseYAMLpath)[:-4], tag, randomID)
-            self.YAMLpath = os.path.join(tempfile.gettempdir(), newFn)
+            # To avoid the overuage of storage (temp space in discover)
+            if 'discover' in os.uname()[1]:
+                # creating a temp space in DISCOVER NOBACKUP drive
+                if not os.path.exists('temp'):
+                    os.mkdir('temp')
+                self.YAMLpath = os.path.join('temp', newFn)
+            else:
+                self.YAMLpath = os.path.join(tempfile.gettempdir(), newFn)
             copyfile(baseYAMLpath, self.YAMLpath)
         else:
             self.YAMLpath = baseYAMLpath
