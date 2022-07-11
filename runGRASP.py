@@ -376,9 +376,9 @@ class graspRun():
             self.dirGRASP = None
             self.yamlObj = graspYAML()
             return
-        if 'discover' in os.uname()[1]:
+        if 'borg' in os.uname()[1]:
             self.dirGRASP = 'temp'+tempfile.mkdtemp() if not dirGRASP else dirGRASP
-            os.makedirs(self.dirGRASP)
+            os.makedirs(self.dirGRASP, exist_ok=True)
         else:
             self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP # set working dir
         if type(pathYAML)==str:
@@ -1183,14 +1183,14 @@ class graspYAML():
             tag = newTmpFile if type(newTmpFile)==str else 'NEW'
             newFn = '%s_%s_%s.yml' % (os.path.basename(baseYAMLpath)[:-4], tag, randomID)
             # To avoid the overuage of storage (temp space in discover)
-            if 'discover' in os.uname()[1]:
+            if 'borg' in os.uname()[1]:
                 # creating a temp space in DISCOVER NOBACKUP drive
                 # if not os.path.exists('temp'):
                 #     os.mkdir('temp')
                 #     print('Creating temp directory')
                 newPat = 'temp'+ tempfile.gettempdir()
                 self.YAMLpath = os.path.join(newPat, newFn)
-                os.makedirs(newPat)
+                os.makedirs(newPat, exist_ok = True)
                 print('Yes')
             else:
                 self.YAMLpath = os.path.join(tempfile.gettempdir(), newFn)
