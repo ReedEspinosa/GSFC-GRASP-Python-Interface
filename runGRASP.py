@@ -18,6 +18,7 @@ from scipy.stats import gaussian_kde
 import numpy as np
 import yaml # may require `conda install pyyaml`
 import miscFunctions as mf
+import os
 
 try:
     from netCDF4 import Dataset
@@ -32,6 +33,12 @@ except ImportError:
     PLOT_LOADED = False
 
 vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
+#<><><><>
+# local tmp directory
+LOCAL_TMPDIR_ = os.popen('echo $LOCAL_TMPDIR')
+LOCAL_TMPDIR = LOCAL_TMPDIR_.read()[:-2]
+LOCAL_TMPDIR_.close()
+#<><><><>
 
 def frmtLoadedRslts(rslts_raw):
     # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
@@ -377,7 +384,8 @@ class graspRun():
             self.yamlObj = graspYAML()
             return
         if 'borg' in os.uname()[1]:
-            self.dirGRASP = 'temp'+tempfile.mkdtemp() if not dirGRASP else dirGRASP
+            
+            self.dirGRASP = LOCAL_TMPDIR+tempfile.mkdtemp() if not dirGRASP else dirGRASP
             os.makedirs(self.dirGRASP, exist_ok=True)
         else:
             self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP # set working dir
@@ -1188,7 +1196,7 @@ class graspYAML():
                 # if not os.path.exists('temp'):
                 #     os.mkdir('temp')
                 #     print('Creating temp directory')
-                newPat = 'temp'+ tempfile.gettempdir()
+                newPat = LOCAL_TMPDIR + tempfile.gettempdir()
                 self.YAMLpath = os.path.join(newPat, newFn)
                 os.makedirs(newPat, exist_ok = True)
                 print('Yes')
