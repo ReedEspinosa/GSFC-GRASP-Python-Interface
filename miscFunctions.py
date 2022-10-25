@@ -14,6 +14,15 @@ try:
 except ImportError:
     pltLoad = False
 # from scipy import integrate
+from random import random
+from math import log
+
+
+def loguniform(lo,hi):
+    '''
+    Definition to create the random number that is uniformly spaced between 2 values
+    '''
+    return lo ** ((((log(hi) / log(lo)) - 1) * random()) + 1)
 
 
 def checkDiscover(): # right now this just checks for a remote connection...
