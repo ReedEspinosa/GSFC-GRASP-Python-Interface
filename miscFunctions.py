@@ -24,6 +24,11 @@ def loguniform(lo,hi):
     '''
     return lo ** ((((log(hi) / log(lo)) - 1) * random()) + 1)
 
+def slope4RRI(RRI, wavelengths, slope=0.01):
+    '''
+    Add a slope to the RRI
+    '''
+    return RRI - slope*RRI*wavelengths
 
 def checkDiscover(): # right now this just checks for a remote connection...
     return "SSH_CONNECTION" in os.environ
