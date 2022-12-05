@@ -22,7 +22,18 @@ def loguniform(lo,hi):
     '''
     Definition to create the random number that is uniformly spaced between 2 values
     '''
-    return lo ** ((((log(hi) / log(lo)) - 1) * random()) + 1)
+    if isinstance(lo,(list,np.ndarray)):
+        if len(lo) > 1:
+            logRnd =[]
+            logRnd_ = lo[0] ** ((((log(hi[0]) / log(lo[0])) - 1) * random()) + 1) # Spectrally flat #HACK, it can be changed in the future
+            for i in range(0,len(lo)):
+                logRnd.append(logRnd_)
+            
+            return logRnd
+        else:
+            return lo ** ((((log(hi) / log(lo)) - 1) * random()) + 1)
+    else:
+        return lo ** ((((log(hi) / log(lo)) - 1) * random()) + 1)
 
 def slope4RRI(RRI, wavelengths, slope=0.01):
     '''

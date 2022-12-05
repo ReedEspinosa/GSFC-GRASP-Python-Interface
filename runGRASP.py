@@ -1278,8 +1278,17 @@ class graspYAML():
                     uprBnd = np.array(mode['initial_guess']['max'], dtype=float)
                     rngBnd = fracOfSpace*(uprBnd - lowBnd)/2
                     meanBnd = (lowBnd + uprBnd)/2
-                    newGuess = np.random.uniform(meanBnd-rngBnd, meanBnd+rngBnd).tolist() # guess is spectrally flat relative to rng
-                    mode['initial_guess']['value'] = newGuess
+                    if char['type'] in ['imaginary_part_of_refractive_index_spectral_dependent', 'aerosol_concentration']:
+                        try:
+                            newGuess = mf.loguniform(meanBnd-rngBnd, meanBnd+rngBnd) # guess is spectrally flat relative to rng #HACK
+                        except:
+                            print(char['type'])
+                            print(mode)
+                                
+                        mode['initial_guess']['value'] = newGuess
+                    else: # random number in linear space                        
+                        newGuess = np.random.uniform(meanBnd-rngBnd, meanBnd+rngBnd).tolist()
+                        mode['initial_guess']['value'] = newGuess # guess is spectrally flat relative to rng
         self.writeYAML()
 
     def adjustLambda(self, Nlambda):
