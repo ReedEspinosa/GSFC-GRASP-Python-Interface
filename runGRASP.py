@@ -37,7 +37,7 @@ def frmtLoadedRslts(rslts_raw):
     # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
     # If a rslts list of dicts is loaded from a file it should be filtered through this function
     rslts = np.array(rslts_raw)
-    if rslts[0]['r'].ndim == 1:
+    if 'r' in rslts[0] and rslts[0]['r'].ndim == 1:
         for i, rs in enumerate(rslts): 
             rslts[i]['r'] = rs['r'][None, :]
             rslts[i]['dVdlnr'] = rs['dVdlnr'][None, :]
