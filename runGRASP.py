@@ -37,6 +37,10 @@ def frmtLoadedRslts(rslts_raw):
     # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
     # If a rslts list of dicts is loaded from a file it should be filtered through this function
     rslts = np.array(rslts_raw)
+    if 'r' in rslts[0] and rslts[0]['r'].ndim == 1:
+        for i, rs in enumerate(rslts): 
+            rslts[i]['r'] = rs['r'][None, :]
+            rslts[i]['dVdlnr'] = rs['dVdlnr'][None, :]
     if 'version' in rslts[0] and float(rslts[0]['version'])>1: return rslts # rslts loaded are ≥v1.01
     if 'dVdlnr' in rslts[0]: # prior to 21/05/2021 we saved normalized; we now use absolute
         psdNormUnityRTOL = 1e-2 # if relative difference between unity and integral of PSD over r is greater than this we assume PSD is absolute
@@ -45,7 +49,7 @@ def frmtLoadedRslts(rslts_raw):
         ra = np.concatenate([rs['dVdlnr'][:,[0,-1]].max(axis=1)/rs['dVdlnr'].max(axis=1) for rs in rslts]) # %timeit -> 229 ms
         nonTruncInd = ra < psdTruncThresh
         if not nonTruncInd.any():
-            print('WARNING: All PSDs were significantly truncated and normalization could not be detemrined. dVdlnr may or may not be in absolute units.')
+            warnings.warn('All PSDs were significantly truncated and normalization could not be detemrined. dVdlnr may or may not be in absolute units.')
             return rslts
         trp = np.concatenate([np.trapz(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
         if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
@@ -589,6 +593,15 @@ class graspRun():
                 self._CVnc4('dVdlnr', 'Absolute size distribution in each mode', (tName, mName,radiiName), varHnds, 'dVdlnr', rsltDict, root_grp, units='μm3/μm2')
             elif self.verbose:
                 print('Skipping radii dimension in NetCDF file because either there were none or they were not consistent between modes.')
+            if 'angle' in rsltDict[0]:
+                angName = 'scattering_angle'
+                Nang = rsltDict[0]['angle'].shape[0]
+                root_grp.createDimension(angName, Nang)
+                varHnds[angName] = root_grp.createVariable(angName, 'f4', (angName))
+                varHnds[angName][:] = rsltDict[0]['angle'][:,0,0] # assume scattering angle same for all pixels, modes, wavelengths (fundamental to NC4 concept)
+                varHnds[angName].units = 'degrees'
+                varHnds[angName].long_name = 'Scattering angle for PM'
+
             # write data variables
             for key in rsltDict[0].keys(): # loop over keys
                 if 'fit' in key or 'sca_ang' in key:
@@ -596,8 +609,10 @@ class graspRun():
                         varNm = key.replace('fit_','')
                         varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (tName, λName, visName))
                         varHnds[varNm].units = 'none'
-                        longNm = 'Intensity' if varNm=='I' else varNm
-                        varHnds[varNm].long_name = '%s at TOA' % longNm
+                        if varNm in ['I', 'Q', 'U']:
+                            varHnds[varNm].long_name = 'Stokes %s as a reflectance (radiance*π/E0) at TOA' % varNm 
+                        else:
+                            varHnds[varNm].long_name = 'Stokes %s at TOA' % varNm.replace('o','/')
                     elif key == 'sca_ang':
                         varNm = key
                         varHnds[varNm] = root_grp.createVariable(varNm, 'f4', (tName, λName, visName))
@@ -614,10 +629,15 @@ class graspRun():
                     varHnds['RTLS_ISO'].long_name = 'Isotropic kernel of the RTLS model'
                     varHnds['RTLS_VOL'].long_name = 'Volume kernel of the RTLS model (MAIAC_vol/MAIAC_iso)'
                     varHnds['RTLS_GEO'].long_name = 'Geometric kernel of the RTLS model (MAIAC_geo/MAIAC_iso)'
-                # TODO: add another elif for wtrSurf (cox-munk) [readOSSEnetCDF doesn't pull this yet anyway]
+                elif key=='wtrSurf' and rsltDict[0]['wtrSurf'].shape[0]==3: # probably Cox-Munk parameters
+                    for i,varNm in enumerate(['CoxMunk_Albedo', 'CoxMunk_foamFrac', 'CoxMunk_sigma']): # loop over the three RTLS parameters
+                        varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (tName, λName))
+                        varHnds[varNm].units = 'none'
+                        varHnds[varNm][:,:] = np.array([rslt['wtrSurf'][i,:] for rslt in rsltDict]) # loop over times, select all λ
+                    varHnds['CoxMunk_Albedo'].long_name = 'Albedo of isotropic water-leaving reflectance'
+                    varHnds['CoxMunk_foamFrac'].long_name = 'GISS Cox-Munk 1 - Fraction_of_foam'
+                    varHnds['CoxMunk_sigma'].long_name = 'Wind speed parameter of isoptropic Cox-Munk model where V = (2*sigma-0.003)/0.00512)'
                 else:
-                    # TODO: add datetime to below... not sure of best method off hand
-                    # TODO: add full PSD output to the below... need to make radius a dimension [readOSSEnetCDF doesn't pull this yet anyway]
                     self._CVnc4('latitude', 'latitude coordinate', (tName,), varHnds, key, rsltDict, root_grp, units='degrees_north')
                     self._CVnc4('longitude', 'longitude coordinate', (tName,), varHnds, key, rsltDict, root_grp, units='degrees_east')
                     self._CVnc4('land_prct', 'Percentage of land cover', (tName,), varHnds, key, rsltDict, root_grp, units='percent')
@@ -631,7 +651,6 @@ class graspRun():
                     self._CVnc4('aod', 'Total aerosol optical depth', (tName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('ssa', 'Total single scattering albedo', (tName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('g', 'Asymmetry parameter', (tName, λName), varHnds, key, rsltDict, root_grp)
-                    self._CVnc4('aodMode', 'Mode resolved AOD', (tName, mName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('ssaMode', 'Mode resolved SSA', (tName, mName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('n', 'Real refractive index', (tName, mName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('k', 'Imaginary refractive index', (tName, mName, λName), varHnds, key, rsltDict, root_grp)
@@ -639,12 +658,22 @@ class graspRun():
                     self._CVnc4('vol', 'Volume concentration of aerosol in each mode', (tName, mName), varHnds, key, rsltDict, root_grp, units='μm3/μm2')
                     self._CVnc4('rv', 'Median volume radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp, units='μm')
                     self._CVnc4('sigma', 'Standard deviations of modes [ln(σg)]', (tName, mName), varHnds, key, rsltDict, root_grp)
-                    if 'rEffMode' in rsltDict[0] and Nmodes==len(rsltDict[0]['rEffMode']): # b/c we have _addReffMode() method in simulateRetrieval the number of rEffModes does not always match other variables
-                        self._CVnc4('rEffMode', 'Effective radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('rEff', 'Total effective radii', (tName,), varHnds, key, rsltDict, root_grp, units='μm')
                     self._CVnc4('LidarRatio', 'Total lidar ratio', (tName, λName), varHnds, key, rsltDict, root_grp)
                     self._CVnc4('height', 'Gaussian layer median height', (tName, mName), varHnds, key, rsltDict, root_grp, units='m')
                     self._CVnc4('heightStd', 'Gaussian layer standard deviation', (tName, mName), varHnds, key, rsltDict, root_grp, units='m')
+                    if self._CVnc4('aodMode', 'Mode resolved AOD', (tName, mName, λName), varHnds, key, rsltDict, root_grp):
+                        self._CVnc4('bext_vol', 'Volume extinction efficiency', (tName, mName, λName), varHnds, 'bext_vol', rsltDict, root_grp, units='m2·m-3')
+                        newData = np.array([rslt['aodMode']/rslt['vol'][:,None] for rslt in rsltDict])
+                        varHnds['bext_vol'][:,:,:] = newData
+                        varHnds['bext_vol'].description = "The extinction cross section per unit of particle volume.\
+                         This is also the extinction coefficient per unit of volume concentration.\
+                         bext_vol x ρ = βext where ρ is the particle density and βext is the mass extinction efficiency."
+                    if 'rEffMode' in rsltDict[0] and Nmodes==len(rsltDict[0]['rEffMode']): # b/c we have _addReffMode() method in simulateRetrieval the number of rEffModes does not always match other variables
+                        self._CVnc4('rEffMode', 'Effective radii of modes', (tName, mName), varHnds, key, rsltDict, root_grp)
+                    for varNm in ['p11', 'p12', 'p22', 'p33', 'p34', 'p44']:
+                        lngNm = varNm + ' phase matrix element'
+                        self._CVnc4(varNm, lngNm, (tName, angName, mName, λName), varHnds, key, rsltDict, root_grp, units='sr-1')
             if seaLevel: # This is a little nasty, need to double check numbers below before using
                 varNm = 'ROD'
                 varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (λName))
@@ -659,12 +688,15 @@ class graspRun():
 
     def _CVnc4(self, trgtKey, desc, dimTuple, varHnds, srchKey, rsltDict, root_grp, nc4Key=None, units='none'):
         """ Creates and writes data to a new netCDF variable """
-        if not srchKey==trgtKey: return
+        if not srchKey==trgtKey: return False
         if nc4Key is None: nc4Key = trgtKey
         varHnds[nc4Key] = root_grp.createVariable(nc4Key, 'f8', dimTuple)
         varHnds[nc4Key].units = units
+        varHnds[nc4Key].long_name = desc
         if trgtKey=='vis':
             newData = np.array([vzaSgnCalc(r['vis'], r['fis']) for r in rsltDict]) # add sign information to SZA based on φ (inefficient by factor of Νλ b/c we drop wavelength dim below)
+        elif trgtKey in ['bext_vol']: # We will set value outside of this method
+            return True
         else:
             newData = np.array([rslt[trgtKey] for rslt in rsltDict]) # loop over times, select all λ
         if len(dimTuple)==1:
@@ -675,9 +707,11 @@ class graspRun():
             varHnds[nc4Key][:,:] = newData
         elif len(dimTuple)==3:
             varHnds[nc4Key][:,:,:] = newData
+        elif len(dimTuple)==4:
+            varHnds[nc4Key][:,:,:,:] = newData
         else:
-            assert False, 'This method can not currently handle a variables with more than 3 dimensions.' # easy to add one more dim, but fully generalizing the above is really tricky
-        varHnds[nc4Key].long_name = desc
+            assert False, 'This method can not currently handle a variables with more than 4 dimensions.' # easy to add one more dim, but fully generalizing the above is really tricky
+        return True
 
     def seaLevelROD(self, λtarget):
         λ =   np.r_[0.3600, 0.3800, 0.4100, 0.5500, 0.6700, 0.8700, 1.5500, 1.6500]
@@ -840,7 +874,7 @@ class graspRun():
         results = self.parseOutDateTime(contents)
         ptrnPMall = re.compile('^[ ]*Phase Matrix[ ]*$')
         ptrnPMfit = re.compile('^[ ]*ipix=([0-9]+)[ ]+yymmdd = [0-9]+-[0-9]+-[0-9]+[ ]+hhmmss[ ]*=[ ]*[0-9][0-9]:[0-9][0-9]:[0-9][0-9][ ]*$')
-        ptrnPMfitWave = re.compile('^[ ]*wl=[ ]*([0-9]+.[0-9]+)[ ]+isd=([0-9]+)[ ]+sca=')
+        ptrnPMfitWave = re.compile('^[ ]*wl[ ]*=[ ]*([0-9]+.[0-9]+)[ ]+isd[ ]*=[ ]*([0-9]+)[ ]+sca')
         FITfnd = False
         Nang = 181
         skipFlds = 1 # first field is just angle number
@@ -897,7 +931,7 @@ class graspRun():
 
     def parseOutFit(self, contents, wavelengths):
         results = self.parseOutDateTime(contents)
-        ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING[ ]*[\*]+[ ]*$')
+        ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING .*[\*]+[ ]*$')
         ptrnPIX = re.compile('^[ ]*pixel[ ]*#[ ]*([0-9]+)[ ]*wavelength[ ]*#[ ]*([0-9]+)[ ]*([0-9\.]+)[ ]*\(um\)')
         numericLn = re.compile('^[ ]*[0-9]+')
         ptrnHeader = re.compile('^[ ]*#[ ]*(sza[ ]*vis|Range_\[m\][ ]*meas_)')
@@ -1129,6 +1163,7 @@ class graspYAML():
         """
         assert not (workingYAMLpath and not baseYAMLpath), 'baseYAMLpath must be provided to create a new YAML file at workingYAMLpath!'
         self.lambdaTypes = ['surface_water_CxMnk_iso_noPol',
+                            'surface_water_cxmnk_iso_nopol', # this seems to have change case at one point
                             'surface_water_cox_munk_iso',
                             'surface_land_brdf_ross_li',
                             'surface_land_polarized_maignan_breon',

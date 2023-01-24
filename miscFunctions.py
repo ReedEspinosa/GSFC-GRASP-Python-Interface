@@ -90,7 +90,7 @@ def logNormal(mu, sig, r=None):
         top = np.log10(mu) + Nfct*sig/np.log(10)
         r = np.logspace(bot,top,Nr)
     nrmFct = 1/(sig*np.sqrt(2*np.pi))
-    dxdr = nrmFct*(r**-1)*np.exp(-((np.log(r)-np.log(mu))**2)/(2*sig**2))
+    dxdr = nrmFct*(1/r)*np.exp(-((np.log(r)-np.log(mu))**2)/(2*sig**2))
     return dxdr,r # random note: rEff = mu*np.exp(-sig**2/2)
 
 
@@ -140,7 +140,7 @@ def integrateProfile(rsltList, mode, lowBnd=1.5, upBnd=2.5):
             assert False, 'Could not determine profile type present in this rsltList.'
     return output
 
-def integratePSD(rsltList, moment='vol', lowBnd=0, upBnd=np.inf, sizeMode=None):
+def integratePSD(rsltList, moment='vol', lowBnd=0, upBnd=np.inf, sizeMode=None, verbose=False):
     import scipy.stats
     # volume returned in μm3/μm2; conveniently, this is also g/m3 for ρ_mass_H20
     if moment.lower()=='reff': 
@@ -151,7 +151,7 @@ def integratePSD(rsltList, moment='vol', lowBnd=0, upBnd=np.inf, sizeMode=None):
     for i,rs in enumerate(rsltList):
         if sizeMode is None: # we want to sum over them all
             if not np.all(rs['r'][0]==rs['r']):
-                print('Warning assumption that all modes specfified over the same radii was violated! Returning list of np.nan...')
+                if verbose: print('Warning assumption that all modes specfified over the same radii was violated! Returning list of np.nan...')
                 return np.full(len(rsltList), np.nan)
             r = rs['r'][0]
             dVdlnr = rs['dVdlnr'].sum(axis=0)
