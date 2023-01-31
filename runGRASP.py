@@ -94,9 +94,9 @@ class graspDB():
         else:
             assert not graspRunObjs, 'graspRunObj must be either a list or graspRun object!'
 
-    def processData(self, maxCPUs=None, binPathGRASP=None, savePath=False, krnlPathGRASP=None, nodesSLURM=0, rndGuess=False):
-        if not maxCPUs:
-            maxCPUs = self.maxCPU if self.maxCPU else 2
+    def processData(self, maxCPU=None, binPathGRASP=None, savePath=False, krnlPathGRASP=None, nodesSLURM=0, rndGuess=False):
+        if not maxCPU:
+            maxCPU = self.maxCPU if self.maxCPU else 2
         usedDirs = []
         t0 = time.time()
         # self.grObjs[1].pixels[0].masl = 1e9 # HACK TO BREAK GRASP AND TEST GRACEFULL EXIT
@@ -110,7 +110,7 @@ class graspDB():
             Nobjs = len(self.grObjs)
             pObjs = []
             while i < Nobjs:
-                if sum([pObj.poll() is None for pObj in pObjs]) < maxCPUs:
+                if sum([pObj.poll() is None for pObj in pObjs]) < maxCPU:
                     print('Starting a new thread for graspRun index %d/%d' % (i+1, Nobjs))
                     if rndGuess: self.grObjs[i].yamlObj.scrambleInitialGuess(rndGuess)
                     pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP, krnlPathGRASP))
@@ -140,7 +140,7 @@ class graspDB():
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
         self.rslts = np.array(self.rslts) # numpy lists indexed w/ only assignment (no copy) but prior code built for std. list
-        return self.rslts, failedRunsPixLev
+        return self.rslts, failedRunsPixLev # failedRunsPixLev is a boolean array with len(Npixels) (which is ≥ len(grObjs))
 
     def loadResults(self, loadPath):
         try:
@@ -1082,7 +1082,7 @@ class pixel():
                 msDct['nbvm'] = [len(rslt[dataStage+'_'+mt][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
                 msDct['meas_type'] = np.sort(msDct['meas_type'])
                 msDct['nip'] = len(msDct['meas_type'])
-                if np.all(msDct['meas_type'] < 40): # lidar data
+                if np.all(msDct['meas_type'] < 40): # lidar data # TODO: This should be improved...
                     msDct['sza'] = 0.01 # we assume vertical lidar
                     msDct['thetav'] = rslt['RangeLidar'][:,l]
                     msDct['phi'] = np.repeat(0, len(msDct['thetav']))
