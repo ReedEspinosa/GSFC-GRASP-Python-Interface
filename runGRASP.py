@@ -1060,7 +1060,7 @@ class pixel():
             if self.meas == [] when called, populateFromRslt will add a measurement for each wvl in rslt
             radianceNoiseFun will override (and permanently set) self.measVals[n]['errorModel']
         """
-        msTypMap = {'I':41, 'Q':42, 'U':43, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
+        msTypMap = {'I':41, 'Q':42, 'U':43, 'DOLP':44, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
         msTyps = np.array([key.replace(dataStage+'_','') for key in rslt.keys() if dataStage in key]) # names of all keys with dataStage (e.g. "fit_")
         if 'QoI' in msTyps:
             rslt[dataStage+'_Q'] = rslt[dataStage+'_QoI']*rslt[dataStage+'_I']
@@ -1101,6 +1101,8 @@ class pixel():
         if 'longitude' in rslt: self.lon = rslt['longitude']
         if 'land_prct' in rslt: self.set_land_prct(rslt['land_prct'])
         if 'masl' in rslt: self.masl = rslt['masl']
+        #
+        
 
     def formatMeas(self, newMeas, lowThresh=1e-10):
         frmtMsg = '\n\
