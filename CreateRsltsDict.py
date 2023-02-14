@@ -46,7 +46,7 @@ def Read_Data_Oracles(file_path,file_name,PixNo,TelNo, nwl, ang): #PixNo = Index
     Solar_Zenith =  f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,:ang]
     Solar_Azimuth = f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,:ang]
     Viewing_Azimuth = f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,:ang]
-    Viewing_Zenith = Ang_corr -f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,:ang]
+    Viewing_Zenith = Ang_corr -f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,:ang] # Theta_v <90
     # Viewing_Zenith = f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,:ang]
     
     
@@ -97,6 +97,7 @@ def Read_Data_Oracles(file_path,file_name,PixNo,TelNo, nwl, ang): #PixNo = Index
     rslt['meas_Q']= Q[PixNo,:ang,:nwl]
     rslt['meas_U']= U[PixNo,:ang,:nwl]
     rslt['DoLP'] = DoLP[PixNo,:ang,:nwl]
+    rslt['height']= f1_MAP['Geometry']['Collocated_Altitude'][TelNo,PixNo]/1000 # height of pixel in km
 
     return rslt
 
