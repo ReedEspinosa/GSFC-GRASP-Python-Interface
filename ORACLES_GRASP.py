@@ -60,7 +60,7 @@ gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU)
 rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
 
 
-
+#Plotting the results:
 
 
 
