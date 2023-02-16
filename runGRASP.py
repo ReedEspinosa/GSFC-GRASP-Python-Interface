@@ -37,7 +37,7 @@ def frmtLoadedRslts(rslts_raw):
     # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
     # If a rslts list of dicts is loaded from a file it should be filtered through this function
     rslts = np.array(rslts_raw)
-    if rslts[0]['r'].ndim == 1:
+    if 'r' in rslts[0] and rslts[0]['r'].ndim == 1:
         for i, rs in enumerate(rslts): 
             rslts[i]['r'] = rs['r'][None, :]
             rslts[i]['dVdlnr'] = rs['dVdlnr'][None, :]
@@ -641,7 +641,6 @@ class graspRun():
                     varHnds['CoxMunk_foamFrac'].long_name = 'GISS Cox-Munk 1 - Fraction_of_foam'
                     varHnds['CoxMunk_sigma'].long_name = 'Wind speed parameter of isoptropic Cox-Munk model where V = (2*sigma-0.003)/0.00512)'
                 else:
-                    # TODO: add datetime to below... not sure of best method off hand
                     self._CVnc4('latitude', 'latitude coordinate', (tName,), varHnds, key, rsltDict, root_grp, units='degrees_north')
                     self._CVnc4('longitude', 'longitude coordinate', (tName,), varHnds, key, rsltDict, root_grp, units='degrees_east')
                     self._CVnc4('land_prct', 'Percentage of land cover', (tName,), varHnds, key, rsltDict, root_grp, units='percent')
@@ -878,7 +877,7 @@ class graspRun():
         results = self.parseOutDateTime(contents)
         ptrnPMall = re.compile('^[ ]*Phase Matrix[ ]*$')
         ptrnPMfit = re.compile('^[ ]*ipix=([0-9]+)[ ]+yymmdd = [0-9]+-[0-9]+-[0-9]+[ ]+hhmmss[ ]*=[ ]*[0-9][0-9]:[0-9][0-9]:[0-9][0-9][ ]*$')
-        ptrnPMfitWave = re.compile('^[ ]*wl=[ ]*([0-9]+.[0-9]+)[ ]+isd=([0-9]+)[ ]+sca=')
+        ptrnPMfitWave = re.compile('^[ ]*wl[ ]*=[ ]*([0-9]+.[0-9]+)[ ]+isd[ ]*=[ ]*([0-9]+)[ ]+sca')
         FITfnd = False
         Nang = 181
         skipFlds = 1 # first field is just angle number
@@ -935,7 +934,7 @@ class graspRun():
 
     def parseOutFit(self, contents, wavelengths):
         results = self.parseOutDateTime(contents)
-        ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING[ ]*[\*]+[ ]*$')
+        ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING .*[\*]+[ ]*$')
         ptrnPIX = re.compile('^[ ]*pixel[ ]*#[ ]*([0-9]+)[ ]*wavelength[ ]*#[ ]*([0-9]+)[ ]*([0-9\.]+)[ ]*\(um\)')
         numericLn = re.compile('^[ ]*[0-9]+')
         ptrnHeader = re.compile('^[ ]*#[ ]*(sza[ ]*vis|Range_\[m\][ ]*meas_)')
