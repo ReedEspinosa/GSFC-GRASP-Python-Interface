@@ -49,7 +49,7 @@ def Run(Kernel_type,PixNo,TelNo,nwl,ang):
     
     if Kernel_type == "TAMU":
         fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes_Shape_ORACLE_tamu.yml'
-        binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP/bin/grasp_app' #GRASP Executable
+        binPathGRASP ='/home/shared/GRASP_GSFC/build_megaharp01_mod/bin/grasp_app' #GRASP Executable
         # binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP_v112_noWarn/bin/grasp_app' # New Version GRASP Executable  
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
         savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
@@ -62,7 +62,7 @@ def Run(Kernel_type,PixNo,TelNo,nwl,ang):
     gRuns = []
     yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
     #eventually have to adjust code for height, this works only for one pixel (single height value)
-    gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML=True, orbHghtKM= rslt['height'] )) # This should copy to new YAML object
+    gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML=True, orbHghtKM= rslt['OBS_hght'] )) # This should copy to new YAML object
 
 
     pix = pixel()
