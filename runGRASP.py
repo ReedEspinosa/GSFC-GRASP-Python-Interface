@@ -116,7 +116,10 @@ class graspDB():
                     pObjs.append(self.grObjs[i].runGRASP(True, binPathGRASP, krnlPathGRASP))
                     i += 1
                 time.sleep(0.1)
-            while any([pObj.poll() is None for pObj in pObjs]): time.sleep(0.1)
+            # print("pObjs.poll() was:")
+            while any([pObj.poll() is None for pObj in pObjs]): 
+                # print(pObjs[0])
+                time.sleep(0.1)
             failedRuns = np.array([pObj.returncode for pObj in pObjs])>0
             for flRn in failedRuns.nonzero()[0]:
                 print(' !!! Exit code %d in: %s' % (pObjs[flRn].returncode, self.grObjs[flRn].dirGRASP))
