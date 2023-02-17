@@ -86,10 +86,6 @@ class graspDB():
                 endInd = min(strtInd+grspChnkSz, Npix)
                 for ind in range(strtInd, endInd):
                     gObj.addPix(graspRunObjs.pixels[ind])
-#                 HACK to test RT accuracy
-#                 valueMap = np.r_[23:51]
-#                 fieldTest = 'retrieval.radiative_transfer.simulating_observation.number_of_guassian_quadratures_for_fourier_expansion_coefficients'
-#                 gObj.yamlObj.access(fieldTest, valueMap[strtInd])
                 self.grObjs.append(gObj)
         else:
             assert not graspRunObjs, 'graspRunObj must be either a list or graspRun object!'
@@ -134,6 +130,7 @@ class graspDB():
         [self.rslts.extend(self.grObjs[i].readOutput()) for i in np.nonzero(~failedRuns)[0]]
         failedRunsPixLev = np.hstack([np.repeat(failed, len(grObj.pixels)) for grObj,failed in zip(self.grObjs,failedRuns)])
         dtSec = time.time() - t0
+        if len(self.rslts)==0: warnings.warn('\nNo pixels were successfully processed!\n')
         print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dtSec, len(self.rslts)/dtSec))
         if savePath:
             self.rslts[0]['version'] = RSLT_DICT_VERSION
@@ -354,10 +351,10 @@ class graspDB():
             if clnLayout: plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         elif clnLayout:
             plt.tight_layout()
-
+            
 
 class graspRun():
-    def __init__(self, pathYAML=None, orbHghtKM=700, dirGRASP=None, releaseYAML=False, verbose=True):
+    def __init__(self, pathYAML=None, orbHghtKM=None, dirGRASP=None, releaseYAML=False, verbose=True):
         """
         pathYAML – yaml data: posix path string, graspYAML object or None
             Note: type(pathYAML)==graspYAML –> create new instance of a graspYAML object, with a duplicated YAML file in dirGRASP (see below)
@@ -366,11 +363,12 @@ class graspRun():
         """
         self.releaseYAML = releaseYAML # allow automated modification of YAML, all index of wavelength involved fields MUST cover every wavelength
         self.pathSDATA = False
-        self.verbose = verbose
-        self.orbHght = orbHghtKM*1000
+        self.verbose = verbose        
         self.pixels = []
         self.pObj = False
         self.invRslt = dict()
+        if orbHghtKM is not None:
+            warnings.warn('Use of orbHghtKM in graspRun is depreciated! orbHghtKM should be set at level of pixel object.')
         if pathYAML is None:
             assert not dirGRASP, 'You can not have a working directory (dirGRASP) without a YAML file (pathYAML)!'
             self.dirGRASP = None
@@ -1013,12 +1011,12 @@ class graspRun():
     def genCellHead(self, pixInd):
         nStr = '\n  %d   ' % len(pixInd)
         dtStr = self.pixels[pixInd[0]].dtObj.strftime('%Y-%m-%dT%H:%M:%SZ')
-        endstr = ' %10.2f   0   0\n' % self.orbHght
+        endstr = ' %10.2f   0   0\n' % self.pixels[pixInd[0]].orbHght
         return nStr+dtStr+endstr
 
 
 class pixel():
-    def __init__(self, dtObj=None, ix=1, iy=1, lon=0, lat=0, masl=0, land_prct=100):
+    def __init__(self, dtObj=None, ix=1, iy=1, lon=0, lat=0, masl=0, land_prct=100, obsHghtKM=700):
         """ dtObj - a datetime object corresponding to measurement time (also accepts matlab style datenum)
             masl - surface altitude in meters
             land_prct - % of land, in the range [0(sea)...100(land)] (matches format GRASP takes) """
@@ -1033,6 +1031,7 @@ class pixel():
         self.set_land_prct(land_prct)
         self.nwl = 0
         self.measVals = []
+        self.obsHght = obsHghtKM*1000
 
     def set_land_prct(self, newValue):
         """ There is a special method for this so that we can warn user if not setting it as a percent """
@@ -1064,7 +1063,7 @@ class pixel():
             if self.meas == [] when called, populateFromRslt will add a measurement for each wvl in rslt
             radianceNoiseFun will override (and permanently set) self.measVals[n]['errorModel']
         """
-        msTypMap = {'I':41, 'Q':42, 'U':43, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
+        msTypMap = {'I':41, 'Q':42, 'U':43, 'DOLP':44, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
         msTyps = np.array([key.replace(dataStage+'_','') for key in rslt.keys() if dataStage in key]) # names of all keys with dataStage (e.g. "fit_")
         if 'QoI' in msTyps:
             rslt[dataStage+'_Q'] = rslt[dataStage+'_QoI']*rslt[dataStage+'_I']
@@ -1106,6 +1105,7 @@ class pixel():
         if 'longitude' in rslt: self.lon = rslt['longitude']
         if 'land_prct' in rslt: self.set_land_prct(rslt['land_prct'])
         if 'masl' in rslt: self.masl = rslt['masl']
+        if 'OBS_hght' in rslt: self.obsHght = rslt['OBS_hght'] # rslt['OBS_hght'] should be in meters (not km)!
 
     def formatMeas(self, newMeas, lowThresh=1e-10):
         frmtMsg = '\n\
