@@ -1011,7 +1011,7 @@ class graspRun():
     def genCellHead(self, pixInd):
         nStr = '\n  %d   ' % len(pixInd)
         dtStr = self.pixels[pixInd[0]].dtObj.strftime('%Y-%m-%dT%H:%M:%SZ')
-        endstr = ' %10.2f   0   0\n' % self.pixels[pixInd[0]].orbHght
+        endstr = ' %10.2f   0   0\n' % self.pixels[pixInd[0]].obsHght
         return nStr+dtStr+endstr
 
 
