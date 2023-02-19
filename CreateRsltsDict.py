@@ -97,7 +97,13 @@ def Read_Data_Oracles(file_path,file_name,PixNo,TelNo, nwl, ang): #PixNo = Index
     rslt['meas_Q']= Q[PixNo,:ang,:nwl]
     rslt['meas_U']= U[PixNo,:ang,:nwl]
     rslt['DoLP'] = DoLP[PixNo,:ang,:nwl]
-    rslt['height']= f1_MAP['Geometry']['Collocated_Altitude'][TelNo,PixNo]/1000 # height of pixel in km
+
+    #height key should not be used for altitude,
+
+    rslt['OBS_hght']= f1_MAP['Geometry']['Collocated_Altitude'][TelNo,PixNo] # height of pixel in m
+    if  rslt['OBS_hght'] < 0:  #if colocated attitude is less than 0 then that is set to 0
+        rslt['OBS_hght'] = 0
+        print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
 
     return rslt
-
+ 
