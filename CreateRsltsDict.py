@@ -21,13 +21,14 @@ import juliandate as jd
 
 
 # Reads the Data from ORACLES and gives the rslt dictionary for GRASP
-def Read_Data_Oracles(file_path,file_name,PixNo,TelNo, nwl, ang): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
+def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
     #Readinh the hdf file
     
     f1_MAP = h5py.File(file_path + file_name,'r+')  #reading hdf5 file
     # print("Keys: %s" % f1_MAP.keys())
     Data = f1_MAP['Data'] #Reading the data
     if ang == None: ang= 152
+    if ang1 == None: ang1= 0
     
     # ang = 152 #No fo angles
     #Reading the Geometry
@@ -40,13 +41,13 @@ def Read_Data_Oracles(file_path,file_name,PixNo,TelNo, nwl, ang): #PixNo = Index
     # Lat[Lat== -999.0] = np.nan
     # Lon[Lon== -999.0] = np.nan
 
-    Ang_corr = np.ones((f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,:ang].shape))*180  #correction for groud based to Grasp 
+    Ang_corr = np.ones((f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,ang1:ang].shape))*180  #correction for groud based to Grasp 
 
-    Scattering_ang = f1_MAP['Geometry']['Scattering_Angle'][TelNo,PixNo,:ang]
-    Solar_Zenith =  f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,:ang]
-    Solar_Azimuth = f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,:ang]
-    Viewing_Azimuth = f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,:ang]
-    Viewing_Zenith = Ang_corr -f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,:ang] # Theta_v <90
+    Scattering_ang = f1_MAP['Geometry']['Scattering_Angle'][TelNo,PixNo,ang1:ang]
+    Solar_Zenith =  f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,ang1:ang]
+    Solar_Azimuth = f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,ang1:ang]
+    Viewing_Azimuth = f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,ang1:ang]
+    Viewing_Zenith = Ang_corr - f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,ang1:ang] # Theta_v <90
     # Viewing_Zenith = f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,:ang]
     
     
@@ -62,15 +63,17 @@ def Read_Data_Oracles(file_path,file_name,PixNo,TelNo, nwl, ang): #PixNo = Index
     if nwl == None: nwl = len(Data['Wavelength'][:])
     
     I1 = (Data['Intensity_1'][:]) #telescope 1 Normalized intensity (unitless)
-    I1[I1<0] = np.nan  #there are some negative intesity values in the file
+    # I1[(I1<0) & (I1>2)] = np.nan  #there are some negative intesity values in the file
     
     I2 = Data['Intensity_2'][:]  #telescope 2
-    I2[I2<0] = np.nan  #there are some negative intesity values in the file
+    # I2[(I1<0) & (I1>2)] = np.nan  #there are some negative intesity values in the file
 
-    I = (I1+I2)/2     # averaging over telescope 1 and telescope 2
+    I = (I1+I2)/2  
+    I[(I<0) & (I>1)] = 0   # averaging over telescope 1 and telescope 2
     Q = Data['Stokes_Q']
     U = Data['Stokes_U']
     DoLP = Data['DoLP']
+    
     
     #Creating rslt dictionary for GRASP
     rslt ={}
@@ -93,10 +96,12 @@ def Read_Data_Oracles(file_path,file_name,PixNo,TelNo, nwl, ang): #PixNo = Index
     rslt['sca_ang']= np.repeat( Scattering_ang, nwl).reshape(len(Scattering_ang), nwl)  #Nangles x Nwavelengths
     rslt['fis'] = np.repeat(Relative_Azi , nwl).reshape(len(Relative_Azi ), nwl)
     
-    rslt['meas_I']= I[PixNo,:ang,:nwl]
-    rslt['meas_Q']= Q[PixNo,:ang,:nwl]
-    rslt['meas_U']= U[PixNo,:ang,:nwl]
-    rslt['DoLP'] = DoLP[PixNo,:ang,:nwl]
+    rslt['meas_I']= I[PixNo,ang1:ang,:nwl]
+
+    rslt['meas_Q']= Q[PixNo,ang1:ang,:nwl]
+    rslt['meas_U']= U[PixNo,ang1:ang,:nwl]
+    rslt['DoLP'] = DoLP[PixNo, ang1:ang,:nwl]
+    rslt['DoLP'][rslt['DoLP']<0] == np.nan
 
     #height key should not be used for altitude,
 
