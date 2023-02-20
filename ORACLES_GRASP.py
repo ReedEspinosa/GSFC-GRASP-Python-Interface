@@ -7,7 +7,7 @@ This code reads Polarimetric data from the Campaigns and runs GRASP. This code w
 """
 
 import sys
-from CreateRsltsDict import Read_Data_Oracles
+from CreateRsltsDict import Read_Data_RSP_Oracles
 
 from runGRASP import graspDB, graspRun, pixel, graspYAML
 from matplotlib import pyplot as plt
@@ -15,7 +15,7 @@ import os
 if os.uname()[1]=='uranus': plt.switch_backend('agg')
 import numpy as np
 import datetime as dt
-
+%matplotlib inline
 import numpy as np
 # import pandas as pd
 from matplotlib import pyplot as plt
@@ -25,9 +25,11 @@ from architectureMap import returnPixel
 
 
 #Reading the ORACLE data for given pixel no, Tel_no = aggregated altitude
-PixNo = 15071 #Pixel no of Lat,Lon that we are interested
+#working pixels: 16800,16813 , 16814
+PixNo = 16813 #Pixel no of Lat,Lon that we are interested
 TelNo = 0 # aggregated altitude. Use 
 nwl = 5 # first  nwl wavelengths
+ang1 = 2
 ang = 152 # :ang angles
 
 file_path = "/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03"  #Path to the ORACLE data file
@@ -44,7 +46,8 @@ def Run(Kernel_type,PixNo,TelNo,nwl,ang):
     
     if Kernel_type == "sphro":
         fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes_Shape_ORACLE.yml'
-        binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP/bin/grasp_app' #GRASP Executable
+        # binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP/bin/grasp_app' #GRASP Executable
+        binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP_v112_noWarn/bin/grasp_app' 
         savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
     
     if Kernel_type == "TAMU":
@@ -56,7 +59,7 @@ def Run(Kernel_type,PixNo,TelNo,nwl,ang):
 
    
     #rslt is the GRASP rslt dictionary or contains GRASP Objects
-    rslt = Read_Data_Oracles(file_path,file_name,PixNo,TelNo,nwl,ang)
+    rslt = Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo,nwl,ang1,ang)
 
     maxCPU = 3 #maximum CPU allocated to run GRASP on server
     gRuns = []
@@ -75,6 +78,10 @@ def Run(Kernel_type,PixNo,TelNo,nwl,ang):
     rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
     return rslts
 
+
+
+# rslts_Sph[0]['costVal']
+
 #Plotting the results:
 
 rslts_Sph = Run("sphro",PixNo,TelNo,nwl,ang)
@@ -82,8 +89,21 @@ rslts_Tamu = Run("TAMU",PixNo,TelNo,nwl,ang)
 
 AOD_sph = rslts_Sph[0]['aod']
 AOD_Tamu = rslts_Tamu[0]['aod']
-wavelen = rslts_Sph[0]['lambda']
 
+
+wavelen = rslts_Sph[0]['lambda']
+fig = plt.figure()
+plt.plot( wavelen, AOD_sph, label = "sph")
+plt.plot( wavelen, AOD_Tamu, label = "tamu")
+plt.legend()
+
+fig = plt.figure()
+nwav=0
+plt.plot(rslts_Sph[0]['sca_ang'][:,nwav],rslts_Sph[0]['fit_I'][:,nwav], label = "sph")
+plt.plot(rslts_Sph[0]['sca_ang'][:,nwav],rslts_Sph[0]['meas_I'][:,nwav])
+plt.plot(rslts_Sph[0]['sca_ang'][:,nwav],rslts_Tamu [0]['fit_I'][:,nwav], label = "tamu")
+plt.legend()
+# plt.show()
 #Looking at Aeronet data Near to the Campaign site. 
 
 
