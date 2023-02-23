@@ -18,8 +18,6 @@ import juliandate as jd
 
 ### Reading the Multiangle Polarimeter data ()
 
-
-
 # Reads the Data from ORACLES and gives the rslt dictionary for GRASP
 def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
     #Readinh the hdf file
@@ -63,22 +61,20 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
     if nwl == None: nwl = len(Data['Wavelength'][:])
     
     I1 = (Data['Intensity_1'][:]) #telescope 1 Normalized intensity (unitless)
-    # I1[(I1<0) & (I1>2)] = np.nan  #there are some negative intesity values in the file
+    I1[(I1<0) & (I1>2)] = np.nan  #there are some negative intesity values in the file
     
     I2 = Data['Intensity_2'][:]  #telescope 2
-    # I2[(I1<0) & (I1>2)] = np.nan  #there are some negative intesity values in the file
+    I2[(I1<0) & (I1>2)] = np.nan  #there are some negative intesity values in the file
 
     I = (I1+I2)/2  
-    I[(I<0) & (I>1)] = 0   # averaging over telescope 1 and telescope 2
+    I[(I<0) & (I>2)] = 0   # averaging over telescope 1 and telescope 2
     Q = Data['Stokes_Q']
     U = Data['Stokes_U']
     DoLP = Data['DoLP']
-    
-    
+
     #Creating rslt dictionary for GRASP
     rslt ={}
     rslt['lambda'] = Data['Wavelength'][:nwl]/1000 # Wavelengths in um
-    
     #converting modified julian date to julain date and then to gregorian
     jdv = f1_MAP['Geometry']['Measurement_Time'][TelNo,PixNo,0]+ 2400000.5  #Taking the time stamp for first angle
     
@@ -112,3 +108,32 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
 
     return rslt
  
+def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,height):
+    #Creating rslt dictionary for GRASP
+    f1= h5py.File(file_path + file_name,'r+')  #reading hdf5 file   
+    latitude = f1['Nav_Data']['gps_lat'][:]
+    longitude = f1['Nav_Data']['gps_lon'][:]
+    altitude = f1['Nav_Data']['gps_alt'][:]
+        
+    PixNo = 0
+    height = 0
+
+    HSRL = f1['DataProducts']
+    #backscatter 
+    bscatter = np.array((HSRL['1064_bsc'][:], HSRL['532_bsc'][:], HSRL['355_bsc'][:]))
+    #extinction
+    ext = np.array((HSRL['1064_ext'][:], HSRL['532_ext'][:], HSRL['355_ext'][:]))
+    LidarRatio = ext/bscatter #The lidar ratio is defined as the ratio of the extinction-to-backscatter coefficient
+
+    Depol_ratio = np.array((HSRL['1064_dep'],HSRL['532_dep'],HSRL['355_dep']))
+    
+    rslt = {}
+    rslt['lambda'] = np.array([1064,532,355])/1000
+    rslt['LidarRatio'] = LidarRatio[:,PixNo,height] # for 3 wl 
+    rslt['LidarDepol']= Depol_ratio[:,PixNo,height] # for 3 wl 
+    rslt['height']= altitude[:]
+    rslt['latitude'] = latitude[:]
+    rslt['longitude']= longitude[:]
+    
+
+    return rslt
