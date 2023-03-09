@@ -15,66 +15,95 @@ import datetime as dt
 import h5py 
 import juliandate as jd
 
+#The function Checks for Fill values or negative values and replaces them with nan. To check for negative values, set negative_check = True 
+def checkFillVals(param, negative_check = None):
+    
+    param[:] = np.where(param[:] == -999, np.nan, param[:])
+    
+    if negative_check == True:
+        param[:] = np.where(param[:] < 0 , np.nan, param[:])
+        
+    return param
+
 
 ### Reading the Multiangle Polarimeter data ()
 
 # Reads the Data from ORACLES and gives the rslt dictionary for GRASP
 def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
-    #Readinh the hdf file
     
-    f1_MAP = h5py.File(file_path + file_name,'r+')  #reading hdf5 file
-    # print("Keys: %s" % f1_MAP.keys())
+    #Reading the hdf file
+    f1_MAP = h5py.File(file_path + file_name,'r+') 
+    
     Data = f1_MAP['Data'] #Reading the data
-    if ang == None: ang= 152
-    if ang1 == None: ang1= 0
+    # if ang == None: ang= 152
+    # if ang1 == None: ang1= 0
     
-    # ang = 152 #No fo angles
-    #Reading the Geometry
-    # f1_MAP['Geometry'].keys()
-    Latitude = f1_MAP['Geometry']['Collocated_Latitude']
-    Longitude = f1_MAP['Geometry']['Collocated_Longitude']
-
-    Lat = Latitude[TelNo,:]
-    Lon = Longitude[TelNo,:]
-    # Lat[Lat== -999.0] = np.nan
-    # Lon[Lon== -999.0] = np.nan
-
-    Ang_corr = np.ones((f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,ang1:ang].shape))*180  #correction for groud based to Grasp 
-
-    Scattering_ang = f1_MAP['Geometry']['Scattering_Angle'][TelNo,PixNo,ang1:ang]
-    Solar_Zenith =  f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,ang1:ang]
-    Solar_Azimuth = f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,ang1:ang]
-    Viewing_Azimuth = f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,ang1:ang]
-    Viewing_Zenith = Ang_corr - f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,ang1:ang] # Theta_v <90
-    # Viewing_Zenith = f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,:ang]
-    
-    
-    Relative_Azi = Solar_Azimuth - Viewing_Azimuth
-    for i in range (len(Relative_Azi)) : 
-        if Relative_Azi[i]<0: Relative_Azi[i] = 360 + Relative_Azi[i]
-    
-
-    # Relative_Azi = np.ones((Solar_Azimuth.shape))*180 + Solar_Azimuth - Viewing_Azimuth
     #Variables
-    pol_ang =  Data['Angle_of_Polarization']
     wl = Data['Wavelength']
     if nwl == None: nwl = len(Data['Wavelength'][:])
-    
-    I1 = (Data['Intensity_1'][:]) #telescope 1 Normalized intensity (unitless)
-    I1[(I1<0) & (I1>2)] = np.nan  #there are some negative intesity values in the file
-    
-    I2 = Data['Intensity_2'][:]  #telescope 2
-    I2[(I1<0) & (I1>2)] = np.nan  #there are some negative intesity values in the file
 
-    I = (I1+I2)/2  
-    I[(I<0) & (I>2)] = 0   # averaging over telescope 1 and telescope 2
-    Q = Data['Stokes_Q']
-    U = Data['Stokes_U']
-    DoLP = Data['DoLP']
+    #Reading the Geometry
+    Lat = f1_MAP['Geometry']['Collocated_Latitude'][TelNo,PixNo]
+    Lon = f1_MAP['Geometry']['Collocated_Longitude'][TelNo,PixNo]
 
+
+    Scattering_ang = checkFillVals(f1_MAP['Geometry']['Scattering_Angle'][TelNo,PixNo,ang1:ang])
+    Solar_Zenith =  checkFillVals(f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,ang1:ang])
+    
+    #Converting sunlight azimuth to solar azimuth: 𝜃𝑠, 180- 𝜃𝑣 𝜙𝑠 = 𝜙𝑠 -180, 𝜙𝑣
+
+    Solar_Azimuth = checkFillVals(f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,ang1:ang]) - 180
+    Viewing_Azimuth = checkFillVals(f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,ang1:ang])
+    #Converting viewing zenith with respect to nadir to that wrt zenith
+    
+    Viewing_Zenith = 180 - checkFillVals(f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,ang1:ang]) # Theta_v <90
+            
+#     sza =  np.radians(Solar_Zenith)
+#     vza =   np.radians(Viewing_Zenith)
+#     szi =  np.radians(Solar_Azimuth)
+#     vzi =  np.radians(Viewing_Azimuth)
+
+
+    #Caculating the relative azimuth using the scattering angle definition. This will assure that the range of relative azimuth is contained in 0-360 range
+    # Relative_Azi = (180/np.pi)*(np.arccos((np.cos((Scattering_ang *np.pi)/180)  + np.cos(sza)*np.cos(vza))/(- np.sin(sza)*np.sin(vza)) ))
+
+    Relative_Azi = Solar_Azimuth - Viewing_Azimuth
+    for i in range (len(Relative_Azi)): 
+        if Relative_Azi[i]<0 : Relative_Azi[i] =  Relative_Azi[i]+360
+ 
+    
+    
+    I1 = checkFillVals(Data['Intensity_1'][PixNo,ang1:ang,:nwl],negative_check =True) #telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
+    I2 = checkFillVals(Data['Intensity_2'][PixNo,ang1:ang,:nwl],negative_check =True)  #telescope 2
+
+    # Q and U in scattering plane 
+    
+    scat_sin = checkFillVals(f1_MAP['Geometry']['Sin_Rot_Scatt_Plane'][TelNo,PixNo,ang1:ang])
+    scat_cos = checkFillVals(f1_MAP['Geometry']['Cos_Rot_Scatt_Plane'][TelNo,PixNo,ang1:ang])
+    
+    scat_sin1 = np.repeat(scat_sin, nwl).reshape(len(scat_sin), nwl)
+    scat_cos1 = np.repeat(scat_cos, nwl).reshape(len(scat_cos), nwl)
+    
+    Q = checkFillVals(Data['Stokes_Q'][PixNo,ang1:ang,:nwl])
+    U = checkFillVals(Data['Stokes_U'][PixNo,ang1:ang,:nwl])
+
+   
     #Creating rslt dictionary for GRASP
     rslt ={}
     rslt['lambda'] = Data['Wavelength'][:nwl]/1000 # Wavelengths in um
+    rslt['longitude'] = Lon
+    rslt['latitude'] = Lat
+    rslt['meas_I'] = (I1+I2)/2
+
+    #Meridian plane 
+    rslt['meas_Q'] = Q
+    rslt['meas_U'] = U                               
+    rslt['DoLP'] = checkFillVals(Data['DoLP'][PixNo,ang1:ang,:nwl],negative_check =True)
+    
+    #In Scattering plane 
+    # rslt['meas_Q'] = U*scat_sin1 + Q*scat_cos1
+    # rslt['meas_U'] = Q*scat_sin1 - U*scat_cos1
+            
     #converting modified julian date to julain date and then to gregorian
     jdv = f1_MAP['Geometry']['Measurement_Time'][TelNo,PixNo,0]+ 2400000.5  #Taking the time stamp for first angle
     
@@ -83,8 +112,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
     jdv = f1_MAP['Geometry']['Measurement_Time'][TelNo,PixNo,0]+ 2400000.5  #Taking the time stamp for first angle
     
     # rslt['datetime'] = dt.datetime.now()
-    rslt['longitude'] = Lon[PixNo]
-    rslt['latitude'] = Lat[PixNo]
+    
 
     # All the geometry arrays should be 2D, (angle, wl)
     rslt['sza'] = np.repeat(Solar_Zenith, nwl).reshape(len(Solar_Zenith), nwl)
@@ -92,22 +120,20 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
     rslt['sca_ang']= np.repeat( Scattering_ang, nwl).reshape(len(Scattering_ang), nwl)  #Nangles x Nwavelengths
     rslt['fis'] = np.repeat(Relative_Azi , nwl).reshape(len(Relative_Azi ), nwl)
     
-    rslt['meas_I']= I[PixNo,ang1:ang,:nwl]
-
-    rslt['meas_Q']= Q[PixNo,ang1:ang,:nwl]
-    rslt['meas_U']= U[PixNo,ang1:ang,:nwl]
-    rslt['DoLP'] = DoLP[PixNo, ang1:ang,:nwl]
-    rslt['DoLP'][rslt['DoLP']<0] == np.nan
+    # solar_distance = (f1_MAP['Platform']['Solar_Distance'][PixNo])**2 
+    # const = solar_distance/(np.cos(np.radians(rslt['sza'])))
+ 
 
     #height key should not be used for altitude,
-
-    rslt['OBS_hght']= f1_MAP['Geometry']['Collocated_Altitude'][TelNo,PixNo] # height of pixel in m
+    rslt['OBS_hght']= f1_MAP['Platform']['Platform_Altitude'][PixNo] # height of pixel in m
     if  rslt['OBS_hght'] < 0:  #if colocated attitude is less than 0 then that is set to 0
         rslt['OBS_hght'] = 0
         print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
 
     return rslt
  
+
+
 def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,height):
     #Creating rslt dictionary for GRASP
     f1= h5py.File(file_path + file_name,'r+')  #reading hdf5 file   
@@ -115,9 +141,6 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,height):
     longitude = f1['Nav_Data']['gps_lon'][:]
     altitude = f1['Nav_Data']['gps_alt'][:]
         
-    PixNo = 0
-    height = 0
-
     HSRL = f1['DataProducts']
     #backscatter 
     bscatter = np.array((HSRL['1064_bsc'][:], HSRL['532_bsc'][:], HSRL['355_bsc'][:]))
@@ -131,9 +154,12 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,height):
     rslt['lambda'] = np.array([1064,532,355])/1000
     rslt['LidarRatio'] = LidarRatio[:,PixNo,height] # for 3 wl 
     rslt['LidarDepol']= Depol_ratio[:,PixNo,height] # for 3 wl 
-    rslt['height']= altitude[:]
-    rslt['latitude'] = latitude[:]
-    rslt['longitude']= longitude[:]
+    rslt['height']= altitude[PixNo]
+    rslt['latitude'] = latitude[PixNo]
+    rslt['longitude']= longitude[PixNo]
+    # rslt['RangeLidar']=0
+
+    rslt['datetime'] = dt.datetime.now()
     
 
     return rslt
