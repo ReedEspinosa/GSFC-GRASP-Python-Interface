@@ -58,20 +58,26 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
     
     Viewing_Zenith = 180 - checkFillVals(f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,ang1:ang]) # Theta_v <90
             
-#     sza =  np.radians(Solar_Zenith)
-#     vza =   np.radians(Viewing_Zenith)
-#     szi =  np.radians(Solar_Azimuth)
-#     vzi =  np.radians(Viewing_Azimuth)
-
-
-    #Caculating the relative azimuth using the scattering angle definition. This will assure that the range of relative azimuth is contained in 0-360 range
-    # Relative_Azi = (180/np.pi)*(np.arccos((np.cos((Scattering_ang *np.pi)/180)  + np.cos(sza)*np.cos(vza))/(- np.sin(sza)*np.sin(vza)) ))
-
-    Relative_Azi = Solar_Azimuth - Viewing_Azimuth
-    for i in range (len(Relative_Azi)): 
-        if Relative_Azi[i]<0 : Relative_Azi[i] =  Relative_Azi[i]+360
- 
+    sza =  np.radians(Solar_Zenith)
+    vza =   np.radians(Viewing_Zenith)
+    szi =  np.radians(Solar_Azimuth)
+    vzi =  np.radians(Viewing_Azimuth)
     
+    # Calculate the phase angle
+
+    # cos_phi = np.sin(sza)*np.sin(vza) + np.cos(sza)*np.cos(vza)*np.cos(vzi-szi)
+    # PhaseAng = np.arccos(cos_phi)
+
+    # # Define the rotation matrix
+    # R =  np.array([[np.cos(PhaseAng)],[-np.sin(PhaseAng)],[0]])
+
+    # Caculating the relative azimuth using the scattering angle definition. This will assure that the range of relative azimuth is contained in 0-360 range
+    Relative_Azi = (180/np.pi)*(np.arccos((np.cos((Scattering_ang *np.pi)/180)  + np.cos(sza)*np.cos(vza))/(- np.sin(sza)*np.sin(vza)) ))
+
+    # Relative_Azi = Solar_Azimuth - Viewing_Azimuth
+    # for i in range (len(Relative_Azi)): 
+    #     if Relative_Azi[i]<0 : Relative_Azi[i] =  Relative_Azi[i]+360
+ 
     
     I1 = checkFillVals(Data['Intensity_1'][PixNo,ang1:ang,:nwl],negative_check =True) #telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
     I2 = checkFillVals(Data['Intensity_2'][PixNo,ang1:ang,:nwl],negative_check =True)  #telescope 2
@@ -95,10 +101,18 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
     rslt['latitude'] = Lat
     rslt['meas_I'] = (I1+I2)/2
 
+    # Define the Stokes vector in the viewing principle plane
+    # S_v = (I1+I2)/2
+
+    # Rotate the Stokes vector to the viewing principle plane
+    # S_v = R @ S_v
+    # rslt['meas_I'] = S_v
     #Meridian plane 
-    rslt['meas_Q'] = Q
-    rslt['meas_U'] = U                               
-    rslt['DoLP'] = checkFillVals(Data['DoLP'][PixNo,ang1:ang,:nwl],negative_check =True)
+    # rslt['meas_Q'] = Q
+    # rslt['meas_U'] = U 
+    # 
+                                  
+    rslt['meas_P'] = rslt['meas_I'] *checkFillVals(Data['DoLP'][PixNo,ang1:ang,:nwl],negative_check =True)/100
     
     #In Scattering plane 
     # rslt['meas_Q'] = U*scat_sin1 + Q*scat_cos1
@@ -119,7 +133,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
     rslt['vis']= np.repeat(Viewing_Zenith, nwl).reshape(len(Viewing_Zenith), nwl) 
     rslt['sca_ang']= np.repeat( Scattering_ang, nwl).reshape(len(Scattering_ang), nwl)  #Nangles x Nwavelengths
     rslt['fis'] = np.repeat(Relative_Azi , nwl).reshape(len(Relative_Azi ), nwl)
-    
+    rslt['land_prct'] =0 #0% land Percentage
     # solar_distance = (f1_MAP['Platform']['Solar_Distance'][PixNo])**2 
     # const = solar_distance/(np.cos(np.radians(rslt['sza'])))
  
@@ -136,7 +150,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
 
 def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,height):
     #Creating rslt dictionary for GRASP
-    f1= h5py.File(file_path + file_name,'r+')  #reading hdf5 file   
+    f1= h5py.File(file_path + file_name,'r+')  #reading hdf5 file  #meas_DP #  
     latitude = f1['Nav_Data']['gps_lat'][:]
     longitude = f1['Nav_Data']['gps_lon'][:]
     altitude = f1['Nav_Data']['gps_alt'][:]
@@ -148,18 +162,28 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,height):
     ext = np.array((HSRL['1064_ext'][:], HSRL['532_ext'][:], HSRL['355_ext'][:]))
     LidarRatio = ext/bscatter #The lidar ratio is defined as the ratio of the extinction-to-backscatter coefficient
 
-    Depol_ratio = np.array((HSRL['1064_dep'],HSRL['532_dep'],HSRL['355_dep']))
-    
+    Depol_ratio = np.array((HSRL['1064_dep'][:],HSRL['532_dep'][:],HSRL['355_dep'][:]))
+
+    #'LS':31, 'DP':35, 'VBS':39, 'VExt':36
     rslt = {}
     rslt['lambda'] = np.array([1064,532,355])/1000
-    rslt['LidarRatio'] = LidarRatio[:,PixNo,height] # for 3 wl 
-    rslt['LidarDepol']= Depol_ratio[:,PixNo,height] # for 3 wl 
-    rslt['height']= altitude[PixNo]
-    rslt['latitude'] = latitude[PixNo]
-    rslt['longitude']= longitude[PixNo]
+    # rslt['LidarRatio'] = LidarRatio[:,PixNo,height] # for 3 wl 
+
+    rslt['meas_DP']= Depol_ratio[:,:,height] # for 3 wl 
+    rslt['meas_VEXT'] = ext[:,:,height]
+    rslt['meas_VBS'] = bscatter[:,:,height]
+
+
+    rslt['height']= altitude[:]
+    rslt['latitude'] = latitude[:]
+    rslt['longitude']= longitude[:]
     # rslt['RangeLidar']=0
 
     rslt['datetime'] = dt.datetime.now()
+
+    
+    Range = f1['UserInput']['range_interp'][:,height]
+    rslt['RangeLidar'] = np.repeat(Range, len(rslt['lambda'])).reshape(len(Range), len(rslt['lambda']))
     
 
     return rslt
