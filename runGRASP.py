@@ -420,6 +420,10 @@ class graspRun():
             fid.close()
 
     def runGRASP(self, parallel=False, binPathGRASP=None, krnlPathGRASP=None):
+        """
+        This actually runs a single instance of GRASP
+        krnlPathGRASP - This points to the internal_files folder (not KERNELS_BASE)
+        """
         if not binPathGRASP: binPathGRASP = '/usr/local/bin/grasp'
         if not self.pathSDATA:
             self.writeSDATA()
@@ -723,34 +727,33 @@ class graspRun():
         ptrnTime = re.compile('^[ ]*Time[ ]*:[ ]+')
         ptrnLon = re.compile('^[ ]*Longitude[ ]*:[ ]+')
         ptrnLat = re.compile('^[ ]*Latitude[ ]*:[ ]+')
-        i = 0
-        LatLonLinesFnd = 0 # GRASP prints these twice, assume lat/lon are last lines
-        while i < len(contents) and LatLonLinesFnd < 2:
-            line = contents[i]
+        ptrnLndPrc = re.compile('^[ ]*Land percent:[ ]+')
+        for line in contents: 
             if not ptrnDate.match(line) is None: # Date
                 dtStrCln = line[ptrnDate.match(line).end():-1].split()
                 dates_list = [dt.strptime(date, '%Y-%m-%d').date() for date in dtStrCln]
-            if not ptrnTime.match(line) is None: # Time (should come after Date in output)
+            if not ptrnTime.match(line) is None: # Time (should come after Date in output, but before lat, lon, and landPrct)
                 dtStrCln = line[ptrnTime.match(line).end():-1].split()
                 times_list = [dt.strptime(time, '%H:%M:%S').time() for time in dtStrCln]
-                for j in range(len(times_list)):
-                    dtNow = dt.combine(dates_list[j], times_list[j])
-                    results.append(dict(datetime=dtNow))
-            if not ptrnLon.match(line) is None: # longitude
-                lonVals = np.array(line[ptrnLon.match(line).end():-1].split(), dtype=np.float)
-                for k,lon in enumerate(lonVals):
-                    results[k]['longitude'] = lon
-                LatLonLinesFnd += 1
-            if not ptrnLat.match(line) is None: # longitude
-                latVals = np.array(line[ptrnLat.match(line).end():-1].split(), dtype=np.float)
-                for k,lat in enumerate(latVals):
-                    results[k]['latitude'] = lat
-                LatLonLinesFnd += 1
-            i += 1
-        if not len(results[-1].keys())==3:
-            warnings.warn('Failure reading date/lat/lon from GRASP output!')
-            return []
+                if len(results)==0: # GRASP time (and other things) multiple times in output... this is slightly inefficient b/c reading of other vars here is repeated
+                    for j in range(len(times_list)):
+                        dtNow = dt.combine(dates_list[j], times_list[j])
+                        results.append({'datetime' : dtNow})
+            self.parseSingleParamFld(line, results, ptrnLon,    'longitude')
+            self.parseSingleParamFld(line, results, ptrnLat,    'latitude')
+            self.parseSingleParamFld(line, results, ptrnLndPrc, 'land_prct')
+        if len(results)==0: # time pattern is the only place where we actually append
+            warnings.warn('Failure reading datetime (and possibly other key variables) from GRASP output!')
         return results
+
+    def parseSingleParamFld(self, line, results, ptrn, fdlName):
+        ptrnMatch = ptrn.match(line)
+        if ptrnMatch is not None: 
+            vals = np.array(line[ptrnMatch.end():-1].split(), dtype=np.float)
+            for k,val in enumerate(vals):
+                results[k][fdlName] = val
+        return ptrnMatch is not None                
+                    
 
     def parseOutAerosol(self, contents):
         results = self.parseOutDateTime(contents)
@@ -1081,7 +1084,7 @@ class pixel():
                 msDct['nbvm'] = [len(rslt[dataStage+'_'+mt][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
                 msDct['meas_type'] = np.sort(msDct['meas_type'])
                 msDct['nip'] = len(msDct['meas_type'])
-                if np.all(msDct['meas_type'] < 40): # lidar data # TODO: This should be improved...
+                if np.all(msDct['meas_type'] < 40): # lidar data
                     msDct['sza'] = 0.01 # we assume vertical lidar
                     msDct['thetav'] = rslt['RangeLidar'][:,l]
                     msDct['phi'] = np.repeat(0, len(msDct['thetav']))
