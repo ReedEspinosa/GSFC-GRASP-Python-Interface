@@ -14,6 +14,9 @@ from matplotlib import pyplot as plt
 import datetime as dt
 import h5py 
 import juliandate as jd
+import itertools
+from scipy.interpolate import interp1d
+import netCDF4 as nc
 
 #The function Checks for Fill values or negative values and replaces them with nan. To check for negative values, set negative_check = True 
 def checkFillVals(param, negative_check = None):
@@ -25,18 +28,61 @@ def checkFillVals(param, negative_check = None):
         
     return param
 
+'''  GasAbsFn: Format of file: .nc, Description: file containing the value of combined optical depth for different gases in the atmosphere using radiatiove tranfer code
+     altIndex = Type: integer , Description: index of the vertical height at which we want to calculate the absorption, In this case we've taken the maximum altitude of RSP aircraft 
+     SpecResFn = Format of file: .txt ,Description: file containing the  response funtion of the instruent at a particular wl (Wlname = interger, wavelength in the file name ) '''
+
+def Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn):
+    #Gas Absorption correction using UNL_VRTM (provided by Richard,UMBC)
+    
+    #Reading the NetCDF file for gas absorption from radiative tranfer code (UNLVRTM)
+    ds = nc.Dataset(GasAbsFn)
+    Tau_Comb = ds.variables['tauGas'][altIndex,:] #Bulk gas absorption for different layers
+    Wl = ds.variables['Lamdas'][:] # wavelength values corresponding to the gas absorption
+   
+    #Spectral response values for given RSP wl
+    SpecResFn = SpecResFn[SpecResFn[:,0]>= min(Wl)]
+    #1D interpolation across wavelength
+    f = interp1d(Wl,Tau_Comb,kind = 'linear')
+
+    # Evaluate the function at a new point
+    wl_RSP = SpecResFn[:,0]
+    tau_new = f(wl_RSP) #Tau at given RSP response function wl
+       
+    return tau_new, wl_RSP, SpecResFn[:,1]
+
+#This function will return the Transmittance for all the solar and viewing geometries
+def Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResFn):
+    
+    intp =Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn)
+    Tau_Comb = intp[0] # Tau interpolated to the RSP response function wavelengths
+    RSP_wl = intp[1]
+    SzenNo = len(Solar_Zenith) # no of angles measured by RSP
+    C_factor_solar = np.zeros((SzenNo,len(RSP_wl))) #  angles x wl
+    C_factor_view = np.zeros((SzenNo,len(RSP_wl))) #  angles x wl
+
+    G_s = 1/np.cos(np.radians(Solar_Zenith))
+    G_v = 1/np.cos(np.radians(Viewing_Zenith))
+
+    for i in range(SzenNo):
+        C_factor_solar[i,:] = np.exp(-(G_s[i])*Tau_Comb) #Based on solar zenith angle
+        C_factor_view[i,:] = np.exp(-(G_v[i])*Tau_Comb)
+    
+    
+    return C_factor_solar, C_factor_view
+
+
+
 
 ### Reading the Multiangle Polarimeter data ()
 
 # Reads the Data from ORACLES and gives the rslt dictionary for GRASP
-def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
+def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang,GasAbsFn): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
     
     #Reading the hdf file
     f1_MAP = h5py.File(file_path + file_name,'r+') 
     
     Data = f1_MAP['Data'] #Reading the data
-    # if ang == None: ang= 152
-    # if ang1 == None: ang1= 0
     
     #Variables
     wl = Data['Wavelength']
@@ -63,24 +109,44 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
     szi =  np.radians(Solar_Azimuth)
     vzi =  np.radians(Viewing_Azimuth)
     
-    # Calculate the phase angle
-
-    # cos_phi = np.sin(sza)*np.sin(vza) + np.cos(sza)*np.cos(vza)*np.cos(vzi-szi)
-    # PhaseAng = np.arccos(cos_phi)
-
-    # # Define the rotation matrix
-    # R =  np.array([[np.cos(PhaseAng)],[-np.sin(PhaseAng)],[0]])
-
-    # Caculating the relative azimuth using the scattering angle definition. This will assure that the range of relative azimuth is contained in 0-360 range
     Relative_Azi = (180/np.pi)*(np.arccos((np.cos((Scattering_ang *np.pi)/180)  + np.cos(sza)*np.cos(vza))/(- np.sin(sza)*np.sin(vza)) ))
 
     # Relative_Azi = Solar_Azimuth - Viewing_Azimuth
     # for i in range (len(Relative_Azi)): 
     #     if Relative_Azi[i]<0 : Relative_Azi[i] =  Relative_Azi[i]+360
- 
+    RSP_wlf = [410, 470, 555, 670, 865, 960, 1590, 1880, 2250] #wl as in the file name of response functions
     
-    I1 = checkFillVals(Data['Intensity_1'][PixNo,ang1:ang,:nwl],negative_check =True) #telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
-    I2 = checkFillVals(Data['Intensity_2'][PixNo,ang1:ang,:nwl],negative_check =True)  #telescope 2
+    CorFac = np.zeros((ang-ang1,nwl))
+    fig, ax1 = plt.subplots()
+    ax2 = ax1.twinx() 
+    for j in range(nwl):
+        
+        if j == 8:
+            Solar_Zenith = f1_MAP['Geometry']['Solar_Zenith'][1,PixNo,:]
+            Viewing_Zenith = f1_MAP['Geometry']['Viewing_Zenith'][1,PixNo,:]
+            
+        Wlname =  RSP_wlf[j]
+        print(Wlname)
+        altIndex = 7 #v I need to improve this and make it more general, altitude index where the altidue t
+
+        SpecResFn = np.loadtxt(f'/home/gregmi/ORACLES/RSP_Spectral_Response/{Wlname}.txt')
+        intp =Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn)
+        RSP_wl = intp[1]
+        resFunc = intp[2]/np.max(intp[2])
+        Transmittance = Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResFn)[0]
+        ax1.plot(RSP_wl,Transmittance[0,:],lw =0.2)
+        ax2.plot(RSP_wl,resFunc, label=f"{RSP_wlf[j]} ")
+        plt.legend()
+        for i in range(ang-ang1):
+            CorFac[i,j] = np.sum(Transmittance[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
+            
+
+
+
+
+
+    I1 = checkFillVals(Data['Intensity_1'][PixNo,ang1:ang,:nwl],negative_check =True)/ CorFac#telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
+    I2 = checkFillVals(Data['Intensity_2'][PixNo,ang1:ang,:nwl],negative_check =True)/CorFac #telescope 2
 
     # Q and U in scattering plane 
     
@@ -99,24 +165,10 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
     rslt['lambda'] = Data['Wavelength'][:nwl]/1000 # Wavelengths in um
     rslt['longitude'] = Lon
     rslt['latitude'] = Lat
-    rslt['meas_I'] = (I1+I2)/2
-
-    # Define the Stokes vector in the viewing principle plane
-    # S_v = (I1+I2)/2
-
-    # Rotate the Stokes vector to the viewing principle plane
-    # S_v = R @ S_v
-    # rslt['meas_I'] = S_v
-    #Meridian plane 
-    # rslt['meas_Q'] = Q
-    # rslt['meas_U'] = U 
-    # 
-                                  
+    rslt['meas_I'] = (I1+I2)/2                              
     rslt['meas_P'] = rslt['meas_I'] *checkFillVals(Data['DoLP'][PixNo,ang1:ang,:nwl],negative_check =True)/100
     
-    #In Scattering plane 
-    # rslt['meas_Q'] = U*scat_sin1 + Q*scat_cos1
-    # rslt['meas_U'] = Q*scat_sin1 - U*scat_cos1
+  
             
     #converting modified julian date to julain date and then to gregorian
     jdv = f1_MAP['Geometry']['Measurement_Time'][TelNo,PixNo,0]+ 2400000.5  #Taking the time stamp for first angle
@@ -124,8 +176,6 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
     yy,mm,dd,hh,mi,s,ms = jd.to_gregorian(jdv)
     rslt['datetime'] = dt.datetime(yy,mm,dd,hh,mi,s,ms) #Coverts julian to datetime
     jdv = f1_MAP['Geometry']['Measurement_Time'][TelNo,PixNo,0]+ 2400000.5  #Taking the time stamp for first angle
-    
-    # rslt['datetime'] = dt.datetime.now()
     
 
     # All the geometry arrays should be 2D, (angle, wl)
@@ -148,42 +198,74 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang): #PixN
  
 
 
-def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,height):
-    #Creating rslt dictionary for GRASP
-    f1= h5py.File(file_path + file_name,'r+')  #reading hdf5 file  #meas_DP #  
+def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
+
+
+    #Specify the pixel no
+    PixNo = 1250
+
+    f1= h5py.File(file_path + file_name,'r+')  #reading hdf5 file  
+
+    #Lat and Lon values for that pixel
     latitude = f1['Nav_Data']['gps_lat'][:]
     longitude = f1['Nav_Data']['gps_lon'][:]
     altitude = f1['Nav_Data']['gps_alt'][:]
-        
+
+    #Reading the data Products
     HSRL = f1['DataProducts']
-    #backscatter 
-    bscatter = np.array((HSRL['1064_bsc'][:], HSRL['532_bsc'][:], HSRL['355_bsc'][:]))
-    #extinction
-    ext = np.array((HSRL['1064_ext'][:], HSRL['532_ext'][:], HSRL['355_ext'][:]))
-    LidarRatio = ext/bscatter #The lidar ratio is defined as the ratio of the extinction-to-backscatter coefficient
-
-    Depol_ratio = np.array((HSRL['1064_dep'][:],HSRL['532_dep'][:],HSRL['355_dep'][:]))
-
-    #'LS':31, 'DP':35, 'VBS':39, 'VExt':36
-    rslt = {}
-    rslt['lambda'] = np.array([1064,532,355])/1000
-    # rslt['LidarRatio'] = LidarRatio[:,PixNo,height] # for 3 wl 
-
-    rslt['meas_DP']= Depol_ratio[:,:,height] # for 3 wl 
-    rslt['meas_VEXT'] = ext[:,:,height]
-    rslt['meas_VBS'] = bscatter[:,:,height]
 
 
-    rslt['height']= altitude[:]
-    rslt['latitude'] = latitude[:]
-    rslt['longitude']= longitude[:]
-    # rslt['RangeLidar']=0
+    #The data file has many nan values, val is the list that stores indices of all the nan values for all the parameters
+    val = []
+    inp =['355_ext','532_ext','1064_ext','355_dep', '532_dep','1064_dep','355_bsc','532_bsc','1064_bsc']
+    for i in range (9):
+        value2 = HSRL[f'{inp[i]}'][PixNo,1:].reshape(56, 10).mean(axis=1)
+        val.append(np.nonzero(np.isnan(value2))[0])#this will give the indices of values that are nan
+    val.append(np.nonzero(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10).mean(axis=1)<0)[0])
+    val.append(np.nonzero(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1)<0)[0])
+    remove_pixels = np.unique(list(itertools.chain.from_iterable(val))) 
+                
+    # Merging all the lists in the val file and then taking the unique values
+    # values for all these pixels will be removed from the parameter file so that we no longer have nan values.
 
-    rslt['datetime'] = dt.datetime.now()
 
-    
-    Range = f1['UserInput']['range_interp'][:,height]
-    rslt['RangeLidar'] = np.repeat(Range, len(rslt['lambda'])).reshape(len(Range), len(rslt['lambda']))
-    
+    rslt = {} 
+    rslt['lambda'] = np.array([355,532,1064])/1000
+
+    rslt['wl'] = np.array([355,532,1064])/1000
+    height_shape = np.delete(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) .shape[0]
+
+
+    Bext = np.ones((height_shape,3))
+    Bext[:,0] = np.delete(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Bext[:,1] = np.delete(HSRL['532_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Bext[:,2] = np.delete(HSRL['1064_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    rslt['meas_VExt'] = Bext
+
+    Bsca = np.ones((height_shape,3))
+    Bsca[:,0] = np.delete(HSRL['355_bsc'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Bsca[:,1] = np.delete(HSRL['532_bsc'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Bsca[:,2] = np.delete(HSRL['1064_bsc'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    rslt['meas_VBS'] =Bsca
+
+    Dep = np.ones((height_shape,3))
+    Dep[:,0] = np.delete(HSRL['355_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Dep[:,1] = np.delete(HSRL['532_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Dep[:,2] = np.delete(HSRL['1064_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    rslt['meas_DP'] = Dep
+
+    Range = np.ones((height_shape,3))
+    Range[:,0] = np.delete(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Range[:,1] = np.delete(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Range[:,2] = np.delete(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels)   # in meters
+    rslt['RangeLidar'] = Range
+
+
+    rslt['datetime'] =dt.datetime.strptime(file_name[10:-6]+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+    rslt['latitude'] = latitude[PixNo]
+    rslt['longitude']= longitude[PixNo]
+
+    rslt['OBS_hght']=(altitude[PixNo] -  Range[:,0])[-1]/1000 # in km 
+    rslt['land_prct'] =0 #Ocean Surface
 
     return rslt
