@@ -17,7 +17,7 @@ import pandas as pd
 from scipy.stats import gaussian_kde
 import numpy as np
 import yaml # may require `conda install pyyaml`
-import miscFunctions as mf
+import miscFunctions as ms
 
 try:
     from netCDF4 import Dataset
@@ -31,33 +31,6 @@ try:
 except ImportError:
     PLOT_LOADED = False
 
-vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
-
-def frmtLoadedRslts(rslts_raw):
-    # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
-    # If a rslts list of dicts is loaded from a file it should be filtered through this function
-    rslts = np.array(rslts_raw)
-    if 'r' in rslts[0] and rslts[0]['r'].ndim == 1:
-        for i, rs in enumerate(rslts): 
-            rslts[i]['r'] = rs['r'][None, :]
-            rslts[i]['dVdlnr'] = rs['dVdlnr'][None, :]
-    if 'version' in rslts[0] and float(rslts[0]['version'])>1: return rslts # rslts loaded are ≥v1.01
-    if 'dVdlnr' in rslts[0]: # prior to 21/05/2021 we saved normalized; we now use absolute
-        psdNormUnityRTOL = 1e-2 # if relative difference between unity and integral of PSD over r is greater than this we assume PSD is absolute
-        psdTruncThresh = 1e-3 # if first or last PSD bin is greater than this fraction of max(PSD[:]) then this particular PSD is significantly truncated and we ignore it when checking for normalization b/c it is expected to integrate to <1 in normalized case
-#             ra = np.concatenate([[dv[[0,-1]]/dv.max() for dv in rs['dVdlnr']] for rs in rslts]).max(axis=1) # %timeit -> 600 ms
-        ra = np.concatenate([rs['dVdlnr'][:,[0,-1]].max(axis=1)/rs['dVdlnr'].max(axis=1) for rs in rslts]) # %timeit -> 229 ms
-        nonTruncInd = ra < psdTruncThresh
-        if not nonTruncInd.any():
-            warnings.warn('All PSDs were significantly truncated and normalization could not be detemrined. dVdlnr may or may not be in absolute units.')
-            return rslts
-        trp = np.concatenate([np.trapz(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
-        if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
-            for rs in rslts: 
-                rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
-    return rslts
-
-RSLT_DICT_VERSION = '1.01' # Need to increment this if any meaningful changes made to rslts list of dicts
 
 class graspDB():
 
@@ -133,7 +106,7 @@ class graspDB():
         if len(self.rslts)==0: warnings.warn('\nNo pixels were successfully processed!\n')
         print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dtSec, len(self.rslts)/dtSec))
         if savePath:
-            self.rslts[0]['version'] = RSLT_DICT_VERSION
+            self.rslts[0]['version'] = rsltDictTools.VERSION
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
         self.rslts = np.array(self.rslts) # numpy lists indexed w/ only assignment (no copy) but prior code built for std. list
@@ -142,7 +115,7 @@ class graspDB():
     def loadResults(self, loadPath):
         try:
             with open(loadPath, 'rb') as f:
-                self.rslts = frmtLoadedRslts(pickle.load(f))
+                self.rslts = rsltDictTools.frmtLoadedRslts(pickle.load(f))
             return self.rslts
         except EnvironmentError:
             warnings.warn('Could not load valid pickle data from %s.' % loadPath)
@@ -547,6 +520,7 @@ class graspRun():
         if not NC4_LOADED:
             print('netCDF4 module failed to import, file could not be written.')
             return
+        vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
         rsltDict = self._findRslts(rsltDict, customOUT)
         with Dataset(nc4Path, 'w', format='NETCDF4') as root_grp: # open/create netCDF4 data file
             root_grp.description = 'Results of a GRASP run'
@@ -680,7 +654,7 @@ class graspRun():
                 varNm = 'ROD'
                 varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (λName))
                 varHnds[varNm].units = 'none'
-                varHnds[varNm][:] = self.seaLevelROD(varHnds[λName][:])
+                varHnds[varNm][:] = seaLevelROD(varHnds[λName][:])
                 varHnds[varNm].long_name = 'Rayleigh Optical Depth'
                 varNm = 'rayleigh_depol'
                 varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (λName))
@@ -714,12 +688,6 @@ class graspRun():
         else:
             assert False, 'This method can not currently handle a variables with more than 4 dimensions.' # easy to add one more dim, but fully generalizing the above is really tricky
         return True
-
-    def seaLevelROD(self, λtarget):
-        λ =   np.r_[0.3600, 0.3800, 0.4100, 0.5500, 0.6700, 0.8700, 1.5500, 1.6500]
-        rod = np.r_[0.5612, 0.4474, 0.3259, 0.0973, 0.0436, 0.0152, 0.0015, 0.0012]
-        assert λ.min()<=λtarget.min() and λ.max()>=λtarget.max(), 'λtarget falls outside the range of pre-programed values!'
-        return np.interp(λtarget, λ, rod**-0.25)**-4
 
     def parseOutDateTime(self, contents):
         results = []
@@ -1018,6 +986,80 @@ class graspRun():
         return nStr+dtStr+endstr
 
 
+
+class rsltDictTools():
+
+    VERSION = '1.01' # Need to increment this if any meaningful changes made to rslts list of dicts
+    MEAS_TYPES = ('I','Q','U','P','QoI','UoI','PoI','DP','VExt','VBS','LS','DP')
+    RSLT_DICT_KEYS = { # See README.md for a complete list (which this currently is not)
+        'stateTotSpctrl'   :('aod','ssa','albedo','g','LidarRatio','LidarDepol'),
+        'stateModeSpctrl'  :('aodMode','ssaMode','n','k','gMode','LidarRatioMode','LidarDepolMode'),
+        'stateSurfSpctrl'  :('albedo','brdf','bpdf','wtrSurf','cxMunk'), # wtrSurf is output by GRASP, but cxMunk is used in case where it is known to be Cox Munk (e.g., YAML writer keys)
+        'statePMSpctrl'  :('angle','p11','p12','p22','p33','p34','p44'),
+        'observeSpctrlGeom':('sca_ang','sza','vis','fis','RangeLidar'),
+        'observeSpctrlFit' :tuple('fit_'+mt for mt in MEAS_TYPES),
+        'observeSpctrlMeas':tuple('meas_'+mt for mt in MEAS_TYPES),
+        'observeSpctrlGeom':('sza','vis','fis','RangeLidar')
+        } # All in a single tuple: sum((x for x in RSLT_DICT_KEYS.values()), ())
+
+    def frmtLoadedRslts(rslts_raw):
+        # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
+        # If a rslts list of dicts is loaded from a file it should be filtered through this function
+        rslts = np.array(rslts_raw)
+        if 'r' in rslts[0] and rslts[0]['r'].ndim == 1:
+            for i, rs in enumerate(rslts): 
+                rslts[i]['r'] = rs['r'][None, :]
+                rslts[i]['dVdlnr'] = rs['dVdlnr'][None, :]
+        if 'version' in rslts[0] and float(rslts[0]['version'])>1: return rslts # rslts loaded are ≥v1.01
+        if 'dVdlnr' in rslts[0]: # prior to 21/05/2021 we saved normalized; we now use absolute
+            psdNormUnityRTOL = 1e-2 # if relative difference between unity and integral of PSD over r is greater than this we assume PSD is absolute
+            psdTruncThresh = 1e-3 # if first or last PSD bin is greater than this fraction of max(PSD[:]) then this particular PSD is significantly truncated and we ignore it when checking for normalization b/c it is expected to integrate to <1 in normalized case
+            # ra = np.concatenate([[dv[[0,-1]]/dv.max() for dv in rs['dVdlnr']] for rs in rslts]).max(axis=1) # %timeit -> 600 ms
+            ra = np.concatenate([rs['dVdlnr'][:,[0,-1]].max(axis=1)/rs['dVdlnr'].max(axis=1) for rs in rslts]) # %timeit -> 229 ms
+            nonTruncInd = ra < psdTruncThresh
+            if not nonTruncInd.any():
+                warnings.warn('All PSDs were significantly truncated and normalization could not be detemrined. dVdlnr may or may not be in absolute units.')
+                return rslts
+            trp = np.concatenate([np.trapz(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
+            if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
+                for rs in rslts: 
+                    rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
+        return rslts
+
+    def spectralInterp(rslt, waveNew, verbose):
+        """
+        Performs linear interpolation on all aerosol state vars, except AOD which use angstrom exponent interpolation.
+        rslt - a single (not list of) rslt dict; waveNew – wavelengths to interpolate to in μm
+        """
+        keys2D = RSLT_DICT_KEYS['stateModeSpctrl'] + RSLT_DICT_KEYS['observeSpctrl'] + RSLT_DICT_KEYS['stateSurfSpctrl']
+        waveOld = rslt['lambda']
+        for key, val in rslt.items():
+            if key in RSLT_DICT_KEYS['stateTotSpctrl']: # 1D variables with lambda as only dim
+                val = rsltDictTools._intrpHelp(waveOld, val, waveNew, key)
+            elif key in keys2D:
+                yNew = np.empty(rslt[key].shape)
+                for i,vect1D in enumerate(yNew):
+                    vect1D = rsltDictTools._intrpHelp(waveOld, val[i], waveNew, key)
+                val = yNew
+            elif key in RSLT_DICT_KEYS['statePMSpctrl']: # 3D arrays (N_ang, N_modes, N_lambda)
+                yNew = np.empty(rslt[key].shape)
+                for i,vect2D in enumerate(yNew): # vect2D has shape (N_modes, N_lambda)
+                    for j,vect1D in enumerate(vect2D): # vect1D has shape (N_lambda)
+                        vect1D = rsltDictTools._intrpHelp(waveOld, val[i,j], waveNew, key)
+                val = yNew
+            elif type(val) is np.ndarray and val.shape[-1]==len(waveOld) and verbose:
+                warnings.warn('rslt key %s was not interpolated but was an array with final dimension matching length of lambda')
+        rslt['lambda'] = waveNew
+        return rslt
+
+    def _intrpHelp(x, y, xn, key):
+        if 'aod' in key.lower():
+            return angstrmIntrp(x,y,xNew) # TODO: I don't think this works with xNew as a vector
+        else:
+            return np.interp(xn, x, y)
+
+
+
 class pixel():
     def __init__(self, dtObj=None, ix=1, iy=1, lon=0, lat=0, masl=0, land_prct=100, obsHghtKM=700):
         """ dtObj - a datetime object corresponding to measurement time (also accepts matlab style datenum)
@@ -1209,9 +1251,9 @@ class graspYAML():
             'brdf':'surface_land_brdf_ross_li',
             'bpdf':'surface_land_polarized_maignan_breon',
             'cxMnk':'surface_water_cox_munk_iso'}
-        spectralFlds = ['n','k','brdf','bpdf','cxMnk']
+        spctrlFlds = RSLT_DICT_KEYS['stateTotSpctrl']+RSLT_DICT_KEYS['stateModeSpctrl']+RSLT_DICT_KEYS['stateSurfSpctrl']
         for key in vals.keys(): # loop over characteristics
-            if key in spectralFlds:
+            if key in spctrlFlds:
                 shapeValsKey = np.array(vals[key]).shape
                 assert len(shapeValsKey) <= 2, '%s had %d dimensions – It should be 2D!' % (key, len(shapeValsKey))
                 if Nlambda is None:

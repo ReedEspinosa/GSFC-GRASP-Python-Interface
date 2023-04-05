@@ -20,6 +20,14 @@ def checkDiscover(): # right now this just checks for a remote connection...
     return "SSH_CONNECTION" in os.environ
 
 
+def seaLevelROD(self, λtarget):
+    """ Returns the ROD at λtarget wavelength at sea level """
+    λ =   np.r_[0.3600, 0.3800, 0.4100, 0.5500, 0.6700, 0.8700, 1.5500, 1.6500]
+    rod = np.r_[0.5612, 0.4474, 0.3259, 0.0973, 0.0436, 0.0152, 0.0015, 0.0012]
+    assert λ.min()<=λtarget.min() and λ.max()>=λtarget.max(), 'λtarget falls outside the range of pre-programed values!'
+    return np.interp(λtarget, λ, rod**-0.25)**-4
+
+
 def norm2absExtProf(normalizedProfile, heights, AOD):
     """
     normalizedProfile -> 1xN array like; normalized profile
