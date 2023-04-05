@@ -837,6 +837,9 @@ class graspRun():
             self.parseMultiParamFld(contents, i, results, ptrnBPDF, 'bpdf')
             self.parseMultiParamFld(contents, i, results, ptrnWater, 'wtrSurf', Nλ=Nλ)
             i += 1
+        for key in ['bpdf', 'albedo']: # spectral variables we want to ensure are 2D (1 x Nlambda) [May be better to do this inside parseMultiParamFld() at some point]
+            if key in results[0]: 
+                for rs in results: rs[key] = np.atleast_2d(rs[key])
         return results
 
     def parsePhaseMatrix(self, contents, wavelengths): # wavelengths is need here specificly b/c PM elements don't give index (only value in um)
@@ -989,9 +992,9 @@ class graspRun():
 
 class rsltDictTools():
 
-    VERSION = '1.01' # Need to increment this if any meaningful changes made to rslts list of dicts
+    VERSION = '1.02' # Need to increment this if any meaningful changes made to rslts list of dicts
     MEAS_TYPES = ('I','Q','U','P','QoI','UoI','PoI','DP','VExt','VBS','LS','DP')
-    RSLT_DICT_KEYS = { # See README.md for a complete list (which this currently is not)
+    KEYS = { # See README.md for a complete list (which this currently is not)
         'stateTotSpctrl'   :('aod','ssa','albedo','g','LidarRatio','LidarDepol'),
         'stateModeSpctrl'  :('aodMode','ssaMode','n','k','gMode','LidarRatioMode','LidarDepolMode'),
         'stateSurfSpctrl'  :('albedo','brdf','bpdf','wtrSurf','cxMunk'), # wtrSurf is output by GRASP, but cxMunk is used in case where it is known to be Cox Munk (e.g., YAML writer keys)
@@ -999,8 +1002,7 @@ class rsltDictTools():
         'observeSpctrlGeom':('sca_ang','sza','vis','fis','RangeLidar'),
         'observeSpctrlFit' :tuple('fit_'+mt for mt in MEAS_TYPES),
         'observeSpctrlMeas':tuple('meas_'+mt for mt in MEAS_TYPES),
-        'observeSpctrlGeom':('sza','vis','fis','RangeLidar')
-        } # All in a single tuple: sum((x for x in RSLT_DICT_KEYS.values()), ())
+        } # All in a single tuple: sum((x for x in rsltDictTools.KEYS.values()), ())
 
     def frmtLoadedRslts(rslts_raw):
         # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
@@ -1024,39 +1026,60 @@ class rsltDictTools():
             if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
                 for rs in rslts: 
                     rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
+        if 'version' in rslts[0] and float(rslts[0]['version'])>1.01: return rslts
+        for key in ['bpdf', 'albedo']: # spectral variables we want to ensure are 2D (1 x Nlambda)
+            if key in rslts[0]: 
+                for rs in rslts: rs[key] = np.atleast_2d(rs[key])
         return rslts
 
-    def spectralInterp(rslt, waveNew, verbose):
+    def spectralInterp(rslt, waveNew, verbose, check4oddKeys=True):
         """
         Performs linear interpolation on all aerosol state vars, except AOD which use angstrom exponent interpolation.
         rslt - a single (not list of) rslt dict; waveNew – wavelengths to interpolate to in μm
         """
-        keys2D = RSLT_DICT_KEYS['stateModeSpctrl'] + RSLT_DICT_KEYS['observeSpctrl'] + RSLT_DICT_KEYS['stateSurfSpctrl']
+        keys1D = rsltDictTools.KEYS['stateTotSpctrl']
+        cats2D = ['stateModeSpctrl','stateSurfSpctrl','observeSpctrlGeom','observeSpctrlFit','observeSpctrlMeas']
+        keys2D = sum((rsltDictTools.KEYS[typ] for typ in cats2D), ())
+        keys3D = rsltDictTools.KEYS['statePMSpctrl']
+        if check4oddKeys: 
+            keys1D = keys1D + rsltDictTools._findUnusualKeys(rslt, keys1D)
+            keys2D = keys2D + rsltDictTools._findUnusualKeys(rslt, keys2D)
+            keys3D = keys3D + rsltDictTools._findUnusualKeys(rslt, keys3D)
         waveOld = rslt['lambda']
         for key, val in rslt.items():
-            if key in RSLT_DICT_KEYS['stateTotSpctrl']: # 1D variables with lambda as only dim
+            if key in keys1D: # 1D variables with lambda as only dim
                 val = rsltDictTools._intrpHelp(waveOld, val, waveNew, key)
-            elif key in keys2D:
+            elif key in keys2D: # 2D arrays (N_modes, N_lambda)
                 yNew = np.empty(rslt[key].shape)
                 for i,vect1D in enumerate(yNew):
                     vect1D = rsltDictTools._intrpHelp(waveOld, val[i], waveNew, key)
                 val = yNew
-            elif key in RSLT_DICT_KEYS['statePMSpctrl']: # 3D arrays (N_ang, N_modes, N_lambda)
+            elif key in keys3D: # 3D arrays (N_ang, N_modes, N_lambda)
                 yNew = np.empty(rslt[key].shape)
                 for i,vect2D in enumerate(yNew): # vect2D has shape (N_modes, N_lambda)
                     for j,vect1D in enumerate(vect2D): # vect1D has shape (N_lambda)
                         vect1D = rsltDictTools._intrpHelp(waveOld, val[i,j], waveNew, key)
                 val = yNew
-            elif type(val) is np.ndarray and val.shape[-1]==len(waveOld) and verbose:
-                warnings.warn('rslt key %s was not interpolated but was an array with final dimension matching length of lambda')
+            elif type(val) is np.ndarray and val.shape[-1]==len(waveOld) and key!='lambda' and verbose:
+                warnings.warn('rslt key %s was not interpolated but was an array with final dimension matching length of lambda' % key)
         rslt['lambda'] = waveNew
         return rslt
 
     def _intrpHelp(x, y, xn, key):
         if 'aod' in key.lower():
-            return angstrmIntrp(x,y,xNew) # TODO: I don't think this works with xNew as a vector
+            return np.asarray([ms.angstrmIntrp(x,y,xNew) for xNew in xn])
         else:
             return np.interp(xn, x, y)
+
+    def _findUnusualKeys(rslt, baseKeys=None):
+        endStrs = ['ocean', 'land', 'oceanStd', 'landStd', 'sky']
+        if baseKeys is None: baseKeys = sum((x for x in rsltDictTools.KEYS.values()), ())
+        unslKeys = []
+        for key in baseKeys:
+            for endStr in endStrs:
+                testKey = '%s_%s' % (key, endStr)
+                if testKey in rslt: unslKeys.append(testKey)
+        return tuple(unslKeys)
 
 
 
@@ -1255,7 +1278,7 @@ class graspYAML():
             'brdf':'surface_land_brdf_ross_li',
             'bpdf':'surface_land_polarized_maignan_breon',
             'cxMnk':'surface_water_cox_munk_iso'}
-        spctrlFlds = RSLT_DICT_KEYS['stateTotSpctrl']+RSLT_DICT_KEYS['stateModeSpctrl']+RSLT_DICT_KEYS['stateSurfSpctrl']
+        spctrlFlds = rsltDictTools.KEYS['stateTotSpctrl']+rsltDictTools.KEYS['stateModeSpctrl']+rsltDictTools.KEYS['stateSurfSpctrl']
         for key in vals.keys(): # loop over characteristics
             if key in spctrlFlds:
                 shapeValsKey = np.array(vals[key]).shape
