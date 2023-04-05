@@ -1063,14 +1063,18 @@ class pixel():
             if self.meas == [] when called, populateFromRslt will add a measurement for each wvl in rslt
             radianceNoiseFun will override (and permanently set) self.measVals[n]['errorModel']
         """
-        msTypMap = {'I':41, 'Q':42, 'U':43, 'DOLP':44, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
+        msTypMap = {'I':41, 'Q':42, 'U':43, 'P':44, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
         msTyps = np.array([key.replace(dataStage+'_','') for key in rslt.keys() if dataStage in key]) # names of all keys with dataStage (e.g. "fit_")
+        
+        if 'P' in msTyps: 
+            msTyps[msTyps=='P'] = 'P'
         if 'QoI' in msTyps:
             rslt[dataStage+'_Q'] = rslt[dataStage+'_QoI']*rslt[dataStage+'_I']
             msTyps[msTyps=='QoI'] = 'Q'
         if 'UoI' in msTyps:
             rslt[dataStage+'_U'] = rslt[dataStage+'_UoI']*rslt[dataStage+'_I']
             msTyps[msTyps=='UoI'] = 'U'
+
         for l, lVal in enumerate(rslt['lambda']): # loop over wavelength
             msTypInd = np.nonzero([not np.isnan(rslt[dataStage+'_'+mt][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
             if msTypInd.size>0: # there are measurements at this wavelength
