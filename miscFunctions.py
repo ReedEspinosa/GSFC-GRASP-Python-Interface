@@ -49,14 +49,12 @@ def matplotlibX11():
 def angstrmIntrp(lmbdIn, tau, lmbdTrgt):
     tau = tau[lmbdIn.argsort()]
     lmbd = lmbdIn[lmbdIn.argsort()]
-#    assert (lmbdTrgt >= lmbd.min() and lmbdTrgt <= lmbd.max()), "This function will not extroplate, lmbdTrgt must fall between two values."
-    if lmbdTrgt < lmbd.min() or lmbdTrgt > lmbd.max():
-        return np.nan
-    if lmbdTrgt==lmbd[0]:
-        return tau[0]
-    if lmbdTrgt==lmbd[-1]:
-        return tau[-1]
-    frstInd = np.nonzero((lmbd - lmbdTrgt) < 0)[0][-1]
+    if lmbdTrgt <= lmbd.min(): # calculate α from lowest two λ
+        frstInd = 0
+    elif lmbdTrgt >= lmbd.max(): # calculate α from highest two λ
+        frstInd = len(lmbd)-2
+    else: # calculate α from adjacent two (above and below) λ
+        frstInd = np.nonzero((lmbd - lmbdTrgt) < 0)[0][-1]
     alpha = angstrm(lmbd[frstInd:frstInd+2], tau[frstInd:frstInd+2])
     return tau[frstInd]*(lmbd[frstInd]/lmbdTrgt)**alpha
 

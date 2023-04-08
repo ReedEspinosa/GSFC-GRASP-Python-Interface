@@ -816,11 +816,11 @@ class graspRun():
                     λ550Ind = np.argmin(np.abs(rs['lambda']-0.55))
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
-                        rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
+                        rs['βext'][mode,:] = 1e6*ms.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
         if ('dVdlnr' in results[0]):
             for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
             if 'rEff' not in results[0]:
-                rEffs = mf.integratePSD(results, moment='rEff')
+                rEffs = ms.integratePSD(results, moment='rEff')
                 for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
         return results, wavelengths
 
@@ -994,6 +994,7 @@ class rsltDictTools():
 
     VERSION = '1.02' # Need to increment this if any meaningful changes made to rslts list of dicts
     MEAS_TYPES = ('I','Q','U','P','QoI','UoI','PoI','DP','VExt','VBS','LS','DP')
+    END_STRS = ('ocean', 'land', 'oceanStd', 'landStd', 'sky')
     KEYS = { # See README.md for a complete list (which this currently is not)
         'stateTotSpctrl'   :('aod','ssa','albedo','g','LidarRatio','LidarDepol'),
         'stateModeSpctrl'  :('aodMode','ssaMode','n','k','gMode','LidarRatioMode','LidarDepolMode'),
@@ -1008,11 +1009,18 @@ class rsltDictTools():
         # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
         # If a rslts list of dicts is loaded from a file it should be filtered through this function
         rslts = np.array(rslts_raw)
-        if 'r' in rslts[0] and rslts[0]['r'].ndim == 1:
-            for i, rs in enumerate(rslts): 
+        for i, rs in enumerate(rslts):
+            if 'r' in rs and rs['r'].ndim == 1:
                 rslts[i]['r'] = rs['r'][None, :]
                 rslts[i]['dVdlnr'] = rs['dVdlnr'][None, :]
-        if 'version' in rslts[0] and float(rslts[0]['version'])>1: return rslts # rslts loaded are ≥v1.01
+            for szaKeyEnd in rsltDictTools.END_STRS+('',):
+                szaKey = 'sza_'+szaKeyEnd
+                if szaKey in rs and rs[szaKey].ndim==0: 
+                    rs[szaKey] = np.tile(rs[szaKey], rs['fis_'+szaKeyEnd].shape)
+            for key in ['bpdf', 'albedo','n','k']: # spectral variables we want to ensure are 2D (1 x Nlambda) (graspRun.readOutput() handles this correctly now but old files and other sources may not)
+                if key in rs: rs[key] = np.atleast_2d(rs[key])
+        if 'version' in rslts[0] and float(rslts[0]['version'])>1: return rslts
+        # Applied only to results older than Version 1.01
         if 'dVdlnr' in rslts[0]: # prior to 21/05/2021 we saved normalized; we now use absolute
             psdNormUnityRTOL = 1e-2 # if relative difference between unity and integral of PSD over r is greater than this we assume PSD is absolute
             psdTruncThresh = 1e-3 # if first or last PSD bin is greater than this fraction of max(PSD[:]) then this particular PSD is significantly truncated and we ignore it when checking for normalization b/c it is expected to integrate to <1 in normalized case
@@ -1026,10 +1034,6 @@ class rsltDictTools():
             if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
                 for rs in rslts: 
                     rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
-        if 'version' in rslts[0] and float(rslts[0]['version'])>1.01: return rslts
-        for key in ['bpdf', 'albedo']: # spectral variables we want to ensure are 2D (1 x Nlambda)
-            if key in rslts[0]: 
-                for rs in rslts: rs[key] = np.atleast_2d(rs[key])
         return rslts
 
     def spectralInterp(rslt, waveNew, verbose, check4oddKeys=True):
@@ -1048,35 +1052,38 @@ class rsltDictTools():
         waveOld = rslt['lambda']
         for key, val in rslt.items():
             if key in keys1D: # 1D variables with lambda as only dim
-                val = rsltDictTools._intrpHelp(waveOld, val, waveNew, key)
+                rslt[key] = rsltDictTools._intrpHelp(waveOld, val, waveNew, key)
             elif key in keys2D: # 2D arrays (N_modes, N_lambda)
                 yNew = np.empty(rslt[key].shape)
                 for i,vect1D in enumerate(yNew):
                     vect1D = rsltDictTools._intrpHelp(waveOld, val[i], waveNew, key)
-                val = yNew
+                rslt[key] = yNew
             elif key in keys3D: # 3D arrays (N_ang, N_modes, N_lambda)
                 yNew = np.empty(rslt[key].shape)
                 for i,vect2D in enumerate(yNew): # vect2D has shape (N_modes, N_lambda)
                     for j,vect1D in enumerate(vect2D): # vect1D has shape (N_lambda)
                         vect1D = rsltDictTools._intrpHelp(waveOld, val[i,j], waveNew, key)
-                val = yNew
+                rslt[key] = yNew
             elif type(val) is np.ndarray and val.shape[-1]==len(waveOld) and key!='lambda' and verbose:
                 warnings.warn('rslt key %s was not interpolated but was an array with final dimension matching length of lambda' % key)
         rslt['lambda'] = waveNew
         return rslt
 
     def _intrpHelp(x, y, xn, key):
+        if np.isnan(y).any():
+            if np.isnan(y).all(): return np.full(xn.shape, np.nan)
+            x = x[~np.isnan(y)] # without these 2 lines np.interp (and maybe angstrmIntrp) will return nans, in some circustances
+            y = y[~np.isnan(y)]
         if 'aod' in key.lower():
             return np.asarray([ms.angstrmIntrp(x,y,xNew) for xNew in xn])
         else:
             return np.interp(xn, x, y)
 
     def _findUnusualKeys(rslt, baseKeys=None):
-        endStrs = ['ocean', 'land', 'oceanStd', 'landStd', 'sky']
         if baseKeys is None: baseKeys = sum((x for x in rsltDictTools.KEYS.values()), ())
         unslKeys = []
         for key in baseKeys:
-            for endStr in endStrs:
+            for endStr in rsltDictTools.END_STRS:
                 testKey = '%s_%s' % (key, endStr)
                 if testKey in rslt: unslKeys.append(testKey)
         return tuple(unslKeys)
@@ -1125,32 +1132,33 @@ class pixel():
             self.measVals.insert(insertInd[0], newMeas)
             return insertInd
 
-    def populateFromRslt(self, rslt, radianceNoiseFun=None, dataStage='fit', verbose=False):
+    def populateFromRslt(self, rslt, radianceNoiseFun=None, dataStage='fit', endStr='', verbose=False):
         """ This method will overwrite any previously existing data in the pixel at the following keys:
             meas_type, nbvm, nip, measurements, sza, thetav, phi, datetime, latitude, longitude, land_prct
             if self.meas == [] when called, populateFromRslt will add a measurement for each wvl in rslt
             radianceNoiseFun will override (and permanently set) self.measVals[n]['errorModel']
         """
+        endFull= '_'+endStr if len(endStr)>0 else ''
         msTypMap = {'I':41, 'Q':42, 'U':43, 'P':44, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
-        msTyps = np.array([key.replace(dataStage+'_','') for key in rslt.keys() if dataStage in key]) # names of all keys with dataStage (e.g. "fit_")
+        msTyps = np.array([key.replace(dataStage+'_','').replace(endFull,'') for key in rslt.keys() if dataStage in key]) # names of all keys with dataStage (e.g. "fit_")
         
         if 'P' in msTyps: 
             msTyps[msTyps=='P'] = 'P'
         if 'QoI' in msTyps:
-            rslt[dataStage+'_Q'] = rslt[dataStage+'_QoI']*rslt[dataStage+'_I']
-            msTyps[msTyps=='QoI'] = 'Q'
+            rslt[dataStage+'_Q'+endFull] = rslt[dataStage+'_QoI'+endFull]*rslt[dataStage+'_I'+endFull]
+            msTyps[msTyps=='QoI'+endFull] = 'Q'
         if 'UoI' in msTyps:
-            rslt[dataStage+'_U'] = rslt[dataStage+'_UoI']*rslt[dataStage+'_I']
+            rslt[dataStage+'_U'+endFull] = rslt[dataStage+'_UoI'+endFull]*rslt[dataStage+'_I'+endFull]
             msTyps[msTyps=='UoI'] = 'U'
 
         for l, lVal in enumerate(rslt['lambda']): # loop over wavelength
-            msTypInd = np.nonzero([not np.isnan(rslt[dataStage+'_'+mt][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
+            msTypInd = np.nonzero([not np.isnan(rslt[dataStage+'_'+mt+endFull][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
             if msTypInd.size>0: # there are measurements at this wavelength
                 measValsInd = self.addMeas(lVal)
                 msDct = self.measVals[measValsInd] # lists and dicts are mutable so changes to msDct['key'] persist in self.measVals
                 msDct['meas_type'] = [msTypMap[mt] for mt in msTyps[msTypInd]] # this is numberic key for measurements avaiable at current λ
                 msTypsNowSorted = msTyps[msTypInd[np.argsort(msDct['meas_type'])]] # need msType names at this λ, sorted by above numeric measurement type keys
-                msDct['nbvm'] = [len(rslt[dataStage+'_'+mt][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
+                msDct['nbvm'] = [len(rslt[dataStage+'_'+mt+endFull][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
                 msDct['meas_type'] = np.sort(msDct['meas_type'])
                 msDct['nip'] = len(msDct['meas_type'])
                 if np.all(msDct['meas_type'] < 40): # lidar data
@@ -1170,7 +1178,7 @@ class pixel():
                     except TypeError:
                         msDct['measurements'] = msDct['errorModel'](l, rslt)
                 else:
-                    msDct['measurements'] = np.reshape([rslt[dataStage+'_'+msStr][:,l] for msStr in msTypsNowSorted], -1)
+                    msDct['measurements'] = np.reshape([rslt[dataStage+'_'+msStr+endFull][:,l] for msStr in msTypsNowSorted], -1)
                 msDct = self.formatMeas(msDct) # this will tile the above msTyp times
         if 'datetime' in rslt: self.dtObj = rslt['datetime']
         if 'latitude' in rslt: self.lat = rslt['latitude']
