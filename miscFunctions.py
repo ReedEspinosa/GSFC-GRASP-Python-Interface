@@ -20,6 +20,15 @@ def checkDiscover(): # right now this just checks for a remote connection...
     return "SSH_CONNECTION" in os.environ
 
 
+def seaLevelROD(λtarget):
+    """ Returns the ROD at λtarget wavelength at sea level """
+    λtarget = np.asarray(λtarget)
+    λ =   np.r_[0.3600, 0.3800, 0.4100, 0.5500, 0.6700, 0.8700, 1.5500, 1.6500]
+    rod = np.r_[0.5612, 0.4474, 0.3259, 0.0973, 0.0436, 0.0152, 0.0015, 0.0012]
+    assert λ.min()<=λtarget.min() and λ.max()>=λtarget.max(), 'λtarget falls outside the range of pre-programed values!'
+    return np.interp(λtarget, λ, rod**-0.25)**-4
+
+
 def norm2absExtProf(normalizedProfile, heights, AOD):
     """
     normalizedProfile -> 1xN array like; normalized profile
@@ -40,14 +49,12 @@ def matplotlibX11():
 def angstrmIntrp(lmbdIn, tau, lmbdTrgt):
     tau = tau[lmbdIn.argsort()]
     lmbd = lmbdIn[lmbdIn.argsort()]
-#    assert (lmbdTrgt >= lmbd.min() and lmbdTrgt <= lmbd.max()), "This function will not extroplate, lmbdTrgt must fall between two values."
-    if lmbdTrgt < lmbd.min() or lmbdTrgt > lmbd.max():
-        return np.nan
-    if lmbdTrgt==lmbd[0]:
-        return tau[0]
-    if lmbdTrgt==lmbd[-1]:
-        return tau[-1]
-    frstInd = np.nonzero((lmbd - lmbdTrgt) < 0)[0][-1]
+    if lmbdTrgt <= lmbd.min(): # calculate α from lowest two λ
+        frstInd = 0
+    elif lmbdTrgt >= lmbd.max(): # calculate α from highest two λ
+        frstInd = len(lmbd)-2
+    else: # calculate α from adjacent two (above and below) λ
+        frstInd = np.nonzero((lmbd - lmbdTrgt) < 0)[0][-1]
     alpha = angstrm(lmbd[frstInd:frstInd+2], tau[frstInd:frstInd+2])
     return tau[frstInd]*(lmbd[frstInd]/lmbdTrgt)**alpha
 
