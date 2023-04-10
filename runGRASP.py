@@ -1054,15 +1054,15 @@ class rsltDictTools():
             if key in keys1D: # 1D variables with lambda as only dim
                 rslt[key] = rsltDictTools._intrpHelp(waveOld, val, waveNew, key)
             elif key in keys2D: # 2D arrays (N_modes, N_lambda)
-                yNew = np.empty(rslt[key].shape)
-                for i,vect1D in enumerate(yNew):
-                    vect1D = rsltDictTools._intrpHelp(waveOld, val[i], waveNew, key)
+                yNew = np.empty((rslt[key].shape[0], len(waveNew)))
+                for i in range(len(yNew)):
+                    yNew[i] = rsltDictTools._intrpHelp(waveOld, val[i], waveNew, key)
                 rslt[key] = yNew
             elif key in keys3D: # 3D arrays (N_ang, N_modes, N_lambda)
-                yNew = np.empty(rslt[key].shape)
-                for i,vect2D in enumerate(yNew): # vect2D has shape (N_modes, N_lambda)
-                    for j,vect1D in enumerate(vect2D): # vect1D has shape (N_lambda)
-                        vect1D = rsltDictTools._intrpHelp(waveOld, val[i,j], waveNew, key)
+                yNew = np.empty(rslt[key].shape[0:2] + (len(waveNew),))
+                for i in range(yNew.shape[0]): # vect2D has shape (N_modes, N_lambda)
+                    for j in range(yNew.shape[1]): # vect1D has shape (N_lambda)
+                        yNew[i,j] = rsltDictTools._intrpHelp(waveOld, val[i,j], waveNew, key)
                 rslt[key] = yNew
             elif type(val) is np.ndarray and val.shape[-1]==len(waveOld) and key!='lambda' and verbose:
                 warnings.warn('rslt key %s was not interpolated but was an array with final dimension matching length of lambda' % key)
