@@ -1138,27 +1138,28 @@ class pixel():
             if self.meas == [] when called, populateFromRslt will add a measurement for each wvl in rslt
             radianceNoiseFun will override (and permanently set) self.measVals[n]['errorModel']
         """
-        endFull= '_'+endStr if len(endStr)>0 else ''
+        # find types of measurement to be used
         msTypMap = {'I':41, 'Q':42, 'U':43, 'P':44, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
-        msTyps = np.array([key.replace(dataStage+'_','').replace(endFull,'') for key in rslt.keys() if dataStage in key]) # names of all keys with dataStage (e.g. "fit_")
-        
-        if 'P' in msTyps: 
+        keyPtrn = (dataStage + '_%s_' + endStr) if len(endStr)>0 else (dataStage + '_%s')
+        msTyps = np.array([key for key in msTypMap.keys() if (keyPtrn % key) in rslt])
+        # adjust units of polarized radiance data
+        if 'P' in msTyps:
             msTyps[msTyps=='P'] = 'P'
         if 'QoI' in msTyps:
-            rslt[dataStage+'_Q'+endFull] = rslt[dataStage+'_QoI'+endFull]*rslt[dataStage+'_I'+endFull]
-            msTyps[msTyps=='QoI'+endFull] = 'Q'
+            rslt[keyPtrn % 'Q'] = rslt[keyPtrn % 'QoI']*rslt[keyPtrn % 'I']
+            msTyps[msTyps=='QoI'] = 'Q'
         if 'UoI' in msTyps:
-            rslt[dataStage+'_U'+endFull] = rslt[dataStage+'_UoI'+endFull]*rslt[dataStage+'_I'+endFull]
+            rslt[keyPtrn % 'U'] = rslt[keyPtrn % 'UoI']*rslt[keyPtrn % 'I']
             msTyps[msTyps=='UoI'] = 'U'
-
+        # loop over wavelengths and add measurements and geometry
         for l, lVal in enumerate(rslt['lambda']): # loop over wavelength
-            msTypInd = np.nonzero([not np.isnan(rslt[dataStage+'_'+mt+endFull][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
+            msTypInd = np.nonzero([~np.isnan(rslt[keyPtrn % mt][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
             if msTypInd.size>0: # there are measurements at this wavelength
                 measValsInd = self.addMeas(lVal)
                 msDct = self.measVals[measValsInd] # lists and dicts are mutable so changes to msDct['key'] persist in self.measVals
                 msDct['meas_type'] = [msTypMap[mt] for mt in msTyps[msTypInd]] # this is numberic key for measurements avaiable at current λ
                 msTypsNowSorted = msTyps[msTypInd[np.argsort(msDct['meas_type'])]] # need msType names at this λ, sorted by above numeric measurement type keys
-                msDct['nbvm'] = [len(rslt[dataStage+'_'+mt+endFull][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
+                msDct['nbvm'] = [len(rslt[keyPtrn % mt][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
                 msDct['meas_type'] = np.sort(msDct['meas_type'])
                 msDct['nip'] = len(msDct['meas_type'])
                 if np.all(msDct['meas_type'] < 40): # lidar data
@@ -1178,8 +1179,9 @@ class pixel():
                     except TypeError:
                         msDct['measurements'] = msDct['errorModel'](l, rslt)
                 else:
-                    msDct['measurements'] = np.reshape([rslt[dataStage+'_'+msStr+endFull][:,l] for msStr in msTypsNowSorted], -1)
+                    msDct['measurements'] = np.reshape([rslt[keyPtrn % mt][:,l] for mt in msTypsNowSorted], -1)
                 msDct = self.formatMeas(msDct) # this will tile the above msTyp times
+        # add pixel metadata
         if 'datetime' in rslt: self.dtObj = rslt['datetime']
         if 'latitude' in rslt: self.lat = rslt['latitude']
         if 'longitude' in rslt: self.lon = rslt['longitude']
@@ -1330,7 +1332,10 @@ class graspYAML():
         self.writeYAML()
 
     def scrambleInitialGuess(self, fracOfSpace=1, skipTypes=['aerosol_concentration']):
-        """Set a random initial guess for all types (excluding skipTypes), uniformly choosen from the range between min and max."""
+        """
+        Set a random initial guess for all types that are not skipTypes
+        Random values are uniformly chosen in linear space in range fracOfSpace*(min, max)
+        """
         self.loadYAML()
         fracOfSpace = min(fracOfSpace, 0.999) # ensure we don't hit min/max exactly
         for char in self.dl['retrieval']['constraints'].values():
@@ -1346,8 +1351,10 @@ class graspYAML():
 
     def adjustLambda(self, Nlambda):
         """Change YAML settings to match a specific number of wavelenths, cutting and adding from the longest wavelength."""
-        for lt in self.lambdaTypes: self._repeatElementsInField(fldName=lt, Nrepeats=Nlambda, λonly=True)  # loop over constraint types
-        assert self.access('retrieval.inversion.noises') is not None, 'Could not find YAML field for noises! Note that only GRASP version 1.0 or later YAML files work with this verison of GSFC-GRASP-Python-Interface.'
+        for lt in self.lambdaTypes:
+            self._repeatElementsInField(fldName=lt, Nrepeats=Nlambda, λonly=True)  # loop over constraint types
+        msg = 'Could not find YAML noises field! Note GSFC-GRASP-Python-Interface only works with GRASP version ≥1.0.'
+        assert self.access('retrieval.inversion.noises') is not None, msg
         for n in range(len(self.access('retrieval.inversion.noises'))): # adjust the noise lambda as well
             m = 1
             while self.access('retrieval.inversion.noises.noise[%d].measurement_type[%d]' % (n+1, m)):
@@ -1366,21 +1373,24 @@ class graspYAML():
         """This will cut/repeat using the last element of characteristic fldName so that the number of entries is Nrepeats
             NOTE: This is a helper function that DOES NOT WRITE CHANGES TO THE FILE """
         assert np.issubdtype(type(Nrepeats), np.integer), 'Nrepeats must be an integer!'
+        lSubFlds = ['index_of_wavelength_involved', 'value', 'min', 'max', 'a_priori_estimates.lagrange_multiplier']
         m = 1
         while self.access('%s.%d' % (fldName, m)): # loop over each mode
             λField = self.access('%s.%d.index_of_wavelength_involved' % (fldName, m))[0] > 0 # otherwise yaml specified [0] implying the parameter should be spectrally invarient
             if not λonly or λField:
-                for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
+                for f in lSubFlds:  # loop over each field
                     orgVal = self.access('%s.%d.%s' % (fldName, m, f))
-                    if len(orgVal) >= Nrepeats:
+                    if orgVal is not None and len(orgVal) >= Nrepeats:
                         self.access('%s.%d.%s' % (fldName, m, f), orgVal[0:Nrepeats], write2disk=False)
-                    else:
+                    elif orgVal is not None:
                         rpts = Nrepeats - len(orgVal)
                         if f == 'index_of_wavelength_involved' and λField:
                             newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
                         else:
                             newVal = orgVal + np.repeat(orgVal[-1], rpts).tolist()
                         self.access('%s.%d.%s' % (fldName, m, f), newVal, write2disk=False)
+                    else: # orgVal is None 
+                        assert f=='a_priori_estimates.lagrange_multiplier', '%s not found in %s (it is mandatory)' % (f,fldName)
             m += 1
 
     def adjustVertBins(self, Nbins):
@@ -1406,7 +1416,8 @@ class graspYAML():
             if mtch: # we may still be able to add the value if we append a mode
                 lastModePath = np.r_[fldPath.split('.')[0:3] + ['mode[%d]' % (int(mtch.group(1))-1)] + fldPath.split('.')[4:]]
                 if self.YAMLrecursion(self.dl, lastModePath): # this field does exist in the previous mode, we will copy it
-                    if verbose: print('The field does exists in previous mode of the same characterisitics, using it as a template to append a new mode...')
+                    if verbose: 
+                        print('%s exists in prior mode, using as template for new mode...' % fldPath)
                     lastModeVal = self.YAMLrecursion(self.dl, lastModePath[0:4])
                     self.dl['retrieval']['constraints'][fldPath.split('.')[2]]['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lastModeVal)
                     prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal) # new mode exist now, write value to it
@@ -1418,20 +1429,28 @@ class graspYAML():
 
     def exapndFldPath(self, fldPath):
         self.loadYAML()
-        if fldPath == 'path_to_internal_files': # <-SHORTCUT: fldPath='path_to_internal_files'
+        if fldPath == 'path_to_internal_files': 
             return 'retrieval.general.path_to_internal_files'
-        if fldPath == 'stop_before_performing_retrieval': # <-SHORTCUT:
+        if fldPath == 'stop_before_performing_retrieval':
             return 'retrieval.mode'
-        if fldPath == 'stream_fn': # <-SHORTCUT:
+        if fldPath == 'stream_fn':
             return 'output.segment.stream'
-        if fldPath == 'sdata_fn': # <-SHORTCUT:
+        if fldPath == 'sdata_fn':
             return 'input.file'
         charN = np.nonzero([val['type'] in fldPath for val in self.dl['retrieval']['constraints'].values()])[0]
-        if charN.size > 0: # <-SHORTCUT: any type, ex. fldPath='aerosol_concentration' (set mode 1, value)
+        if charN.size > 0: # any type, ex. fldPath='aerosol_concentration' (set mode 1, value)
             fPvct = fldPath.split('.') # OR fldPath='aerosol_concentration.2' (mode 2, value)
             mode = fPvct[1] if len(fPvct) > 1 else 1 # OR fldPath='aerosol_concentration.2.min' (mode 3, min)
-            fld = fPvct[2] if len(fPvct) > 2 else 'value'
-            return 'retrieval.constraints.characteristic[%d].mode[%s].initial_guess.%s' % (charN[0]+1, mode, fld)
+            if len(fPvct)==4 and fPvct[2]=='a_priori_estimates': # e.g., 'aerosol_concentration.2.a_priori_estimates.lagrange_multiplier
+                fld = '.'.join(fPvct[2:])
+                overFld = 'single_pixel' # probably will be: 'single_pixel.a_priori_estimates.lagrange_multiplier'
+            elif len(fPvct)<4:
+                overFld = 'initial_guess'
+                fld = fPvct[2] if len(fPvct) > 2 else 'value'
+            else:
+                assert False, 'Failed expanding %s. Characteristic found but %s not understood.' % (fldPath, '.'.join(fPvct[2:]))
+            pthPtrn = 'retrieval.constraints.characteristic[%d].mode[%s].%s.%s'
+            return pthPtrn % (charN[0]+1, mode, overFld, fld)
         return fldPath
 
     def writeYAML(self):
