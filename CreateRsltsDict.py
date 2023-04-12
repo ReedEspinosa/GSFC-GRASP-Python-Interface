@@ -19,12 +19,14 @@ from scipy.interpolate import interp1d
 import netCDF4 as nc
 
 #The function Checks for Fill values or negative values and replaces them with nan. To check for negative values, set negative_check = True 
-def checkFillVals(param, negative_check = None):
+def checkFillVals(param,Angfilter, negative_check = None):
     
     param[:] = np.where(param[:] == -999, np.nan, param[:])
     
     if negative_check == True:
         param[:] = np.where(param[:] < 0 , np.nan, param[:])
+
+    param = param[Angfilter]
         
     return param
 
@@ -36,28 +38,37 @@ def Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn):
     #Gas Absorption correction using UNL_VRTM (provided by Richard,UMBC)
     
     #Reading the NetCDF file for gas absorption from radiative tranfer code (UNLVRTM)
+    
     ds = nc.Dataset(GasAbsFn)
-    Tau_Comb = ds.variables['tauGas'][altIndex,:] #Bulk gas absorption for different layers
+#     Tau_Comb = np.sum(ds.variables['tauGas'][altIndex,:]) #Bulk gas absorption for different layers
     Wl = ds.variables['Lamdas'][:] # wavelength values corresponding to the gas absorption
-   
+    
+    Tau_Comb_solar=  np.sum(ds.variables['tauGas'], axis=0)
+    Tau_Comb_view=  np.sum(ds.variables['tauGas'][:altIndex,:], axis=0)   
     #Spectral response values for given RSP wl
     SpecResFn = SpecResFn[SpecResFn[:,0]>= min(Wl)]
     #1D interpolation across wavelength
-    f = interp1d(Wl,Tau_Comb,kind = 'linear')
+    f = interp1d(Wl,Tau_Comb_solar,kind = 'linear')
+    f2 = interp1d(Wl,Tau_Comb_view,kind = 'linear')
 
     # Evaluate the function at a new point
     wl_RSP = SpecResFn[:,0]
-    tau_new = f(wl_RSP) #Tau at given RSP response function wl
+    tau_solar = f(wl_RSP) #Tau at given RSP response function wl
+    tau_view = f2(wl_RSP) #Tau at given RSP response function wl
+    
        
-    return tau_new, wl_RSP, SpecResFn[:,1]
+    return tau_solar, tau_view, wl_RSP, SpecResFn[:,1]
 
 #This function will return the Transmittance for all the solar and viewing geometries
 def Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResFn):
     
     intp =Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn)
-    Tau_Comb = intp[0] # Tau interpolated to the RSP response function wavelengths
-    RSP_wl = intp[1]
+    Tau_Comb_solar = intp[0]
+    Tau_Comb_view = intp[1]# Tau interpolated to the RSP response function wavelengths
+    
+    RSP_wl = intp[2]
     SzenNo = len(Solar_Zenith) # no of angles measured by RSP
+    
     C_factor_solar = np.zeros((SzenNo,len(RSP_wl))) #  angles x wl
     C_factor_view = np.zeros((SzenNo,len(RSP_wl))) #  angles x wl
 
@@ -65,11 +76,10 @@ def Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResF
     G_v = 1/np.cos(np.radians(Viewing_Zenith))
 
     for i in range(SzenNo):
-        C_factor_solar[i,:] = np.exp(-(G_s[i])*Tau_Comb) #Based on solar zenith angle
-        C_factor_view[i,:] = np.exp(-(G_v[i])*Tau_Comb)
-    
-    
-    return C_factor_solar, C_factor_view
+        C_factor_solar[i,:] = np.exp(-(G_s[i])*Tau_Comb_solar) #Based on solar zenith angle
+        C_factor_view[i,:] = np.exp(-(G_v[i])*Tau_Comb_view)
+
+    return  C_factor_solar, C_factor_view
 
 
 
@@ -77,7 +87,7 @@ def Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResF
 ### Reading the Multiangle Polarimeter data ()
 
 # Reads the Data from ORACLES and gives the rslt dictionary for GRASP
-def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang,GasAbsFn): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
+def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,GasAbsFn): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
     
     #Reading the hdf file
     f1_MAP = h5py.File(file_path + file_name,'r+') 
@@ -91,18 +101,23 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang,GasAbsF
     #Reading the Geometry
     Lat = f1_MAP['Geometry']['Collocated_Latitude'][TelNo,PixNo]
     Lon = f1_MAP['Geometry']['Collocated_Longitude'][TelNo,PixNo]
+    #filtering angles
+    vza = 180-f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,:]
+    vza[:f1_MAP['Geometry']['Nadir_Index'][0,PixNo]] = - vza[:f1_MAP['Geometry']['Nadir_Index'][0,PixNo]]
+    Angfilter = (vza>= -65) & (vza<= 45) # taking only the values of view zenith from -65 to 45
 
 
-    Scattering_ang = checkFillVals(f1_MAP['Geometry']['Scattering_Angle'][TelNo,PixNo,ang1:ang])
-    Solar_Zenith =  checkFillVals(f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,ang1:ang])
+
+    Scattering_ang = checkFillVals(f1_MAP['Geometry']['Scattering_Angle'][TelNo,PixNo,:],Angfilter)
+    Solar_Zenith =  checkFillVals(f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,:],Angfilter)
     
     #Converting sunlight azimuth to solar azimuth: 𝜃𝑠, 180- 𝜃𝑣 𝜙𝑠 = 𝜙𝑠 -180, 𝜙𝑣
 
-    Solar_Azimuth = checkFillVals(f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,ang1:ang]) - 180
-    Viewing_Azimuth = checkFillVals(f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,ang1:ang])
+    Solar_Azimuth = checkFillVals(f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,:],Angfilter) - 180
+    Viewing_Azimuth = checkFillVals(f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,:],Angfilter)
     #Converting viewing zenith with respect to nadir to that wrt zenith
     
-    Viewing_Zenith = 180 - checkFillVals(f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,ang1:ang]) # Theta_v <90
+    Viewing_Zenith = 180 - checkFillVals(f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,:],Angfilter) # Theta_v <90
             
     sza =  np.radians(Solar_Zenith)
     vza =   np.radians(Viewing_Zenith)
@@ -116,7 +131,8 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang,GasAbsF
     #     if Relative_Azi[i]<0 : Relative_Azi[i] =  Relative_Azi[i]+360
     RSP_wlf = [410, 470, 555, 670, 865, 960, 1590, 1880, 2250] #wl as in the file name of response functions
     
-    CorFac = np.zeros((ang-ang1,nwl))
+    CorFac1 = np.ones((np.sum(Angfilter),nwl))
+    CorFac2 = np.ones((np.sum(Angfilter),nwl))
     fig, ax1 = plt.subplots()
     ax2 = ax1.twinx() 
     for j in range(nwl):
@@ -131,33 +147,38 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang,GasAbsF
 
         SpecResFn = np.loadtxt(f'/home/gregmi/ORACLES/RSP_Spectral_Response/{Wlname}.txt')
         intp =Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn)
-        RSP_wl = intp[1]
-        resFunc = intp[2]/np.max(intp[2])
-        Transmittance = Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResFn)[0]
-        ax1.plot(RSP_wl,Transmittance[0,:],lw =0.2)
-        ax2.plot(RSP_wl,resFunc, label=f"{RSP_wlf[j]} ")
-        plt.legend()
-        for i in range(ang-ang1):
-            CorFac[i,j] = np.sum(Transmittance[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
+    RSP_wl = intp[2]
+    resFunc = intp[3]/np.max(intp[3])
+    Trans1 = Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResFn)[0]
+    Trans2 = Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResFn)[1]
+    
+    ax1.plot(RSP_wl,Trans1[0,:],lw =0.2)
+    ax2.plot(RSP_wl,resFunc, label=f"{RSP_wlf[j]} ")
+    plt.legend()
+    
+    for i in range(np.sum(Angfilter)):
+        CorFac1[i,j] = np.sum(Trans1[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
+        CorFac2[i,j] = np.sum(Trans2[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
             
 
 
 
+    corrFac = (CorFac1+CorFac2)/np.nanmax(CorFac1+CorFac2) #Noramalized correction factore
 
-
-    I1 = checkFillVals(Data['Intensity_1'][PixNo,ang1:ang,:nwl],negative_check =True)/ CorFac#telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
-    I2 = checkFillVals(Data['Intensity_2'][PixNo,ang1:ang,:nwl],negative_check =True)/CorFac #telescope 2
-
+    I1 = (checkFillVals(Data['Intensity_1'][PixNo,:,:nwl],Angfilter, negative_check =True)/ corrFac)# / corrFac telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
+    # I1 = I1/CorFac2
+    I2 = (checkFillVals(Data['Intensity_2'][PixNo,:,:nwl],Angfilter,negative_check =True)/ corrFac)# #telescope 2
+    # I2 = I2/CorFac2
     # Q and U in scattering plane 
     
-    scat_sin = checkFillVals(f1_MAP['Geometry']['Sin_Rot_Scatt_Plane'][TelNo,PixNo,ang1:ang])
-    scat_cos = checkFillVals(f1_MAP['Geometry']['Cos_Rot_Scatt_Plane'][TelNo,PixNo,ang1:ang])
+    # scat_sin = checkFillVals(f1_MAP['Geometry']['Sin_Rot_Scatt_Plane'][TelNo,PixNo,ang1:ang])
+    # scat_cos = checkFillVals(f1_MAP['Geometry']['Cos_Rot_Scatt_Plane'][TelNo,PixNo,ang1:ang])
     
-    scat_sin1 = np.repeat(scat_sin, nwl).reshape(len(scat_sin), nwl)
-    scat_cos1 = np.repeat(scat_cos, nwl).reshape(len(scat_cos), nwl)
+    # scat_sin1 = np.repeat(scat_sin, nwl).reshape(len(scat_sin), nwl)
+    # scat_cos1 = np.repeat(scat_cos, nwl).reshape(len(scat_cos), nwl)
     
-    Q = checkFillVals(Data['Stokes_Q'][PixNo,ang1:ang,:nwl])
-    U = checkFillVals(Data['Stokes_U'][PixNo,ang1:ang,:nwl])
+    # Q = checkFillVals(Data['Stokes_Q'][PixNo,:,:nwl])
+    # U = checkFillVals(Data['Stokes_U'][PixNo,:,:nwl])
 
    
     #Creating rslt dictionary for GRASP
@@ -166,7 +187,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang,GasAbsF
     rslt['longitude'] = Lon
     rslt['latitude'] = Lat
     rslt['meas_I'] = (I1+I2)/2                              
-    rslt['meas_P'] = rslt['meas_I'] *checkFillVals(Data['DoLP'][PixNo,ang1:ang,:nwl],negative_check =True)/100
+    rslt['meas_P'] = rslt['meas_I'] *checkFillVals(Data['DoLP'][PixNo,:,:nwl],Angfilter,negative_check =True)/100
     
   
             
@@ -189,7 +210,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,ang1, ang,GasAbsF
  
 
     #height key should not be used for altitude,
-    rslt['OBS_hght']= f1_MAP['Platform']['Platform_Altitude'][PixNo] # height of pixel in m
+    rslt['OBS_hght']= f1_MAP['Platform']['Platform_Altitude'][PixNo]- 1000 # height of pixel in m
     if  rslt['OBS_hght'] < 0:  #if colocated attitude is less than 0 then that is set to 0
         rslt['OBS_hght'] = 0
         print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
@@ -217,12 +238,14 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
 
     #The data file has many nan values, val is the list that stores indices of all the nan values for all the parameters
     val = []
-    inp =['355_ext','532_ext','1064_ext','355_dep', '532_dep','1064_dep','355_bsc','532_bsc','1064_bsc']
+    inp =['355_ext','532_ext','1064_ext','355_aer_dep', '532_aer_dep','1064_aer_dep','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa']
     for i in range (9):
         value2 = HSRL[f'{inp[i]}'][PixNo,1:].reshape(56, 10).mean(axis=1)
         val.append(np.nonzero(np.isnan(value2))[0])#this will give the indices of values that are nan
-    val.append(np.nonzero(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10).mean(axis=1)<0)[0])
-    val.append(np.nonzero(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1)<0)[0])
+        val.append(np.nonzero(value2<0)[0]) #Filter all negatives
+    
+    # val.append(np.nonzero(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1)<0)[0])
+    # val.append(np.nonzero(HSRL['355_bsc_Sa'][PixNo,1:].reshape(56, 10).mean(axis=1)<0)[0])
     remove_pixels = np.unique(list(itertools.chain.from_iterable(val))) 
                 
     # Merging all the lists in the val file and then taking the unique values
@@ -235,37 +258,48 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     rslt['wl'] = np.array([355,532,1064])/1000
     height_shape = np.delete(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) .shape[0]
 
-
-    Bext = np.ones((height_shape,3))
-    Bext[:,0] = np.delete(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Bext[:,1] = np.delete(HSRL['532_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Bext[:,2] = np.delete(HSRL['1064_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    rslt['meas_VExt'] = Bext
-
-    Bsca = np.ones((height_shape,3))
-    Bsca[:,0] = np.delete(HSRL['355_bsc'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Bsca[:,1] = np.delete(HSRL['532_bsc'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Bsca[:,2] = np.delete(HSRL['1064_bsc'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    rslt['meas_VBS'] =Bsca
-
-    Dep = np.ones((height_shape,3))
-    Dep[:,0] = np.delete(HSRL['355_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Dep[:,1] = np.delete(HSRL['532_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Dep[:,2] = np.delete(HSRL['1064_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    rslt['meas_DP'] = Dep
-
     Range = np.ones((height_shape,3))
     Range[:,0] = np.delete(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
     Range[:,1] = np.delete(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
     Range[:,2] = np.delete(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels)   # in meters
     rslt['RangeLidar'] = Range
 
+    Bext = np.ones((height_shape,3))
+    Bext[:,0] = np.delete(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Bext[:,1] = np.delete(HSRL['532_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Bext[:,2] = np.delete(HSRL['1064_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    # rslt['meas_VExt'] = Bext
 
+    Bsca = np.ones((height_shape,3))
+    Bsca[:,0] = np.delete(HSRL['355_bsc_Sa'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Bsca[:,1] = np.delete(HSRL['532_bsc_Sa'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Bsca[:,2] = np.delete(HSRL['1064_bsc_Sa'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    # rslt['meas_VBS'] =Bsca
+    # Bext = Bext/1000 #m-1
+    # Bsca = Bsca/1000 #m-1
+
+    height = altitude[PixNo] -  Range[:,0]
+    #Normalizing the values 
+    # for i in range(3):
+        # Bext[:,i] = (Bext[:,i]/1000)/np.trapz(Bext[:,i],height)
+        # Bsca[:,i] = (Bsca[:,i]/1000)/np.trapz(Bsca[:,i],height)
+        
+    rslt['meas_VExt'] = Bext / 1000
+    rslt['meas_VBS'] = Bsca / 1000 # m-1
+
+
+    Dep = np.ones((height_shape,3))
+    Dep[:,0] = np.delete(HSRL['355_aer_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Dep[:,1] = np.delete(HSRL['532_aer_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    Dep[:,2] = np.delete(HSRL['1064_aer_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
+    rslt['meas_DP'] = Dep*100
+
+    
     rslt['datetime'] =dt.datetime.strptime(file_name[10:-6]+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
     rslt['latitude'] = latitude[PixNo]
     rslt['longitude']= longitude[PixNo]
 
-    rslt['OBS_hght']=(altitude[PixNo] -  Range[:,0])[-1]/1000 # in km 
-    rslt['land_prct'] =0 #Ocean Surface
+    rslt['OBS_hght']=(altitude[PixNo] -  Range[:,0])[-1] # in m
+    rslt['land_prct'] = 0 #Ocean Surface
 
     return rslt
