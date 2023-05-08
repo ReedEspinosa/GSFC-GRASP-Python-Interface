@@ -993,7 +993,17 @@ class graspRun():
 class rsltDictTools():
 
     VERSION = '1.02' # Need to increment this if any meaningful changes made to rslts list of dicts
-    MEAS_TYPES = ('I','Q','U','P','QoI','UoI','PoI','DP','VExt','VBS','LS','DP')
+    EXPCT_MEAS_ERR = {'I'   :0.003,  # relative (variable must be explicitly defined as relative error below, absolute error is default)
+                      'Q'   :0.0015, # absolute in terms of Q/I
+                      'U'   :0.005,  # absolute in terms of U/I
+                      'QoI' :0.0015, # absolute
+                      'UoI' :0.005,  # absolute
+                      'PoI' :0.005,  # absolute
+                      'LS'  :0.15,   # relative
+                      'DP'  :2.00,   # absolute [units of %]
+                      'VBS' :0.05,   # relative
+                      'VExt':5e-6}   # absolute
+    MEAS_TYPES = tuple(k for k in EXPCT_MEAS_ERR.keys())
     END_STRS = ('ocean', 'land', 'oceanStd', 'landStd', 'sky')
     KEYS = { # See README.md for a complete list (which this currently is not)
         'stateTotSpctrl'   :('aod','ssa','albedo','g','LidarRatio','LidarDepol'),
@@ -1005,6 +1015,37 @@ class rsltDictTools():
         'observeSpctrlMeas':tuple('meas_'+mt for mt in MEAS_TYPES),
         } # All in a single tuple: sum((x for x in rsltDictTools.KEYS.values()), ())
 
+    def calcChi2(rsltA, rsltB, prfxA='fit', prfxB='meas'):
+        # TODO:
+        #    1) debug this function
+        #    2) double check the call (calls?) to this function in the simulation class
+        #    3) have graspRun.readOutput() automaticly call this if cost val comes out as unity (multipixel case)
+        # In simulations class: rstlBck['fit_...'] -> rsltA, rstlFwd['fit_...'] -> rsltB
+        sigMeas = rsltDictTools.EXPCT_MEAS_ERR
+        ObsKeysA = rsltDictTools.KEYS['observeSpctrl'+prfxA.title()]
+        ObsKeysB = rsltDictTools.KEYS['observeSpctrl'+prfxB.title()]        
+        χΤοtal = np.array([])
+        for measKeyA, measKeyB, measType in zip(ObsKeysA, ObsKeysB, sigMeas.keys()):
+            if measKeyA in rsltA:
+                valsA = rsltA[measKeyA] # we assume this is never Q[U]oI for some reason...
+                if measKeyB in rsltB:
+                    valsB = rsltB[measKeyB]
+                elif ('QoI' in measKeyA or 'UoI' in measKeyA) and measKeyB[:-2] in rsltB: 
+                    valsB = rsltB[measKeyB[:-2]]/rsltB[prfxB+'_I'] # A has XoI so we convert B from X to XoI
+                else:
+                    assert False, 'rsltA has %s but %s is not present in rsltB' % (measKeyA, measKeyB)
+                if measType in ['I', 'LS', 'VBS']: # relative errors
+                    with np.errstate(divide='ignore'): # possible for valsA+valsB=0, inf's will be removed below
+                        χLocal = ((2*(valsA-valsB)/(valsA+valsB))/sigMeas[measType])**2
+                    χLocal[χLocal>100] = 100 # cap at 10σ (small values may produce huge relative errors)
+                else: # absolute errors
+                    if measType in ['Q', 'U']: # we need to normalize by I, all Q[U] errors given in terms of q[u]
+                        valsA = valsA/rsltA[prfxA+'_I']
+                        valsB = valsB/rsltB[prfxB+'_I']
+                    χLocal = ((valsA-valsB)/sigMeas[measType])**2
+                χΤοtal = np.r_[χΤοtal, χLocal.flatten()]
+                return np.sqrt(np.nanmean(χΤοtal))
+               
     def frmtLoadedRslts(rslts_raw):
         # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
         # If a rslts list of dicts is loaded from a file it should be filtered through this function
@@ -1103,6 +1144,7 @@ class pixel():
         self.lon = lon
         self.lat = lat
         self.masl = masl
+        self.gasPar = None
         self.set_land_prct(land_prct)
         self.nwl = 0
         self.measVals = []
