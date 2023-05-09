@@ -17,16 +17,24 @@ import juliandate as jd
 import itertools
 from scipy.interpolate import interp1d
 import netCDF4 as nc
+from numpy import nanmean
+import yaml
+import pandas as pd
 
 #The function Checks for Fill values or negative values and replaces them with nan. To check for negative values, set negative_check = True 
-def checkFillVals(param,Angfilter, negative_check = None):
+def checkFillVals(param , negative_check = None):
     
     param[:] = np.where(param[:] == -999, np.nan, param[:])
     
     if negative_check == True:
         param[:] = np.where(param[:] < 0 , np.nan, param[:])
 
-    param = param[Angfilter]
+    # param = param[Angfilter]
+        
+    return param
+
+def HSRL_checkFillVals(param):
+    param[:] = np.where(param[:] < 0 , np.nan, param[:])     
         
     return param
 
@@ -87,7 +95,7 @@ def Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResF
 ### Reading the Multiangle Polarimeter data ()
 
 # Reads the Data from ORACLES and gives the rslt dictionary for GRASP
-def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,GasAbsFn): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
+def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsFn): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
     
     #Reading the hdf file
     f1_MAP = h5py.File(file_path + file_name,'r+') 
@@ -102,22 +110,22 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,GasAbsFn): #PixNo
     Lat = f1_MAP['Geometry']['Collocated_Latitude'][TelNo,PixNo]
     Lon = f1_MAP['Geometry']['Collocated_Longitude'][TelNo,PixNo]
     #filtering angles
-    vza = 180-f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,:]
-    vza[:f1_MAP['Geometry']['Nadir_Index'][0,PixNo]] = - vza[:f1_MAP['Geometry']['Nadir_Index'][0,PixNo]]
-    Angfilter = (vza>= -65) & (vza<= 45) # taking only the values of view zenith from -65 to 45
+    vza = 180-f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,ang1:ang2]
+    vza[f1_MAP['Geometry']['Nadir_Index'][0,PixNo]:] = - vza[f1_MAP['Geometry']['Nadir_Index'][0,PixNo]:]
+    Angfilter = (vza>= -45) & (vza<= 45) # taking only the values of view zenith from -65 to 45
 
 
 
-    Scattering_ang = checkFillVals(f1_MAP['Geometry']['Scattering_Angle'][TelNo,PixNo,:],Angfilter)
-    Solar_Zenith =  checkFillVals(f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,:],Angfilter)
+    Scattering_ang = checkFillVals(f1_MAP['Geometry']['Scattering_Angle'][TelNo,PixNo,ang1:ang2]  )
+    Solar_Zenith =  checkFillVals(f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,ang1:ang2]  )
     
     #Converting sunlight azimuth to solar azimuth: 𝜃𝑠, 180- 𝜃𝑣 𝜙𝑠 = 𝜙𝑠 -180, 𝜙𝑣
 
-    Solar_Azimuth = checkFillVals(f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,:],Angfilter) - 180
-    Viewing_Azimuth = checkFillVals(f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,:],Angfilter)
+    Solar_Azimuth = checkFillVals(f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,ang1:ang2], ) - 180
+    Viewing_Azimuth = checkFillVals(f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,ang1:ang2]  )
     #Converting viewing zenith with respect to nadir to that wrt zenith
     
-    Viewing_Zenith = 180 - checkFillVals(f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,:],Angfilter) # Theta_v <90
+    Viewing_Zenith = 180 - checkFillVals(f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,ang1:ang2]  ) # Theta_v <90
             
     sza =  np.radians(Solar_Zenith)
     vza =   np.radians(Viewing_Zenith)
@@ -138,8 +146,8 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,GasAbsFn): #PixNo
     for j in range(nwl):
         
         if j == 8:
-            Solar_Zenith = f1_MAP['Geometry']['Solar_Zenith'][1,PixNo,:]
-            Viewing_Zenith = f1_MAP['Geometry']['Viewing_Zenith'][1,PixNo,:]
+            Solar_Zenith = f1_MAP['Geometry']['Solar_Zenith'][1,PixNo,ang1:ang2]
+            Viewing_Zenith = f1_MAP['Geometry']['Viewing_Zenith'][1,PixNo,ang1:ang2]
             
         Wlname =  RSP_wlf[j]
         print(Wlname)
@@ -156,7 +164,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,GasAbsFn): #PixNo
     ax2.plot(RSP_wl,resFunc, label=f"{RSP_wlf[j]} ")
     plt.legend()
     
-    for i in range(np.sum(Angfilter)):
+    for i in range(ang2-ang1):
         CorFac1[i,j] = np.sum(Trans1[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
         CorFac2[i,j] = np.sum(Trans2[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
             
@@ -165,9 +173,9 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,GasAbsFn): #PixNo
 
     corrFac = (CorFac1+CorFac2)/np.nanmax(CorFac1+CorFac2) #Noramalized correction factore
 
-    I1 = (checkFillVals(Data['Intensity_1'][PixNo,:,:nwl],Angfilter, negative_check =True)/ corrFac)# / corrFac telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
+    I1 = (checkFillVals(Data['Intensity_1'][PixNo,ang1:ang2,:nwl]  , negative_check =True)/ corrFac)# / corrFac telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
     # I1 = I1/CorFac2
-    I2 = (checkFillVals(Data['Intensity_2'][PixNo,:,:nwl],Angfilter,negative_check =True)/ corrFac)# #telescope 2
+    I2 = (checkFillVals(Data['Intensity_2'][PixNo,ang1:ang2,:nwl]  ,negative_check =True)/ corrFac)# #telescope 2
     # I2 = I2/CorFac2
     # Q and U in scattering plane 
     
@@ -187,10 +195,8 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,GasAbsFn): #PixNo
     rslt['longitude'] = Lon
     rslt['latitude'] = Lat
     rslt['meas_I'] = (I1+I2)/2                              
-    rslt['meas_P'] = rslt['meas_I'] *checkFillVals(Data['DoLP'][PixNo,:,:nwl],Angfilter,negative_check =True)/100
-    
-  
-            
+    rslt['meas_P'] = rslt['meas_I'] *checkFillVals(Data['DoLP'][PixNo,ang1:ang2,:nwl]  ,negative_check =True)/100
+              
     #converting modified julian date to julain date and then to gregorian
     jdv = f1_MAP['Geometry']['Measurement_Time'][TelNo,PixNo,0]+ 2400000.5  #Taking the time stamp for first angle
     
@@ -208,7 +214,6 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,GasAbsFn): #PixNo
     # solar_distance = (f1_MAP['Platform']['Solar_Distance'][PixNo])**2 
     # const = solar_distance/(np.cos(np.radians(rslt['sza'])))
  
-
     #height key should not be used for altitude,
     rslt['OBS_hght']= f1_MAP['Platform']['Platform_Altitude'][PixNo]- 1000 # height of pixel in m
     if  rslt['OBS_hght'] < 0:  #if colocated attitude is less than 0 then that is set to 0
@@ -216,90 +221,312 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,TelNo, nwl,GasAbsFn): #PixNo
         print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
 
     return rslt
- 
-
 
 def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
-
-
-    #Specify the pixel no
-    PixNo = 1250
-
     f1= h5py.File(file_path + file_name,'r+')  #reading hdf5 file  
+    HSRL = f1['DataProducts']
 
     #Lat and Lon values for that pixel
     latitude = f1['Nav_Data']['gps_lat'][:]
     longitude = f1['Nav_Data']['gps_lon'][:]
-    altitude = f1['Nav_Data']['gps_alt'][:]
-
-    #Reading the data Products
-    HSRL = f1['DataProducts']
+    AirAlt = f1['Nav_Data']['gps_alt'][PixNo]
 
 
-    #The data file has many nan values, val is the list that stores indices of all the nan values for all the parameters
-    val = []
-    inp =['355_ext','532_ext','1064_ext','355_aer_dep', '532_aer_dep','1064_aer_dep','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa']
-    for i in range (9):
-        value2 = HSRL[f'{inp[i]}'][PixNo,1:].reshape(56, 10).mean(axis=1)
-        val.append(np.nonzero(np.isnan(value2))[0])#this will give the indices of values that are nan
-        val.append(np.nonzero(value2<0)[0]) #Filter all negatives
+
+    # Create a list to hold indices of removed pixels
+    Removed_index = []
+
+    # Filter values greater than flight altitude
+    Removed_index.append(np.nonzero(HSRL['Altitude'][0] > AirAlt)[0][:])
+    # Filter values less than or equal to zero altitude
+    Removed_index.append(np.nonzero(HSRL['Altitude'][0] <= 0)[0][:])
+    # Filter values less than or equal to zero range
+    Removed_index.append(np.nonzero(f1['UserInput']['range_interp'][PixNo] <= 0)[0])
+    # Filter NaN values in range interpolation
+    Removed_index.append(np.nonzero(np.isnan(f1['UserInput']['range_interp'][PixNo]))[0])
+    # Filter NaN values in low gain signal limit data mask
+    Removed_index.append(np.nonzero(np.isnan(HSRL["mask_low"][PixNo]))[0])
+    # Filter values less than 1800 in range interpolation
+    Removed_index.append(np.nonzero(f1['UserInput']['range_interp'][PixNo] < 1800)[0])
+    # Filter NaN values in 355_ext data
+    Removed_index.append(np.nonzero(np.isnan(HSRL['355_ext'][PixNo]))[0])
+
+    # Concatenate all removed indices and remove duplicates
+    rm_pix=[]
+    for lis in Removed_index:
+        rm_pix += list(lis)[:] # concatenating the lists
+    rm_pix = np.unique(rm_pix)
+
+    # Create dictionaries to hold filtered and interpolated data
+    dic_filt = {}
+    Interp_dict = {}
+
+    # Delete removed pixels and set negative values to zero for each data type
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_aer_dep', '532_aer_dep','1064_aer_dep']
+    dic_filt['Altitude'] = np.delete(HSRL['Altitude'][0], rm_pix)
     
-    # val.append(np.nonzero(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1)<0)[0])
-    # val.append(np.nonzero(HSRL['355_bsc_Sa'][PixNo,1:].reshape(56, 10).mean(axis=1)<0)[0])
-    remove_pixels = np.unique(list(itertools.chain.from_iterable(val))) 
-                
-    # Merging all the lists in the val file and then taking the unique values
-    # values for all these pixels will be removed from the parameter file so that we no longer have nan values.
+    
+    dic_filt['Range'] = np.delete(f1['UserInput']['range_interp'][PixNo], rm_pix)
+    HSRL_checkFillVals(dic_filt[f'Range']) # set all negative values to zero
+    
+    for i in range (9):
+        dic_filt[f'{inp[i]}'] = np.delete(HSRL[f'{inp[i]}'][PixNo], rm_pix)
+        HSRL_checkFillVals(dic_filt[f'{inp[i]}']) # set all negative values to zero
 
+    # Interpolate data at 100 m intervals and add to Interp_dict
+    new_alt = np.arange(min(dic_filt['Altitude']), max(dic_filt['Altitude']), 100)
+    for i in range (9):
+        Interp_dict[f'{inp[i]}'] = np.interp(new_alt, dic_filt['Altitude'], dic_filt[f'{inp[i]}'])
+    Interp_dict['Range'] = np.interp(new_alt, dic_filt['Altitude'], dic_filt['Range'])
 
+    len(new_alt)
+    
+    df = pd.DataFrame(Interp_dict)
+    df.interpolate(inplace=True)
+    
+       
     rslt = {} 
-    rslt['lambda'] = np.array([355,532,1064])/1000
+    rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
 
     rslt['wl'] = np.array([355,532,1064])/1000
-    height_shape = np.delete(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) .shape[0]
+
+    height_shape = len(new_alt)
 
     Range = np.ones((height_shape,3))
-    Range[:,0] = np.delete(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Range[:,1] = np.delete(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Range[:,2] = np.delete(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels)   # in meters
+
+    Range[:,0] = Interp_dict['Range'] 
+    Range[:,1] = Interp_dict['Range'] 
+    Range[:,2] = Interp_dict['Range']   # in meters
     rslt['RangeLidar'] = Range
 
     Bext = np.ones((height_shape,3))
-    Bext[:,0] = np.delete(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Bext[:,1] = np.delete(HSRL['532_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Bext[:,2] = np.delete(HSRL['1064_ext'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    # rslt['meas_VExt'] = Bext
+    Bext[:,0] = df['355_ext']
+    Bext[:,1] = df['532_ext']
+    Bext[:,2] = df['1064_ext'] 
+
 
     Bsca = np.ones((height_shape,3))
-    Bsca[:,0] = np.delete(HSRL['355_bsc_Sa'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Bsca[:,1] = np.delete(HSRL['532_bsc_Sa'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Bsca[:,2] = np.delete(HSRL['1064_bsc_Sa'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    # rslt['meas_VBS'] =Bsca
-    # Bext = Bext/1000 #m-1
-    # Bsca = Bsca/1000 #m-1
+    Bsca[:,0] = df['355_bsc_Sa']
+    Bsca[:,1] = df['532_bsc_Sa'] 
+    Bsca[:,2] = df['1064_bsc_Sa']
 
-    height = altitude[PixNo] -  Range[:,0]
-    #Normalizing the values 
-    # for i in range(3):
-        # Bext[:,i] = (Bext[:,i]/1000)/np.trapz(Bext[:,i],height)
-        # Bsca[:,i] = (Bsca[:,i]/1000)/np.trapz(Bsca[:,i],height)
-        
+
     rslt['meas_VExt'] = Bext / 1000
-    rslt['meas_VBS'] = Bsca / 1000 # m-1
+    rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 tp m-1
 
+    #Substitude the actual value
+    rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
 
     Dep = np.ones((height_shape,3))
-    Dep[:,0] = np.delete(HSRL['355_aer_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Dep[:,1] = np.delete(HSRL['532_aer_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    Dep[:,2] = np.delete(HSRL['1064_aer_dep'][PixNo,1:].reshape(56, 10).mean(axis=1),remove_pixels) 
-    rslt['meas_DP'] = Dep*100
+    Dep[:,0] = df['355_aer_dep']
+    Dep[:,1] = df['532_aer_dep']
+    Dep[:,2] = df['1064_aer_dep'] 
+    rslt['meas_DP'] = Dep*100  #_aer
+    # print(rslt['meas_DP'])
 
-    
-    rslt['datetime'] =dt.datetime.strptime(file_name[10:-6]+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+    rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
     rslt['latitude'] = latitude[PixNo]
     rslt['longitude']= longitude[PixNo]
-
-    rslt['OBS_hght']=(altitude[PixNo] -  Range[:,0])[-1] # in m
+    rslt['OBS_hght']= AirAlt # max height of the measuremnt. 
     rslt['land_prct'] = 0 #Ocean Surface
-
+    
     return rslt
+
+
+
+    
+    
+
+
+    
+
+
+
+    
+ 
+
+
+# # def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
+# #     f1= h5py.File(file_path + file_name,'r+')  #reading hdf5 file  
+# #     HSRL = f1['DataProducts']
+    
+# #     #Lat and Lon values for that pixel
+# #     latitude = f1['Nav_Data']['gps_lat'][:]
+# #     longitude = f1['Nav_Data']['gps_lon'][:]
+# #     aircraft_alt = f1['Nav_Data']['gps_alt'][:]
+
+# #     #Create a panda DataFrame
+# #     df = pd.DataFrame()
+# #     Mean_df = pd.DataFrame()
+
+# #     HSRL_checkFillVals(f1['UserInput']['range_interp'][PixNo])
+    
+# #     df['Range'] = f1['UserInput']['range_interp'][PixNo]
+# #     df['Range'] =df['Range'].interpolate()
+# #     Mean_df['Range'] = (nanmean(df['Range'].values[:220].reshape((110, 2)),axis =1))[16:]
+# #     Mean_df['Range'] =round(Mean_df['Range'],3)
+# #     PixNo_org = PixNo
+
+
+# #     inp =['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_aer_dep', '532_aer_dep','1064_aer_dep','Altitude']
+# #     for i in range (10):
+# #         HSRL_checkFillVals(HSRL[f'{inp[i]}'])
+# #         if (i == 6) or (i == 7) or (i == 8):
+# #             HSRL[f'{inp[i]}'][:] = np.where(HSRL[f'{inp[i]}'][:] > 1 , np.nan, HSRL[f'{inp[i]}'][:])
+
+# #         if i ==9: PixNo=0 
+
+# #         else: PixNo = PixNo_org #0 when altitude
+
+# #         # dataframe with NaN values
+# #         df[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo]
+# #         # interpolate NaN values using linear interpolation
+# #         df[f'{inp[i]}'] = df[f'{inp[i]}'].interpolate()
+
+# #         Mean_df[f'{inp[i]}'] = (nanmean(df[f'{inp[i]}'].values[:220].reshape((110, 2)),axis =1))[16:]
+                                      
+    
+# #     rslt = {} 
+# #     rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
+
+# #     rslt['wl'] = np.array([355,532,1064])/1000
+    
+# #     height_shape = Mean_df['Range'].shape[0]
+
+# #     Range = np.ones((height_shape,3))
+# #     Range[:,0] = Mean_df['Range'].to_numpy()
+# #     Range[:,1] = Mean_df['Range'].to_numpy() 
+# #     Range[:,2] = Mean_df['Range'].to_numpy()   # in meters
+
+# #     # Range[:,0] = np.linspace(min(Mean_df['Range']),max(Mean_df['Range']),94)[::-1]
+# #     # Range[:,1] = np.linspace(min(Mean_df['Range']),max(Mean_df['Range']),94)[::-1]
+# #     # Range[:,2] = np.linspace(min(Mean_df['Range']),max(Mean_df['Range']),94)[::-1]   # in meters
+
+    
+# #     rslt['RangeLidar'] = Range
+
+# #     Bext = np.ones((height_shape,3))
+# #     Bext[:,0] = Mean_df['355_ext'].to_numpy() 
+# #     Bext[:,1] = Mean_df['532_ext'].to_numpy() 
+# #     Bext[:,2] = Mean_df['1064_ext'].to_numpy() 
+# #     # rslt['meas_VExt'] = Bext
+
+# #     Bsca = np.ones((height_shape,3))
+# #     Bsca[:,0] = Mean_df['355_bsc_Sa'].to_numpy()
+# #     Bsca[:,1] = Mean_df['532_bsc_Sa'].to_numpy()
+# #     Bsca[:,2] = Mean_df['1064_bsc_Sa'].to_numpy() 
+   
+        
+# #     rslt['meas_VExt'] = Bext/ 1000
+# #     rslt['meas_VBS'] = Bsca/ 1000 # changing unit to m-1
+
+# #     #Substitude the actual value
+# #     rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
+
+# #     Dep = np.ones((height_shape,3))
+# #   # 
+# #     Dep[:,0] = Mean_df['355_aer_dep'].to_numpy()
+# #     Dep[:,1] = Mean_df['532_aer_dep'].to_numpy()
+# #     Dep[:,2] = Mean_df['1064_aer_dep'].to_numpy()
+                 
+# #     rslt['meas_DP'] = Dep*100  #In percentage
+   
+# #     rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+# #     rslt['latitude'] = latitude[PixNo]
+# #     rslt['longitude']= longitude[PixNo]
+# #     rslt['OBS_hght']= aircraft_alt[PixNo]/1000 #Height of the altitude. 
+    
+# #     rslt['land_prct'] = 0 #Ocean Surface
+    
+# #     return rslt
+
+
+
+# def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
+#     #Specify the pixel no
+#     # PixNo = 1250
+
+#     f1= h5py.File(file_path + file_name,'r+')  #reading hdf5 file  
+
+#     #Lat and Lon values for that pixel
+#     latitude = f1['Nav_Data']['gps_lat'][:]
+#     longitude = f1['Nav_Data']['gps_lon'][:]
+#     altitude = f1['Nav_Data']['gps_alt'][:]
+
+#     #Reading the data Products
+#     HSRL = f1['DataProducts']
+
+
+#     #The data file has many nan values, val is the list that stores indices of all the nan values for all the parameters
+#     val = []
+#     inp =['355_ext','532_ext','1064_ext','355_aer_dep', '532_aer_dep','1064_aer_dep','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa']
+#     for i in range (9):
+#         value2 = HSRL[f'{inp[i]}'][PixNo,1:].reshape(56, 10).mean(axis=1)
+#         val.append(np.nonzero(np.isnan(value2))[0])#this will give the indices of values that are nan
+#         val.append(np.nonzero(value2<0)[0]) #Filter all negatives
+    
+#     # val.append(np.nonzero(HSRL['355_ext'][PixNo,1:].reshape(56, 10).mean(axis=1)<0)[0])
+#     # val.append(np.nonzero(HSRL['355_bsc_Sa'][PixNo,1:].reshape(56, 10).mean(axis=1)<0)[0])
+#     remove_pixels = np.unique(list(itertools.chain.from_iterable(val))) 
+                
+#     # Merging all the lists in the val file and then taking the unique values
+#     # values for all these pixels will be removed from the parameter file so that we no longer have nan values.
+
+
+#     rslt = {} 
+#     rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
+
+#     rslt['wl'] = np.array([355,532,1064])/1000
+#     height_shape = np.delete(nanmean(HSRL['355_ext'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) .shape[0]
+
+#     Range = np.ones((height_shape,3))
+#     Range[:,0] = np.delete(nanmean(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) 
+#     Range[:,1] = np.delete(nanmean(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) 
+#     Range[:,2] = np.delete(nanmean(f1['UserInput']['range_interp'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels)   # in meters
+#     rslt['RangeLidar'] = Range
+
+#     Bext = np.ones((height_shape,3))
+#     Bext[:,0] = np.delete(nanmean(HSRL['355_ext'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) 
+#     Bext[:,1] = np.delete(nanmean(HSRL['532_ext'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) 
+#     Bext[:,2] = np.delete(nanmean(HSRL['1064_ext'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) 
+#     # rslt['meas_VExt'] = Bext
+
+#     Bsca = np.ones((height_shape,3))
+#     Bsca[:,0] = np.delete(nanmean(HSRL['355_bsc_Sa'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) 
+#     Bsca[:,1] = np.delete(nanmean(HSRL['532_bsc_Sa'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) 
+#     Bsca[:,2] = np.delete(nanmean(HSRL['1064_bsc_Sa'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) 
+   
+
+#     height = altitude[PixNo] -  Range[:,0]
+#     #Normalizing the values 
+#     # for i in range(3):
+#         # Bext[:,i] = (Bext[:,i]/1000)/np.trapz(Bext[:,i],height)
+#         # Bsca[:,i] = (Bsca[:,i]/1000)/np.trapz(Bsca[:,i],height)
+        
+#     rslt['meas_VExt'] = Bext / 1000
+#     rslt['meas_VBS'] = Bsca / 1000 # m-1
+
+#     #Substitude the actual value
+#     rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
+
+#     Dep = np.ones((height_shape,3))
+
+#     HSRL['355_aer_dep'][PixNo,1:] = np.where(HSRL['355_aer_dep'][PixNo,1:] > 2, np.nan, HSRL['355_aer_dep'][PixNo,1:])
+#     HSRL['532_aer_dep'][PixNo,1:] = np.where(HSRL['532_aer_dep'][PixNo,1:] > 2, np.nan, HSRL['532_aer_dep'][PixNo,1:])
+#     HSRL['1064_aer_dep'][PixNo,1:] = np.where(HSRL['1064_aer_dep'][PixNo,1:] > 2, np.nan, HSRL['1064_aer_dep'][PixNo,1:])
+#     # 
+#     Dep[:,0] = np.delete(nanmean(HSRL['355_aer_dep'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) 
+#     Dep[:,1] = np.delete(nanmean(HSRL['532_aer_dep'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) 
+#     Dep[:,2] = np.delete(nanmean(HSRL['1064_aer_dep'][PixNo,1:].reshape(56, 10),axis=1),remove_pixels) 
+#     rslt['meas_DP'] = Dep*100  #_aer
+
+    
+#     rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+#     rslt['latitude'] = latitude[PixNo]
+#     rslt['longitude']= longitude[PixNo]
+
+#     rslt['OBS_hght']= altitude[PixNo]/1000 #Height of the altitude. 
+    
+#     rslt['land_prct'] = 0 #Ocean Surface
+
+#     return rslt
