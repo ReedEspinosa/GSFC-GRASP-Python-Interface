@@ -139,43 +139,43 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     #     if Relative_Azi[i]<0 : Relative_Azi[i] =  Relative_Azi[i]+360
     RSP_wlf = [410, 470, 555, 670, 865, 960, 1590, 1880, 2250] #wl as in the file name of response functions
     
-    CorFac1 = np.ones((np.sum(Angfilter),nwl))
-    CorFac2 = np.ones((np.sum(Angfilter),nwl))
-    fig, ax1 = plt.subplots()
-    ax2 = ax1.twinx() 
-    for j in range(nwl):
+    # CorFac1 = np.ones((np.sum(Angfilter),nwl))
+    # CorFac2 = np.ones((np.sum(Angfilter),nwl))
+    # fig, ax1 = plt.subplots()
+    # ax2 = ax1.twinx() 
+    # for j in range(nwl):
         
-        if j == 8:
-            Solar_Zenith = f1_MAP['Geometry']['Solar_Zenith'][1,PixNo,ang1:ang2]
-            Viewing_Zenith = f1_MAP['Geometry']['Viewing_Zenith'][1,PixNo,ang1:ang2]
+    #     if j == 8:
+    #         Solar_Zenith = f1_MAP['Geometry']['Solar_Zenith'][1,PixNo,ang1:ang2]
+    #         Viewing_Zenith = f1_MAP['Geometry']['Viewing_Zenith'][1,PixNo,ang1:ang2]
             
-        Wlname =  RSP_wlf[j]
-        print(Wlname)
-        altIndex = 7 #v I need to improve this and make it more general, altitude index where the altidue t
+    #     Wlname =  RSP_wlf[j]
+    #     print(Wlname)
+    #     altIndex = 7 #v I need to improve this and make it more general, altitude index where the altidue t
 
-        SpecResFn = np.loadtxt(f'/home/gregmi/ORACLES/RSP_Spectral_Response/{Wlname}.txt')
-        intp =Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn)
-    RSP_wl = intp[2]
-    resFunc = intp[3]/np.max(intp[3])
-    Trans1 = Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResFn)[0]
-    Trans2 = Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResFn)[1]
+    #     SpecResFn = np.loadtxt(f'/home/gregmi/ORACLES/RSP_Spectral_Response/{Wlname}.txt')
+    #     intp =Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn)
+    # RSP_wl = intp[2]
+    # resFunc = intp[3]/np.max(intp[3])
+    # Trans1 = Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResFn)[0]
+    # Trans2 = Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResFn)[1]
     
-    ax1.plot(RSP_wl,Trans1[0,:],lw =0.2)
-    ax2.plot(RSP_wl,resFunc, label=f"{RSP_wlf[j]} ")
-    plt.legend()
+    # ax1.plot(RSP_wl,Trans1[0,:],lw =0.2)
+    # ax2.plot(RSP_wl,resFunc, label=f"{RSP_wlf[j]} ")
+    # plt.legend()
     
-    for i in range(ang2-ang1):
-        CorFac1[i,j] = np.sum(Trans1[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
-        CorFac2[i,j] = np.sum(Trans2[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
+    # for i in range(ang2-ang1):
+    #     CorFac1[i,j] = np.sum(Trans1[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
+    #     CorFac2[i,j] = np.sum(Trans2[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
             
 
 
 
-    corrFac = (CorFac1+CorFac2)/np.nanmax(CorFac1+CorFac2) #Noramalized correction factore
+    # corrFac = (CorFac1+CorFac2)/np.nanmax(CorFac1+CorFac2) #Noramalized correction factore
 
-    I1 = (checkFillVals(Data['Intensity_1'][PixNo,ang1:ang2,:nwl]  , negative_check =True)/ corrFac)# / corrFac telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
+    I1 = (checkFillVals(Data['Intensity_1'][PixNo,ang1:ang2,:nwl]  , negative_check =True))# / corrFac telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
     # I1 = I1/CorFac2
-    I2 = (checkFillVals(Data['Intensity_2'][PixNo,ang1:ang2,:nwl]  ,negative_check =True)/ corrFac)# #telescope 2
+    I2 = (checkFillVals(Data['Intensity_2'][PixNo,ang1:ang2,:nwl]  ,negative_check =True))# #telescope 2
     # I2 = I2/CorFac2
     # Q and U in scattering plane 
 
@@ -211,7 +211,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     if  rslt['OBS_hght'] < 0:  #if colocated attitude is less than 0 then that is set to 0
         rslt['OBS_hght'] = 0
         print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
-
+    f1_MAP.close()
     return rslt
 
 
@@ -314,11 +314,13 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     Bext[:,0] = df['355_ext']
     Bext[:,1] = df['532_ext']
     Bext[:,2] = df['1064_ext'] 
+    # Bext[1,2] = np.nan 
 
     Bsca = np.ones((height_shape,3))
     Bsca[:,0] = df['355_bsc_Sa']
     Bsca[:,1] = df['532_bsc_Sa'] 
     Bsca[:,2] = df['1064_bsc_Sa']
+    # Bsca[1,2] = np.nan 
 
     rslt['meas_VExt'] = Bext / 1000
     rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 tp m-1
@@ -336,9 +338,9 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
     rslt['latitude'] = latitude[PixNo]
     rslt['longitude']= longitude[PixNo]
-    rslt['OBS_hght']= np.max(Range[:,0]) # aircraft altitude. 
+    rslt['OBS_hght']= np.nanmax(Range[:,0]) # aircraft altitude. 
     rslt['land_prct'] = 0 #Ocean Surface
-
+    f1.close()
     return rslt
 
 
