@@ -18,9 +18,9 @@ import numpy as np
 import datetime as dt
 from numpy import nanmean
 %matplotlib inline
-%load_ext autoreload
-%autoreload 2
-%reload_ext autoreload
+# %load_ext autoreload
+# %autoreload 2
+# %reload_ext autoreload
 
 # %run -d -b runGRASP.py:LINENUM scriptToRun.py
 # %load_ext autoreload
@@ -37,11 +37,9 @@ import yaml
 
 # file_path = '/home/gregmi/ORACLES/ more_case/'
 # file_name = 'RSP1-P3_L1C-RSPCOL-CollocatedRadiances_20181010T124329Z_V003-20210422T002644Z.h5'
-
 # # RSP Case: August 1
 # file_path = "/home/gregmi/ORACLES/RSP2-L1C_P3_20170801_R02"  #Path to the ORACLE data file
 # file_name =  "/RSP2-P3_L1C-RSPCOL-CollocatedRadiances_20170801T130949Z_V002-20210624T034642Z.h5" #Name of the ORACLES file
-
 # # file_name = '/RSP2-P3_L1C-RSPCOL-CollocatedRadiances_20170801T142830Z_V002-20210624T034755Z.h5'
 
 # # RSP  Case: Sep 22
@@ -111,11 +109,6 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type):
                 print("done",YamlChar[i])
 
 
-            
-            
-
-
-
     if Kernel_type == "sphro":
         UpKerFile = 'Settings_Sphd_RSP_HSRL.yaml'
     if Kernel_type == "TAMU":
@@ -128,7 +121,7 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type):
         
     return 
 
-
+#Find the pixel index for nearest lat and lon for given LatH and LonH
 def FindPix(LatH,LonH,Lat,Lon):
     
     # Assuming Lat, latH, Lon, and LonM are all NumPy arrays
@@ -139,6 +132,16 @@ def FindPix(LatH,LonH,Lat,Lon):
     indexLon = np.argwhere(diffLon == diffLon.min())[0] # Find the indices of all elements that minimize the difference
     
     return indexLat[0], indexLat[1]
+
+
+#Merge the two dictionary
+def merge_dictionaries(dict1, dict2):
+    merged_dict = {**dict1, **dict2}
+    for key, value in dict1.items():
+        if key in dict2:
+            merged_dict[key] = [value, dict2[key]]
+    return merged_dict
+
 
 
     #Pixel no of Lat,Lon that we are interested
@@ -195,7 +198,7 @@ def RSP_Run(Kernel_type,PixNo,ang1,ang2,TelNo,nwl):
         
         # binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP_v112_noWarn/bin/grasp_app' # New Version GRASP Executable  
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
-        
+        # Kernel_type =  sphro is for the GRASP spheriod kernal, while TAMU is to run with Hexahedral Kernal
         if Kernel_type == "sphro":
             fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes_Shape_ORACLE_DoLP.yml'
             # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes_Shape_ORACLE_DoLP_2COARSE.yml'
@@ -262,7 +265,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, updateYaml= None):
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
         rslt = Read_Data_HSRL_Oracles(HSRLfile_path,HSRLfile_name,PixNo)
 
-        maxCPU = 10 #maximum CPU allocated to run GRASP on server
+        maxCPU = 3 #maximum CPU allocated to run GRASP on server
         gRuns = []
         yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
         #eventually have to adjust code for height, this works only for one pixel (single height value)
@@ -278,6 +281,92 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, updateYaml= None):
         rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
         return rslts
     # height = 200 
+
+
+def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn, updateYaml= None):
+    
+    krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
+
+    if Kernel_type == "sphro":  #If spheriod model
+        #Path to the yaml file for sphriod model
+        fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLARandLIDAR_10Vbins_2modes_ORACLES.yml'
+        # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLARandLIDAR_10Vbins_2modes_ORACLES_2Coarse.yml'
+        if updateYaml == True:  # True if init conditions for Yaml file for HSRL is updated from the GRASP output from RSP
+            update_HSRLyaml(fwdModelYAMLpath, rslts_Sph[0], noMod, maxr, minr, a,Kernel_type)
+            
+            fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/Settings_Sphd_RSP_HSRL.yaml'
+        # binPathGRASP = path toGRASP Executable for spheriod model
+        binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP_v112/bin/grasp_app' 
+        savePath=f"/home/gregmi/ORACLES/HSRL1_P3_20180922_R03_{Kernel_type}"
+    
+    if Kernel_type == "TAMU":
+        fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLARandLIDAR_10Vbins_2modes_Tamu.yml'
+        # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLARandLIDAR_10Vbins_2modes_Tamu_2Coarse.yml'
+        if updateYaml == True:# True if init conditions for Yaml file for HSRL is updated from the GRASP output from RSP
+            update_HSRLyaml(fwdModelYAMLpath, rslts_Tamu[0], noMod, maxr, minr, a,Kernel_type)
+            fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/Settings_TAMU_RSP_HSRL.yaml'
+        #Path to the GRASP Executable for TAMU
+        binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
+        #Path to save output plot
+        savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
+
+
+    rslt_HSRL = Read_Data_HSRL_Oracles(HSRLfile_path,HSRLfile_name,HSRLPixNo)
+    rslt_RSP = Read_Data_RSP_Oracles(file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn)
+    
+    rslt= {}  # Teh order of the data is  First lidar(number of wl ) and then Polarimter data 
+    rslt['lambda'] = np.concatenate((rslt_HSRL['lambda'],rslt_RSP['lambda']))
+    IndHSRL = rslt_HSRL['lambda'].shape[0]
+
+# The shape of the variables in RSPkeys and HSRLkeys should be equal to no of wavelength
+#  Setting np.nan in place of the measurements for wavelengths for which there is no data
+    RSPkeys = ['meas_I', 'meas_P','sza', 'vis', 'sca_ang', 'fis']
+    HSRLkeys = ['RangeLidar','meas_VExt','meas_VBS','meas_DP']
+    GenKeys= ['datetime','longitude', 'latitude', 'land_prct', 'OBS_hght'] # Shape of these variables is not N wavelength
+    
+    #MAP measurement variables
+    RSP_var = np.ones((rslt_RSP['meas_I'].shape[0],rslt['lambda'].shape[0])) * np.nan
+    for keys in RSPkeys:
+        RSP_var[:,IndHSRL:] = rslt_RSP[keys]
+        rslt[keys] = RSP_var
+
+    #Lidar Measurements
+    HSRL_var = np.ones((rslt_HSRL['meas_VExt'].shape[0],rslt['lambda'].shape[0]))* np.nan
+    for keys in HSRLkeys:
+        HSRL_var[:,:IndHSRL] = rslt_HSRL[keys]
+        rslt[keys] = HSRL_var
+    
+    for keys in GenKeys:
+        rslt[keys] = rslt_RSP[keys]
+
+    sort = np.argsort(rslt['lambda'])
+    
+    for keys in RSPkeys:
+        for a in range(rslt[keys][:,0].shape[0]):
+            rslt[keys][a,:] = rslt[keys][a,:][sort]
+
+    for keys in HSRLkeys:
+        for a in range(rslt[keys][:,0].shape[0]):
+            rslt[keys][a,:] = rslt[keys][a,:][sort]
+    rslt['lambda'] = rslt['lambda'][sort]
+
+    maxCPU = 3 #maximum CPU allocated to run GRASP on server
+    gRuns = []
+    yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
+    #eventually have to adjust code for height, this works only for one pixel (single height value)
+    gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML=True )) # This should copy to new YAML object
+
+    pix = pixel()
+    pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage= 'meas', verbose=False)
+    gRuns[-1].addPix(pix)
+
+    gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU)
+
+    #rslts contain all the results form the GRASP inverse run
+    rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
+    return rslts
+
+
 
 for i in range(1):
     
