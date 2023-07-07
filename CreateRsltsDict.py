@@ -7,8 +7,6 @@ This code reads Polarimetric data from the Campaigns and runs GRASP. This code w
 """
 
 import os
-  
-    
 import numpy as np
 from matplotlib import pyplot as plt
 import datetime as dt
@@ -32,7 +30,7 @@ def checkFillVals(param , negative_check = None):
     # param = param[Angfilter]
         
     return param
-
+#Checks for negative values and replaces them by nan
 def HSRL_checkFillVals(param):
     param[:] = np.where(param[:] < 0 , np.nan, param[:])     
         
@@ -99,23 +97,24 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     
     #Reading the hdf file
     f1_MAP = h5py.File(file_path + file_name,'r+') 
-    
     Data = f1_MAP['Data'] #Reading the data
     
     #Variables
-    wl = Data['Wavelength']
-    if nwl == None: nwl = len(Data['Wavelength'][:])
+    wl = Data['Wavelength'] #Wavelength
+    if nwl == None: nwl = len(Data['Wavelength'][:]) # User could either provide the number of wavelengths (which is also index of the wl), or it will just take the number of wavelength values in the variable " Wavelength"
 
     #Reading the Geometry
     Lat = f1_MAP['Geometry']['Collocated_Latitude'][TelNo,PixNo]
     Lon = f1_MAP['Geometry']['Collocated_Longitude'][TelNo,PixNo]
-    #filtering angles
+    
+    #All the angles are converted to GRASP's definition of Genometry which is different than that of RSP
     vza = 180-f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,ang1:ang2]
+
+    #This can be used to filter scattering angles if required
     vza[f1_MAP['Geometry']['Nadir_Index'][0,PixNo]:] = - vza[f1_MAP['Geometry']['Nadir_Index'][0,PixNo]:]
     Angfilter = (vza>= -45) & (vza<= 45) # taking only the values of view zenith from -65 to 45
 
-
-
+    #Angles are checked for nans 
     Scattering_ang = checkFillVals(f1_MAP['Geometry']['Scattering_Angle'][TelNo,PixNo,ang1:ang2]  )
     Solar_Zenith =  checkFillVals(f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,ang1:ang2]  )
     
@@ -123,10 +122,11 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
 
     Solar_Azimuth = checkFillVals(f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,ang1:ang2], ) - 180
     Viewing_Azimuth = checkFillVals(f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,ang1:ang2]  )
+   
     #Converting viewing zenith with respect to nadir to that wrt zenith
-    
     Viewing_Zenith = 180 - checkFillVals(f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,ang1:ang2]  ) # Theta_v <90
-            
+    
+    #Converting values into radians to caculate the relative azimuth angles        
     sza =  np.radians(Solar_Zenith)
     vza =   np.radians(Viewing_Zenith)
     szi =  np.radians(Solar_Azimuth)
@@ -186,9 +186,12 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     rslt['lambda'] = Data['Wavelength'][:nwl]/1000 # Wavelengths in um
     rslt['longitude'] = Lon
     rslt['latitude'] = Lat
-    rslt['meas_I'] = (I1+I2)/2                              
-    rslt['meas_P'] = rslt['meas_I'] *checkFillVals(Data['DoLP'][PixNo,ang1:ang2,:nwl]  ,negative_check =True)/100
-              
+    rslt['meas_I'] = (I1+I2)/2  
+
+    '''This should be changed  '''
+
+    # rslt['meas_P'] = rslt['meas_I'] *checkFillVals(Data['DoLP'][PixNo,ang1:ang2,:nwl]  ,negative_check =True)/100
+    rslt['meas_P'] = checkFillVals(Data['DoLP'][PixNo,ang1:ang2,:nwl]  ,negative_check =True)/100    #relative value    
     #converting modified julian date to julain date and then to gregorian
     jdv = f1_MAP['Geometry']['Measurement_Time'][TelNo,PixNo,0]+ 2400000.5  #Taking the time stamp for first angle
     
@@ -234,7 +237,7 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
             Data_dic[f'{inp[i]}'] = np.where(HSRL[f'{inp[i]}'][PixNo][:]>= 0.6 , np.nan, HSRL[f'{inp[i]}'][PixNo])  #CH: This should be changed, 0.7 has been set arbitarily
 
             
-    Data_dic['Altitude'] = HSRL['Altitude'][0]
+    Data_dic['Altitude'] = HSRL['Altitude'][0] 
     df_new = pd.DataFrame(Data_dic)
     df_new.interpolate(inplace=True, limit_area= 'inside')
 
@@ -265,25 +268,18 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     Removed_index.append(CloudCorr_532)
     Removed_index.append(np.nonzero(np.isnan(HSRL['355_ext'][PixNo]))[0])
 
-
     # Concatenate all removed indices and remove duplicates
     rm_pix=[]
     for lis in Removed_index:
         rm_pix += list(lis)[:] # concatenating the lists
     rm_pix = np.unique(rm_pix)
 
-
     # Create dictionaries to hold filtered and interpolated data
     del_dict = {}
-
     # Delete removed pixels and set negative values to zero for each data type
     inp2 = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude']
     for i in range (10):
         del_dict[f'{inp2[i]}'] = np.delete(np.array(df_new[f'{inp2[i]}']), rm_pix)
-        
-     
-    # for k in del_dict.keys():
-    #     print(del_dict[k].shape)
 
     npoints = 10 #no of height pixels averaged 
     df_mean = pd.DataFrame()
@@ -296,31 +292,36 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
         print(df_mean[k].shape)
     #Height in decending order
     df = df_mean[::-1]
-    # for k in df.keys():
-    #     print(df[k].shape)
-
     rslt = {} 
     rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
     rslt['wl'] = np.array([355,532,1064])/1000
-    height_shape = np.array(df['Altitude'][:-6]).shape[0] #to avoint the height of the sea salt, this should be removed 
+    height_shape = np.array(df['Altitude'][:]).shape[0] #to avoint the height of the sea salt, this should be removed 
+
+    # Range = np.ones((height_shape,3))
+    # Range[:,0] = df['Altitude'] [:-6]
+    # Range[:,1] = df['Altitude'] [:-6]
+    # Range[:,2] = df['Altitude'][:-6]   # in meters
+    # rslt['RangeLidar'] = Range
+
 
     Range = np.ones((height_shape,3))
-    Range[:,0] = df['Altitude'] [:-6]
-    Range[:,1] = df['Altitude'] [:-6]
-    Range[:,2] = df['Altitude'][:-6]   # in meters
+    Range[:,0] = df['Altitude'][:]
+    Range[:,1] = df['Altitude'][:]
+    Range[:,2] = df['Altitude'][:]  # in meters
     rslt['RangeLidar'] = Range
 
+
     Bext = np.ones((height_shape,3))
-    Bext[:,0] = df['355_ext'][:-6]
-    Bext[:,1] = df['532_ext'][:-6]
-    Bext[:,2] = df['1064_ext'] [:-6]
-    Bext[1,2] = np.nan 
+    Bext[:,0] = df['355_ext'][:]
+    Bext[:,1] = df['532_ext'][:]
+    Bext[:,2] = df['1064_ext'] [:]
+    # Bext[0,2] = np.nan 
 
     Bsca = np.ones((height_shape,3))
-    Bsca[:,0] = df['355_bsc_Sa'][:-6]
-    Bsca[:,1] = df['532_bsc_Sa'] [:-6]
-    Bsca[:,2] = df['1064_bsc_Sa'][:-6]
-    Bsca[1,2] = np.nan 
+    Bsca[:,0] = df['355_bsc_Sa'][:]
+    Bsca[:,1] = df['532_bsc_Sa'] [:]
+    Bsca[:,2] = df['1064_bsc_Sa'][:]
+    # Bsca[0,2] = np.nan 
 
     rslt['meas_VExt'] = Bext / 1000
     rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 tp m-1
@@ -329,9 +330,9 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
 
     Dep = np.ones((height_shape,3))
-    Dep[:,0] = df['355_dep'][:-6]
-    Dep[:,1] = df['532_dep'][:-6]
-    Dep[:,2] = df['1064_dep'] [:-6]
+    Dep[:,0] = df['355_dep'][:]
+    Dep[:,1] = df['532_dep'][:]
+    Dep[:,2] = df['1064_dep'] [:]
     rslt['meas_DP'] = Dep*100  #_aer
     # print(rslt['meas_DP'])
 
@@ -342,6 +343,7 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     rslt['land_prct'] = 0 #Ocean Surface
     f1.close() 
     return rslt
+
 
 
 
