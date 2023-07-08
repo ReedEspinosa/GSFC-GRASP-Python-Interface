@@ -3,9 +3,7 @@
 # Date: Jan 31, 2023
 
 This code reads Polarimetric data from the Campaigns and runs GRASP. This code was created to Validate the Aerosol retrivals performed using Non Spherical Kernels (Hexahedral from TAMU DUST 2020)
-
 """
-
 import os
 import numpy as np
 from matplotlib import pyplot as plt
@@ -21,19 +19,13 @@ import pandas as pd
 
 #The function Checks for Fill values or negative values and replaces them with nan. To check for negative values, set negative_check = True 
 def checkFillVals(param , negative_check = None):
-    
     param[:] = np.where(param[:] == -999, np.nan, param[:])
-    
     if negative_check == True:
         param[:] = np.where(param[:] < 0 , np.nan, param[:])
-
-    # param = param[Angfilter]
-        
     return param
 #Checks for negative values and replaces them by nan
 def HSRL_checkFillVals(param):
     param[:] = np.where(param[:] < 0 , np.nan, param[:])     
-        
     return param
 
 '''  GasAbsFn: Format of file: .nc, Description: file containing the value of combined optical depth for different gases in the atmosphere using radiatiove tranfer code
@@ -42,13 +34,10 @@ def HSRL_checkFillVals(param):
 
 def Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn):
     #Gas Absorption correction using UNL_VRTM (provided by Richard,UMBC)
-    
     #Reading the NetCDF file for gas absorption from radiative tranfer code (UNLVRTM)
-    
     ds = nc.Dataset(GasAbsFn)
 #     Tau_Comb = np.sum(ds.variables['tauGas'][altIndex,:]) #Bulk gas absorption for different layers
     Wl = ds.variables['Lamdas'][:] # wavelength values corresponding to the gas absorption
-    
     Tau_Comb_solar=  np.sum(ds.variables['tauGas'], axis=0)
     Tau_Comb_view=  np.sum(ds.variables['tauGas'][:altIndex,:], axis=0)   
     #Spectral response values for given RSP wl
@@ -61,8 +50,7 @@ def Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn):
     wl_RSP = SpecResFn[:,0]
     tau_solar = f(wl_RSP) #Tau at given RSP response function wl
     tau_view = f2(wl_RSP) #Tau at given RSP response function wl
-    
-       
+     
     return tau_solar, tau_view, wl_RSP, SpecResFn[:,1]
 
 #This function will return the Transmittance for all the solar and viewing geometries
@@ -88,8 +76,6 @@ def Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResF
     return  C_factor_solar, C_factor_view
 
 
-
-
 ### Reading the Multiangle Polarimeter data ()
 
 # Reads the Data from ORACLES and gives the rslt dictionary for GRASP
@@ -105,8 +91,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
 
     #Reading the Geometry
     Lat = f1_MAP['Geometry']['Collocated_Latitude'][TelNo,PixNo]
-    Lon = f1_MAP['Geometry']['Collocated_Longitude'][TelNo,PixNo]
-    
+    Lon = f1_MAP['Geometry']['Collocated_Longitude'][TelNo,PixNo]   
     #All the angles are converted to GRASP's definition of Genometry which is different than that of RSP
     vza = 180-f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,ang1:ang2]
 
@@ -168,9 +153,6 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     #     CorFac1[i,j] = np.sum(Trans1[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
     #     CorFac2[i,j] = np.sum(Trans2[i,1:]*resFunc[1:]* (np.diff(RSP_wl)))/np.sum(resFunc[1:]* (np.diff(RSP_wl)))
             
-
-
-
     # corrFac = (CorFac1+CorFac2)/np.nanmax(CorFac1+CorFac2) #Noramalized correction factore
 
     I1 = (checkFillVals(Data['Intensity_1'][PixNo,ang1:ang2,:nwl]  , negative_check =True))# / corrFac telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
@@ -210,7 +192,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     # const = solar_distance/(np.cos(np.radians(rslt['sza'])))
  
     #height key should not be used for altitude,
-    rslt['OBS_hght']= f1_MAP['Platform']['Platform_Altitude'][PixNo]- 1000 # height of pixel in m
+    rslt['OBS_hght']= f1_MAP['Platform']['Platform_Altitude'][PixNo] # height of pixel in m
     if  rslt['OBS_hght'] < 0:  #if colocated attitude is less than 0 then that is set to 0
         rslt['OBS_hght'] = 0
         print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
@@ -219,33 +201,29 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
 
 
 def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
-    f1= h5py.File(file_path + file_name,'r+')  #reading hdf5 file  
+
+    f1= h5py.File(file_path + file_name,'r+')  #reading Lidar measurements 
     HSRL = f1['DataProducts']
-    latitude = f1['Nav_Data']['gps_lat'][:]
-    longitude = f1['Nav_Data']['gps_lon'][:]
+    latitude,longitude = f1['Nav_Data']['gps_lat'][:],f1['Nav_Data']['gps_lon'][:]
+    AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
+    print(AirAlt)
 
-    # Delete removed pixels and set negative values to zero for each data type
+    Data_dic ={} #This dictionary stores 
     inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
-
-    Data_dic ={}
-
-    #Setting negative values to zero
-    for i in range (9):
+    #Setting negative values to zero, Teh negative values are due to low signal so we can replace with 0 without loss of info.
+    for i in range (len(inp)):
         Data_dic[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo]
         HSRL_checkFillVals(Data_dic[f'{inp[i]}']) # set all negative values to zero
         if (inp[i] == '355_dep') or (inp[i] == '532_dep') or (inp[i] == '1064_dep'):
             Data_dic[f'{inp[i]}'] = np.where(HSRL[f'{inp[i]}'][PixNo][:]>= 0.6 , np.nan, HSRL[f'{inp[i]}'][PixNo])  #CH: This should be changed, 0.7 has been set arbitarily
 
-            
-    Data_dic['Altitude'] = HSRL['Altitude'][0] 
+    #Caculating range, Range is defined as distance from the instrument to the aersosol layer, i.e. range at instrument heright = 0. We have to make sure that The range is in decending order
+    Data_dic['Altitude'] = AirAlt - HSRL['Altitude'][0] 
     df_new = pd.DataFrame(Data_dic)
     df_new.interpolate(inplace=True, limit_area= 'inside')
 
-    #Filtering and removing the pixels with bad data:
-    AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
-
-    # Create a list to hold indices of removed pixels
-    Removed_index = []
+    #Filtering and removing the pixels with bad data: 
+    Removed_index = []  # Removed_index holds indices of pixels to be removed
     # Filter values greater than flight altitude
     Removed_index.append(np.nonzero(np.array(df_new['Altitude'][:]) > AirAlt)[0][:])
     # Filter values less than or equal to zero altitude
@@ -263,6 +241,7 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     CloudCorr_1064 = np.nonzero(np.isnan(HSRL["1064_bsc_cloud_screened"][PixNo]))[0]
     CloudCorr_355 = np.nonzero(np.isnan(HSRL["355_bsc_cloud_screened"][PixNo]))[0]
     CloudCorr_532 = np.nonzero(np.isnan(HSRL["532_bsc_cloud_screened"][PixNo]))[0]
+    
     Removed_index.append(CloudCorr_1064)
     Removed_index.append(CloudCorr_355)
     Removed_index.append(CloudCorr_532)
@@ -281,35 +260,24 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     for i in range (10):
         del_dict[f'{inp2[i]}'] = np.delete(np.array(df_new[f'{inp2[i]}']), rm_pix)
 
-    npoints = 10 #no of height pixels averaged 
     df_mean = pd.DataFrame()
-
+    npoints = 10 #no of height pixels averaged 
     Mod_value = np.array(del_dict['Altitude']).shape[0] % npoints  #Skip these values for reshaping the array
-    for i in range (10):
+    for i in range (10): #taking mean 
         df_mean[f'{inp2[i]}'] = nanmean(np.array(del_dict[f'{inp2[i]}'][Mod_value:]).reshape( int(np.array(del_dict[f'{inp2[i]}']).shape[0]/npoints),npoints),axis=1)
 
     for k in df_mean.keys():
         print(df_mean[k].shape)
-    #Height in decending order
-    df = df_mean[::-1]
-    rslt = {} 
-    rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
-    rslt['wl'] = np.array([355,532,1064])/1000
+
+    df = df_mean[:]
+    rslt = {} # 
     height_shape = np.array(df['Altitude'][:]).shape[0] #to avoint the height of the sea salt, this should be removed 
-
-    # Range = np.ones((height_shape,3))
-    # Range[:,0] = df['Altitude'] [:-6]
-    # Range[:,1] = df['Altitude'] [:-6]
-    # Range[:,2] = df['Altitude'][:-6]   # in meters
-    # rslt['RangeLidar'] = Range
-
 
     Range = np.ones((height_shape,3))
     Range[:,0] = df['Altitude'][:]
     Range[:,1] = df['Altitude'][:]
     Range[:,2] = df['Altitude'][:]  # in meters
     rslt['RangeLidar'] = Range
-
 
     Bext = np.ones((height_shape,3))
     Bext[:,0] = df['355_ext'][:]
@@ -323,27 +291,26 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     Bsca[:,2] = df['1064_bsc_Sa'][:]
     # Bsca[0,2] = np.nan 
 
-    rslt['meas_VExt'] = Bext / 1000
-    rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 tp m-1
-
-    #Substitude the actual value
-    rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
-
     Dep = np.ones((height_shape,3))
     Dep[:,0] = df['355_dep'][:]
     Dep[:,1] = df['532_dep'][:]
     Dep[:,2] = df['1064_dep'] [:]
+
+    rslt['meas_VExt'] = Bext / 1000
+    rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 tp m-1
     rslt['meas_DP'] = Dep*100  #_aer
     # print(rslt['meas_DP'])
 
+    rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
+    rslt['wl'] = np.array([355,532,1064])/1000
     rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
     rslt['latitude'] = latitude[PixNo]
     rslt['longitude']= longitude[PixNo]
-    rslt['OBS_hght']= np.nanmax(Range[:,0]) # aircraft altitude. 
+    rslt['OBS_hght']= AirAlt # aircraft altitude. 
     rslt['land_prct'] = 0 #Ocean Surface
+    #Substitude the actual value
+    rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
     f1.close() 
     return rslt
-
-
 
 
