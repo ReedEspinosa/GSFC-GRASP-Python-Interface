@@ -6,6 +6,15 @@ This code reads Polarimetric data from the Campaigns and runs GRASP. This code w
 
 """
 
+# %load_ext autoreload
+# %autoreload 2
+# %reload_ext autoreload
+
+# %run -d -b runGRASP.py:LINENUM scriptToRun.py
+# %load_ext autoreload
+# %autoreload 2
+
+
 import sys
 from CreateRsltsDict import Read_Data_RSP_Oracles
 from CreateRsltsDict import Read_Data_HSRL_Oracles
@@ -17,40 +26,24 @@ if os.uname()[1]=='uranus': plt.switch_backend('agg')
 import numpy as np
 import datetime as dt
 from numpy import nanmean
-%matplotlib inline
-# %load_ext autoreload
-# %autoreload 2
-# %reload_ext autoreload
-
-# %run -d -b runGRASP.py:LINENUM scriptToRun.py
-# %load_ext autoreload
-# %autoreload 2
-
-import numpy as np
-# import pandas as pd
-from matplotlib import pyplot as plt
 import h5py 
 sys.path.append("/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases")
 from architectureMap import returnPixel
 from Plot_ORACLES import PltGRASPoutput
 import yaml
+%matplotlib inline
 
-# file_path = '/home/gregmi/ORACLES/ more_case/'
-# file_name = 'RSP1-P3_L1C-RSPCOL-CollocatedRadiances_20181010T124329Z_V003-20210422T002644Z.h5'
-# # RSP Case: August 1
-# file_path = "/home/gregmi/ORACLES/RSP2-L1C_P3_20170801_R02"  #Path to the ORACLE data file
-# file_name =  "/RSP2-P3_L1C-RSPCOL-CollocatedRadiances_20170801T130949Z_V002-20210624T034642Z.h5" #Name of the ORACLES file
-# # file_name = '/RSP2-P3_L1C-RSPCOL-CollocatedRadiances_20170801T142830Z_V002-20210624T034755Z.h5'
 
-# # RSP  Case: Sep 22
+# Path to the Polarimeter data (RSP, In this case)
 file_path = "/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03/"  #Path to the ORACLE data file
 file_name =  "/RSP1-P3_L1C-RSPCOL-CollocatedRadiances_20180922T151106Z_V003-20210421T233946Z.h5" #Name of the ORACLES file
 
+#Paths to the Lidar Data
 HSRLfile_path = "/home/gregmi/ORACLES/HSRL" #Path to the ORACLE data file 
 HSRLfile_name =  "/HSRL2_P3_20180922_R2.h5" #Name of the ORACLES file
+
+#Path to the gas absorption (tau) values for gas absorption correction
 GasAbsFn = '/home/gregmi/ORACLES/UNL_VRTM/shortwave_gas.unlvrtm.nc'
-
-
 
 #This is required if we want to configure the HSRL yaml file based on the GRASP output for the RSP
 noMod =2  #number of aerosol mode, here 2 for fine+coarse mode configuration
@@ -61,6 +54,8 @@ a=1 #no of char # this is a varible added to char and modes to avoid char[0]/ mo
 
 def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type):
 
+    #This function creates new yaml with initial conditions updated form microphysical properties of  Polarimeter retrievals
+
     # Load the YAML file for HSRL
     with open(YamlFileName, 'r') as f:  
         data = yaml.safe_load(f)
@@ -69,22 +64,18 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type):
     noYmlChar = np.arange(1,7) #No of aerosol characters types in the yaml file (This can be adjusted based on the parameters we want to change)
     
     for i in noYmlChar:
-
         YamlChar.append(data['retrieval']['constraints'][f'characteristic[{i}]']['type'])
-
     # RSP_rslt = np.load('RSP_sph.npy',allow_pickle= True).item()
     print(len(YamlChar))
     
     #change the yaml intitial conditions using the RSP GRASP output
     for i in range(len(YamlChar)): #loop over the character types in the list
-
-        for noMd in range(noMod): #loop over the aerosol modes
+        for noMd in range(noMod): #loop over the aerosol modes (i.e 2 for fine and coarse)
 
     #         print(noMd,i)
             initCond = data['retrieval']['constraints'][f'characteristic[{i+a}]'][f'mode[{noMd+a}]']['initial_guess']
             if YamlChar[i] == 'aerosol_concentration':
                 initCond['value'] = float(RSP_rslt['vol'][noMd]) #value from the GRASP result for RSP
-               
             if YamlChar[i] == 'size_distribution_lognormal':
                 initCond['value'] = float(RSP_rslt['rv'][noMd]),float(RSP_rslt['sigma'][noMd])
                 initCond['max'] =float(RSP_rslt['rv'][noMd]*maxr),float(RSP_rslt['sigma'][noMd]*maxr)
@@ -110,9 +101,9 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type):
 
 
     if Kernel_type == "sphro":
-        UpKerFile = 'Settings_Sphd_RSP_HSRL.yaml'
+        UpKerFile = 'Settings_Sphd_RSP_HSRL.yaml' #for spheroidal kernel
     if Kernel_type == "TAMU":
-        UpKerFile = 'Settings_TAMU_RSP_HSRL.yaml'
+        UpKerFile = 'Settings_TAMU_RSP_HSRL.yaml'#for hexahedral kernel
     
     ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
     
@@ -120,6 +111,8 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type):
         yaml.safe_dump(data, f)
         
     return 
+
+
 
 #Find the pixel index for nearest lat and lon for given LatH and LonH
 def FindPix(LatH,LonH,Lat,Lon):
@@ -130,12 +123,11 @@ def FindPix(LatH,LonH,Lat,Lon):
 
     diffLon = np.abs(LonH - Lon) # Find the absolute difference between `Lon` and each element in `LonM`
     indexLon = np.argwhere(diffLon == diffLon.min())[0] # Find the indices of all elements that minimize the difference
-    
     return indexLat[0], indexLat[1]
 
 
 def find_dust(HSRLfile_path, HSRLfile_name, plot=None):
-    #BAsed
+
     # Open the HDF5 file in read mode
     f1 = h5py.File(HSRLfile_path + HSRLfile_name, 'r+')
     
@@ -184,9 +176,9 @@ def find_dust(HSRLfile_path, HSRLfile_name, plot=None):
     # Return the filtered dust pixel values and the dust pixel value(s) with the highest frequency count
     return dust_pix, max_dust
 
+
 def RSP_Run(Kernel_type,PixNo,ang1,ang2,TelNo,nwl): 
         
-        # binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP_v112_noWarn/bin/grasp_app' # New Version GRASP Executable  
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
         # Kernel_type =  sphro is for the GRASP spheriod kernal, while TAMU is to run with Hexahedral Kernal
         if Kernel_type == "sphro":
@@ -201,16 +193,14 @@ def RSP_Run(Kernel_type,PixNo,ang1,ang2,TelNo,nwl):
             binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
             savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
 
-    
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
         rslt = Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsFn)
-
+        print(rslt['OBS_hght'])
         maxCPU = 3 #maximum CPU allocated to run GRASP on server
         gRuns = []
         yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
         #eventually have to adjust code for height, this works only for one pixel (single height value)
         gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML=True )) # This should copy to new YAML object
-
         pix = pixel()
         pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage='meas', verbose=False)
         gRuns[-1].addPix(pix)
@@ -227,8 +217,8 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, updateYaml= None):
         #Path to the kernel files
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
         
-        if Kernel_type == "sphro":  #If spheriod model
-            #Path to the yaml file for sphriod model
+        if Kernel_type == "sphro":  #If spheroid model
+            #Path to the yaml file for sphreroid model
             fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLARandLIDAR_10Vbins_2modes_ORACLES.yml'
             # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLARandLIDAR_10Vbins_2modes_ORACLES_2Coarse.yml'
             if updateYaml == True:  # True if init conditions for Yaml file for HSRL is updated from the GRASP output from RSP
@@ -253,27 +243,26 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, updateYaml= None):
     
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
         rslt = Read_Data_HSRL_Oracles(HSRLfile_path,HSRLfile_name,PixNo)
+        max_alt = rslt['OBS_hght']
+        print(rslt['OBS_hght'])
 
         maxCPU = 3 #maximum CPU allocated to run GRASP on server
         gRuns = []
         yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
         #eventually have to adjust code for height, this works only for one pixel (single height value)
         gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML=True )) # This should copy to new YAML object
-
         pix = pixel()
         pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage= 'meas', verbose=False)
         gRuns[-1].addPix(pix)
-
         gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU)
-
         #rslts contain all the results form the GRASP inverse run
         rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
-        return rslts
+        return rslts, max_alt
     # height = 200 
 
 
 def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn, updateYaml= None):
-    
+
     krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
 
     if Kernel_type == "sphro":  #If spheriod model
@@ -305,7 +294,8 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     
     rslt= {}  # Teh order of the data is  First lidar(number of wl ) and then Polarimter data 
     rslt['lambda'] = np.concatenate((rslt_HSRL['lambda'],rslt_RSP['lambda']))
-    #Sort sotes theindex of the wavelength if arranged in ascending order
+
+    #Sort the index of the wavelength if arranged in ascending order, this is required by GRASP
     sort = np.argsort(rslt['lambda']) 
     IndHSRL = rslt_HSRL['lambda'].shape[0]
     sort_Lidar, sort_MAP  = np.array([0,3,7]),np.array([1,2,4,5,6])
@@ -317,10 +307,11 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     HSRLkeys = ['RangeLidar','meas_VExt','meas_VBS','meas_DP']
     GenKeys= ['datetime','longitude', 'latitude', 'land_prct'] # Shape of these variables is not N wavelength
     
-    #MAP measurement variables
+    #MAP measurement variables 
+
     RSP_var = np.ones((rslt_RSP['meas_I'].shape[0],rslt['lambda'].shape[0])) * np.nan
     for keys in RSPkeys:
-
+        #adding values to sort_MAP index positions
         for a in range(rslt_RSP[keys][:,0].shape[0]):
             RSP_var[a][sort_MAP] = rslt_RSP[keys][a]
         rslt[keys] = RSP_var
@@ -334,15 +325,26 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
             
             HSRL_var[a][sort_Lidar] = rslt_HSRL[keys1][a]
 
+            # 'sza', 'vis','fis'
         rslt[keys1] = HSRL_var
         # Refresh the array by Creating numpy nan array with shape of height x wl, Basically deleting all values
         HSRL_var = np.ones((rslt_HSRL['meas_VExt'].shape[0],rslt['lambda'].shape[0]))* np.nan
 
+    rslt['sza'][0][sort_Lidar]= np.ones(IndHSRL)* 0.01
+    # rslt['vis'][sort_Lidar] = rslt['RangeLidar'][sort_Lidar]
+    for a in range(rslt_HSRL['RangeLidar'][:,0].shape[0]):
+
+        # rslt['sza'][a][sort_Lidar]= np.ones(IndHSRL)* 0.01
+        rslt['fis'][a][sort_Lidar]= np.zeros(IndHSRL)
+        rslt['vis'][a][sort_Lidar] = rslt['RangeLidar'][a][sort_Lidar]
+    
+    
     for keys in GenKeys:
         rslt[keys] = rslt_RSP[keys]  #Adding the information about lat, lon, datetime and so on from RSP
     
-    # rslt['OBS_hght'] = rslt_HSRL['OBS_hght']
+    # rslt['OBS_hght'] = rslt_RSP['OBS_hght'] #adding the aircraft altitude 
     rslt['lambda'] = rslt['lambda'][sort]
+    # rslt['masl'] = 0  #height of the ground
     # print(rslt)
 
     maxCPU = 3 #maximum CPU allocated to run GRASP on server
@@ -350,44 +352,19 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
     #eventually have to adjust code for height, this works only for one pixel (single height value)
     gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML=True )) # This should copy to new YAML object
-
     pix = pixel()
     pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage= 'meas', verbose=False)
     gRuns[-1].addPix(pix)
-
     gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU)
-
     #rslts contain all the results form the GRASP inverse run
     rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
     return rslts
 
-# # RSP_PixNo =13460
-# RSP_PixNo = 13240
-#     #Dusty pixel on 9/22
-# # PixNo = find_dust(file_path,file_name)[1][0]
-# TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
-# nwl = 5 # first  nwl wavelengths
-# ang1 = 20
-# ang2 = 120 # :ang angles  #Remove
 
 
-# f1_MAP = h5py.File(file_path+file_name,'r+')   
-# Data = f1_MAP['Data']
-# LatRSP = f1_MAP['Geometry']['Collocated_Latitude'][TelNo,RSP_PixNo]
-# LonRSP = f1_MAP['Geometry']['Collocated_Longitude'][TelNo,RSP_PixNo]
-# f1_MAP.close()
-
-# f1= h5py.File(HSRLfile_path + HSRLfile_name,'r+')  #reading hdf5 file  
-
-# #Lat and Lon values for that pixel
-# LatH = f1['Nav_Data']['gps_lat'][:]
-# LonH = f1['Nav_Data']['gps_lon'][:]
-# HSRLPixNo = FindPix(LatH,LonH,LatRSP,LonRSP)[0]
-# f1.close()
-
-# HSRLPixNo = 1154
 
 
+#Plotting the values
 
 for i in range(1):
     
@@ -403,11 +380,10 @@ for i in range(1):
     ang1 = 20
     ang2 = 120 # :ang angles  #Remove
 
-    #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
+    # Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
     rslts_Sph = RSP_Run("sphro",RSP_PixNo,ang1,ang2,TelNo,nwl)
     rslts_Tamu = RSP_Run("TAMU",RSP_PixNo,ang1,ang2,TelNo,nwl)
 
-    
     f1_MAP = h5py.File(file_path+file_name,'r+')   
     Data = f1_MAP['Data']
     LatRSP = f1_MAP['Geometry']['Collocated_Latitude'][TelNo,RSP_PixNo]
@@ -426,8 +402,8 @@ for i in range(1):
     # HSRLPixNo = 1154
     Retrieval_type = 'NosaltStrictConst_final'
     #Running GRASP for HSRL, HSRL_sphrod = for spheriod kernels,HSRL_Tamu = Hexahedral kernels
-    HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,updateYaml= True) 
-    HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name,HSRLPixNo,updateYaml= True)
+    HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,updateYaml= False) 
+    HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name,HSRLPixNo,updateYaml= False)
 
     LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn, updateYaml= None)
     LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn, updateYaml= None)
@@ -435,7 +411,7 @@ for i in range(1):
     print('SPH',"tam" )
     print(HSRL_sphrod[0]['aod'],HSRL_Tamu[0]['aod'])
     
-    
+  
     #Plotting the results
     PltGRASPoutput(rslts_Sph, rslts_Tamu,file_name,PixNo = RSP_PixNo)
 
@@ -446,7 +422,6 @@ for i in range(1):
 
             wave = np.str(HSRL_sphrod[0]['lambda'][i]) +"μm \n Range(km)"
 
-            
             axs[i,0].plot(HSRL_sphrod[0]['meas_VBS'][:,i],HSRL_sphrod[0]['RangeLidar'][:,0]/1000, marker =">",color = "#3B270C", label ="Meas")
             axs[i,0].plot(HSRL_sphrod[0]['fit_VBS'][:,i],HSRL_sphrod[0]['RangeLidar'][:,0]/1000,color = "#025043", marker = "$O$",label ="Sphd")
             axs[i,0].plot(HSRL_Tamu[0]['fit_VBS'][:,i],HSRL_Tamu[0]['RangeLidar'][:,0]/1000,color = "#d24787",ls = "--", label="Hex", marker = "h")
@@ -458,9 +433,6 @@ for i in range(1):
             axs[i,2].plot(HSRL_sphrod[0]['meas_VExt'][:,i],HSRL_sphrod[0]['RangeLidar'][:,0]/1000, marker =">",color = "#3B270C", label ="Meas")
             axs[i,2].plot(HSRL_sphrod[0]['fit_VExt'][:,i],HSRL_sphrod[0]['RangeLidar'][:,0]/1000,color = "#025043", marker = "$O$")
             axs[i,2].plot(HSRL_Tamu[0]['fit_VExt'][:,i],HSRL_Tamu[0]['RangeLidar']/1000,color = "#d24787",ls = "--", marker = "h")
-            
-
-
 
             axs[0,0].set_title('VBS')
             axs[i,0].set_xlabel('VBS')
@@ -575,87 +547,192 @@ for i in range(1):
         print(HSRL_sphrod[0]['costVal'],HSRL_Tamu[0]['costVal'], rslts_Sph[0]['costVal'],rslts_Tamu[0]['costVal'])
         return
     
-    def PlotOutput_Separate():
+    # def PlotOutput_Separate():
 
+    #     altd = (HSRL_sphrod[1][0]-HSRL_sphrod[0][0]['RangeLidar'][:,0])/1000
+    #     HSRL_sphrod = HSRL_sphrod[0]
+    #     HSRL_Tamu =HSRL_Tamu[0]
+    #     fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    #     for i in range(3):
+            
 
-        fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
-        for i in range(3):
+    #         wave = np.str(HSRL_sphrod[0]['lambda'][i]) +"μm"
+    #         axs[i].plot(HSRL_sphrod[0]['meas_VBS'][:,i],altd, marker =">",color = "#3B270C", label ="Meas")
+    #         axs[i].plot(HSRL_sphrod[0]['fit_VBS'][:,i],altd,color = "#025043", marker = "$O$",label ="Sphd")
+    #         axs[i].plot(HSRL_Tamu[0]['fit_VBS'][:,i],altd,color = "#d24787",ls = "--", label="Hex", marker = "h")
 
-            wave = np.str(HSRL_sphrod[0]['lambda'][i]) +"μm"
-            axs[i].plot(HSRL_sphrod[0]['meas_VBS'][:,i],HSRL_sphrod[0]['RangeLidar'][:,0]/1000, marker =">",color = "#3B270C", label ="Meas")
-            axs[i].plot(HSRL_sphrod[0]['fit_VBS'][:,i],HSRL_sphrod[0]['RangeLidar'][:,0]/1000,color = "#025043", marker = "$O$",label ="Sphd")
-            axs[i].plot(HSRL_Tamu[0]['fit_VBS'][:,i],HSRL_Tamu[0]['RangeLidar'][:,0]/1000,color = "#d24787",ls = "--", label="Hex", marker = "h")
+    #         axs[i].set_xlabel('VBS')
+    #         axs[i].set_title(wave)
+    #         if i ==0:
+    #             axs[0].legend()
+    #         plt.suptitle(f"Lat: {HSRL_Tamu[0]['latitude']},Lon:{HSRL_Tamu[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
 
-            axs[i].set_xlabel('VBS')
-            axs[i].set_title(wave)
-            if i ==0:
-                axs[0].legend()
-            plt.suptitle(f"Lat: {HSRL_Tamu[0]['latitude']},Lon:{HSRL_Tamu[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+    #     fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    #     for i in range(3):
 
-        fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
-        for i in range(3):
+    #         axs[i].plot(HSRL_sphrod[0]['meas_DP'][:,i],altd, marker =">",color = "#3B270C", label ="Meas")
+    #         axs[i].plot(HSRL_sphrod[0]['fit_DP'][:,i],altd,color = "#025043", marker = "$O$",label ="Sphd")
+    #         axs[i].plot(HSRL_Tamu[0]['fit_DP'][:,i],altd,color = "#d24787", ls = "--",marker = "h")
+    #         axs[i].set_xlabel('DP %')
+    #         axs[i].set_title(wave)
+    #         if i ==0:
+    #             axs[0].legend()
+    #         plt.suptitle(f"Lat: {HSRL_Tamu[0]['latitude']},Lon:{HSRL_Tamu[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
 
-            axs[i].plot(HSRL_sphrod[0]['meas_DP'][:,i],HSRL_sphrod[0]['RangeLidar'][:,0]/1000, marker =">",color = "#3B270C", label ="Meas")
-            axs[i].plot(HSRL_sphrod[0]['fit_DP'][:,i],HSRL_sphrod[0]['RangeLidar'][:,0]/1000,color = "#025043", marker = "$O$",label ="Sphd")
-            axs[i].plot(HSRL_Tamu[0]['fit_DP'][:,i],HSRL_Tamu[0]['RangeLidar'][:,0]/1000,color = "#d24787", ls = "--",marker = "h")
-            axs[i].set_xlabel('DP %')
-            axs[i].set_title(wave)
-            if i ==0:
-                axs[0].legend()
-            plt.suptitle(f"Lat: {HSRL_Tamu[0]['latitude']},Lon:{HSRL_Tamu[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+    #     fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    #     for i in range(3):
 
-        fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
-        for i in range(3):
+    #         axs[i].plot(HSRL_sphrod[0]['meas_VExt'][:,i],altd, marker =">",color = "#3B270C", label ="Meas")
+    #         axs[i].plot(HSRL_sphrod[0]['fit_VExt'][:,i],altd,color = "#025043", marker = "$O$",label ="Sphd")
+    #         axs[i].plot(HSRL_Tamu[0]['fit_VExt'][:,i],altd,color = "#d24787",ls = "--", marker = "h")
+    #         axs[i].set_xlabel('VExt')
+    #         axs[i].set_title(wave)
+    #         if i ==0:
+    #             axs[0].legend()
+    #         plt.suptitle(f"Lat: {HSRL_Tamu[0]['latitude']},Lon:{HSRL_Tamu[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
 
-            axs[i].plot(HSRL_sphrod[0]['meas_VExt'][:,i],HSRL_sphrod[0]['RangeLidar'][:,0]/1000, marker =">",color = "#3B270C", label ="Meas")
-            axs[i].plot(HSRL_sphrod[0]['fit_VExt'][:,i],HSRL_sphrod[0]['RangeLidar'][:,0]/1000,color = "#025043", marker = "$O$",label ="Sphd")
-            axs[i].plot(HSRL_Tamu[0]['fit_VExt'][:,i],HSRL_Tamu[0]['RangeLidar']/1000,color = "#d24787",ls = "--", marker = "h")
-            axs[i].set_xlabel('VExt')
-            axs[i].set_title(wave)
-            if i ==0:
-                axs[0].legend()
-            plt.suptitle(f"Lat: {HSRL_Tamu[0]['latitude']},Lon:{HSRL_Tamu[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+    #     fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    #     IndexH = [0,3,7]
+    #     for i in range(3):
 
-        fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
-        IndexH = [0,3,7]
-        for i in range(3):
+    #         wave = np.str(LidarPolSph[0]['lambda'][IndexH[i]]) +"μm"
+    #         axs[i].plot(LidarPolSph[0]['meas_VBS'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000, marker =">",color = "#3B270C", label ="Meas")
+    #         axs[i].plot(LidarPolSph[0]['fit_VBS'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000,color = "#025043", marker = "$O$",label ="Sphd")
+    #         axs[i].plot(LidarPolTAMU[0]['fit_VBS'][:,IndexH[i]],LidarPolTAMU[0]['RangeLidar'][:,0]/1000,color = "#d24787",ls = "--", label="Hex", marker = "h")
 
-            wave = np.str(LidarPolSph[0]['lambda'][IndexH[i]]) +"μm"
-            axs[i].plot(LidarPolSph[0]['meas_VBS'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000, marker =">",color = "#3B270C", label ="Meas")
-            axs[i].plot(LidarPolSph[0]['fit_VBS'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000,color = "#025043", marker = "$O$",label ="Sphd")
-            axs[i].plot(LidarPolTAMU[0]['fit_VBS'][:,IndexH[i]],LidarPolTAMU[0]['RangeLidar'][:,0]/1000,color = "#d24787",ls = "--", label="Hex", marker = "h")
+    #         axs[i].set_xlabel('VBS')
+    #         axs[i].set_title(wave)
+    #         if i ==0:
+    #             axs[0].legend()
+    #         plt.suptitle(f"Lat: {HSRL_Tamu[0]['latitude']},Lon:{HSRL_Tamu[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
 
-            axs[i].set_xlabel('VBS')
-            axs[i].set_title(wave)
-            if i ==0:
-                axs[0].legend()
-            plt.suptitle(f"Lat: {HSRL_Tamu[0]['latitude']},Lon:{HSRL_Tamu[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+    #     fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    #     for i in range(3):
 
-        fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
-        for i in range(3):
+    #         axs[i].plot(LidarPolSph[0]['meas_DP'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000, marker =">",color = "#3B270C", label ="Meas")
+    #         axs[i].plot(LidarPolSph[0]['fit_DP'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000,color = "#025043", marker = "$O$",label ="Sphd")
+    #         axs[i].plot(LidarPolTAMU[0]['fit_DP'][:,IndexH[i]],LidarPolTAMU[0]['RangeLidar'][:,0]/1000,color = "#d24787", ls = "--",marker = "h", label="Hex")
+    #         axs[i].set_xlabel('DP %')
+    #         axs[i].set_title(wave)
+    #         if i ==0:
+    #             axs[0].legend()
+    #         plt.suptitle(f"Lat: {LidarPolTAMU[0]['latitude']},Lon:{LidarPolTAMU[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n Lidar+polarimeter Retrievals ") #Initial condition strictly constrainted by RSP retrievals
 
-            axs[i].plot(LidarPolSph[0]['meas_DP'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000, marker =">",color = "#3B270C", label ="Meas")
-            axs[i].plot(LidarPolSph[0]['fit_DP'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000,color = "#025043", marker = "$O$",label ="Sphd")
-            axs[i].plot(LidarPolTAMU[0]['fit_DP'][:,IndexH[i]],LidarPolTAMU[0]['RangeLidar'][:,0]/1000,color = "#d24787", ls = "--",marker = "h", label="Hex")
-            axs[i].set_xlabel('DP %')
-            axs[i].set_title(wave)
-            if i ==0:
-                axs[0].legend()
-            plt.suptitle(f"Lat: {LidarPolTAMU[0]['latitude']},Lon:{LidarPolTAMU[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n Lidar+polarimeter Retrievals ") #Initial condition strictly constrainted by RSP retrievals
+    #     fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    #     for i in range(3):
 
-        fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
-        for i in range(3):
+    #         axs[i].plot(LidarPolSph[0]['meas_VExt'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000, marker =">",color = "#3B270C", label ="Meas")
+    #         axs[i].plot(LidarPolSph[0]['fit_VExt'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000,color = "#025043", marker = "$O$",label ="Sphd")
+    #         axs[i].plot(LidarPolTAMU[0]['fit_VExt'][:,IndexH[i]],LidarPolTAMU[0]['RangeLidar']/1000,color = "#d24787",ls = "--", marker = "h", label="Hex")
+    #         axs[i].set_xlabel('VExt')
+    #         axs[i].set_title(wave)
+    #         if i ==0:
+    #             axs[0].legend()
+    #         plt.suptitle(f"Lat: {LidarPolTAMU[0]['latitude']},Lon:{LidarPolTAMU[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n Lidar+polarimeter Retrievals  ") #Initial condition strictly constrainted by RSP retrievals
 
-            axs[i].plot(LidarPolSph[0]['meas_VExt'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000, marker =">",color = "#3B270C", label ="Meas")
-            axs[i].plot(LidarPolSph[0]['fit_VExt'][:,IndexH[i]],LidarPolSph[0]['RangeLidar'][:,0]/1000,color = "#025043", marker = "$O$",label ="Sphd")
-            axs[i].plot(LidarPolTAMU[0]['fit_VExt'][:,IndexH[i]],LidarPolTAMU[0]['RangeLidar']/1000,color = "#d24787",ls = "--", marker = "h", label="Hex")
-            axs[i].set_xlabel('VExt')
-            axs[i].set_title(wave)
-            if i ==0:
-                axs[0].legend()
-            plt.suptitle(f"Lat: {LidarPolTAMU[0]['latitude']},Lon:{LidarPolTAMU[0]['longitude']} Date: {HSRL_Tamu[0]['datetime']}\n Lidar+polarimeter Retrievals  ") #Initial condition strictly constrainted by RSP retrievals
+def PlotOutput_Separate (HSRL_sphrod, HSRL_Tamu,LidarPolSph,LidarPolTAMU ):
+    
+    Hsph = HSRL_sphrod[0][0]
+    HTam =HSRL_Tamu[0][0]
+    #Converting range to altitude
+    altd = (HSRL_sphrod[1][0]-Hsph['RangeLidar'][:,0])/1000 #altitude for spheriod
+    altT = (HSRL_sphrod[1][0]-Hsph['RangeLidar'][:,0])/1000 #altitude for hexahedra
+    fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    for i in range(3):
+        wave = np.str(Hsph['lambda'][i]) +"μm"
+        axs[i].plot(Hsph['meas_VBS'][:,i],altd, marker =">",color = "#3B270C", label ="Meas")
+        axs[i].plot(Hsph['fit_VBS'][:,i],altd,color = "#025043", marker = "$O$",label ="Sphd")
+        axs[i].plot(HTam['fit_VBS'][:,i],altd,color = "#d24787",ls = "--", label="Hex", marker = "h")
 
+        axs[i].set_xlabel('VBS')
+        axs[i].set_title(wave)
+        if i ==0:
+            axs[0].legend()
+        plt.suptitle(f"Lat: {HTam['latitude']},Lon:{HTam['longitude']} Date: {HTam['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
 
+    fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    for i in range(3):
+
+        axs[i].plot(Hsph['meas_DP'][:,i],altd, marker =">",color = "#3B270C", label ="Meas")
+        axs[i].plot(Hsph['fit_DP'][:,i],altd,color = "#025043", marker = "$O$",label ="Sphd")
+        axs[i].plot(HTam['fit_DP'][:,i],altd,color = "#d24787", ls = "--",marker = "h")
+        axs[i].set_xlabel('DP %')
+        axs[i].set_title(wave)
+        if i ==0:
+            axs[0].legend()
+        plt.suptitle(f"Lat: {HTam['latitude']},Lon:{HTam['longitude']} Date: {HTam['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+
+    fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    for i in range(3):
+
+        axs[i].plot(Hsph['meas_VExt'][:,i],altd, marker =">",color = "#3B270C", label ="Meas")
+        axs[i].plot(Hsph['fit_VExt'][:,i],altd,color = "#025043", marker = "$O$",label ="Sphd")
+        axs[i].plot(HTam['fit_VExt'][:,i],altd,color = "#d24787",ls = "--", marker = "h")
+        axs[i].set_xlabel('VExt')
+        axs[i].set_title(wave)
+        if i ==0:
+            axs[0].legend()
+        plt.suptitle(f"Lat: {HTam['latitude']},Lon:{HTam['longitude']} Date: {HTam['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+
+    fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    IndexH = [0,3,7]
+    for i in range(3):
+
+        wave = np.str(LidarPolSph[0]['lambda'][IndexH[i]]) +"μm"
+        axs[i].plot(LidarPolSph[0]['meas_VBS'][:,IndexH[i]],(HSRL_sphrod[1][0]-LidarPolSph[0]['RangeLidar'][:,0])/1000, marker =">",color = "#3B270C", label ="Meas")
+        axs[i].plot(LidarPolSph[0]['fit_VBS'][:,IndexH[i]],(HSRL_sphrod[1][0]-LidarPolSph[0]['RangeLidar'][:,0])/1000,color = "#025043", marker = "$O$",label ="Sphd")
+        axs[i].plot(LidarPolTAMU[0]['fit_VBS'][:,IndexH[i]],altd,color = "#d24787",ls = "--", label="Hex", marker = "h")
+
+        axs[i].set_xlabel('VBS')
+        axs[i].set_title(wave)
+        if i ==0:
+            axs[0].legend()
+        plt.suptitle(f"Lat: {HTam['latitude']},Lon:{HTam['longitude']} Date: {HTam['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+
+    fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    for i in range(3):
+
+        axs[i].plot(LidarPolSph[0]['meas_DP'][:,IndexH[i]],(HSRL_sphrod[1][0]-LidarPolSph[0]['RangeLidar'][:,0])/1000, marker =">",color = "#3B270C", label ="Meas")
+        axs[i].plot(LidarPolSph[0]['fit_DP'][:,IndexH[i]],(HSRL_sphrod[1][0]-LidarPolSph[0]['RangeLidar'][:,0])/1000,color = "#025043", marker = "$O$",label ="Sphd")
+        axs[i].plot(LidarPolTAMU[0]['fit_DP'][:,IndexH[i]],altd,color = "#d24787", ls = "--",marker = "h", label="Hex")
+        axs[i].set_xlabel('DP %')
+        axs[i].set_title(wave)
+        if i ==0:
+            axs[0].legend()
+        plt.suptitle(f"Lat: {LidarPolTAMU[0]['latitude']},Lon:{LidarPolTAMU[0]['longitude']} Date: {HTam['datetime']}\n Lidar+polarimeter Retrievals ") #Initial condition strictly constrainted by RSP retrievals
+
+    fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (18,6))
+    for i in range(3):
+
+        axs[i].plot(LidarPolSph[0]['meas_VExt'][:,IndexH[i]],(HSRL_sphrod[1][0]-LidarPolSph[0]['RangeLidar'][:,0])/1000, marker =">",color = "#3B270C", label ="Meas")
+        axs[i].plot(LidarPolSph[0]['fit_VExt'][:,IndexH[i]],(HSRL_sphrod[1][0]-LidarPolSph[0]['RangeLidar'][:,0])/1000,color = "#025043", marker = "$O$",label ="Sphd")
+        axs[i].plot(LidarPolTAMU[0]['fit_VExt'][:,IndexH[i]],altd,color = "#d24787",ls = "--", marker = "h", label="Hex")
+        axs[i].set_xlabel('VExt')
+        axs[i].set_title(wave)
+        if i ==0:
+            axs[0].legend()
+        plt.suptitle(f"Lat: {LidarPolTAMU[0]['latitude']},Lon:{LidarPolTAMU[0]['longitude']} Date: {HTam['datetime']}\n Lidar+polarimeter Retrievals  ") #Initial condition strictly constrainted by RSP retrievals
+
+    fig, axs= plt.subplots(nrows = 1, ncols =2, figsize= (18,6))
+    for i in [1,2,4,5,6]:
+
+        axs[0].plot(LidarPolSph[0]['sca_ang'][:,i], LidarPolSph[0]['meas_I'][:,i],marker =">",color = "#3B270C", label ="Meas")
+        axs[0].plot(LidarPolSph[0]['sca_ang'][:,i],LidarPolSph[0]['fit_I'][:,i],color = "#025043", marker = "$O$",label ="Sphd")
+        axs[0].plot(LidarPolSph[0]['sca_ang'][:,i],LidarPolTAMU[0]['fit_I'][:,i],color = "#d24787",ls = "--", marker = "h", label="Hex")
+        axs[0].set_ylabel('I')
+        axs[0].set_xlabel('Scattering angles')
+        
+        plt.suptitle(f"Wl: {LidarPolSph[0]['lambda'][i]}, Lat: {LidarPolTAMU[0]['latitude']},Lon:{LidarPolTAMU[0]['longitude']} Date: {HTam['datetime']}\n Lidar+polarimeter Retrievals  ") #Initial condition strictly constrainted by RSP retrievals
+        
+        axs[1].plot(LidarPolSph[0]['sca_ang'][:,i],LidarPolSph[0]['meas_P_rel'][:,i], marker =">",color = "#3B270C", label ="Meas")
+        axs[1].plot(LidarPolSph[0]['sca_ang'][:,i],LidarPolSph[0]['fit_P_rel'][:,i],color = "#025043", marker = "$O$",label ="Sphd")
+        axs[1].plot(LidarPolSph[0]['sca_ang'][:,i],LidarPolTAMU[0]['fit_P_rel'][:,i],color = "#d24787",ls = "--", marker = "h", label="Hex")
+        axs[1].set_ylabel('P/I')
+        axs[1].set_xlabel('Scattering angles')
+        axs[0].legend()
+        # axs[1].set_title()
+        fig, axs= plt.subplots(nrows = 1, ncols =2, figsize= (18,6))
+# LidarPolTAMU[0]['meas_P_rel']
 
 
 
