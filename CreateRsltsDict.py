@@ -173,7 +173,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     '''This should be changed  '''
 
     # rslt['meas_P'] = rslt['meas_I'] *checkFillVals(Data['DoLP'][PixNo,ang1:ang2,:nwl]  ,negative_check =True)/100
-    rslt['meas_P'] = checkFillVals(Data['DoLP'][PixNo,ang1:ang2,:nwl]  ,negative_check =True)/100    #relative value    
+    rslt['meas_P'] = checkFillVals(Data['DoLP'][PixNo,ang1:ang2,:nwl]  ,negative_check =True)/100    #relative value P/I
     #converting modified julian date to julain date and then to gregorian
     jdv = f1_MAP['Geometry']['Measurement_Time'][TelNo,PixNo,0]+ 2400000.5  #Taking the time stamp for first angle
     
@@ -193,6 +193,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
  
     #height key should not be used for altitude,
     rslt['OBS_hght']= f1_MAP['Platform']['Platform_Altitude'][PixNo] # height of pixel in m
+    # print(rslt['OBS_hght'])
     if  rslt['OBS_hght'] < 0:  #if colocated attitude is less than 0 then that is set to 0
         rslt['OBS_hght'] = 0
         print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
@@ -306,8 +307,9 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
     rslt['latitude'] = latitude[PixNo]
     rslt['longitude']= longitude[PixNo]
-    rslt['OBS_hght']= AirAlt # aircraft altitude. 
+    rslt['OBS_hght']=  AirAlt# aircraft altitude. 
     rslt['land_prct'] = 0 #Ocean Surface
+
     #Substitude the actual value
     rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
     f1.close() 
