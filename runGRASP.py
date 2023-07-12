@@ -1019,7 +1019,7 @@ class rsltDictTools():
                     rs[szaKey] = np.tile(rs[szaKey], rs['fis_'+szaKeyEnd].shape)
             for key in ['bpdf', 'albedo','n','k']: # spectral variables we want to ensure are 2D (1 x Nlambda) (graspRun.readOutput() handles this correctly now but old files and other sources may not)
                 if key in rs: rs[key] = np.atleast_2d(rs[key])
-        if 'version' in rslts[0] and float(rslts[0]['version'])>1: return rslts
+        if 'version' in rslts[0] and float(rslts[0]['version'])>1: return list(rslts)
         # Applied only to results older than Version 1.01
         if 'dVdlnr' in rslts[0]: # prior to 21/05/2021 we saved normalized; we now use absolute
             psdNormUnityRTOL = 1e-2 # if relative difference between unity and integral of PSD over r is greater than this we assume PSD is absolute
@@ -1029,12 +1029,12 @@ class rsltDictTools():
             nonTruncInd = ra < psdTruncThresh
             if not nonTruncInd.any():
                 warnings.warn('All PSDs were significantly truncated and normalization could not be detemrined. dVdlnr may or may not be in absolute units.')
-                return rslts
+                return list(rslts)
             trp = np.concatenate([np.trapz(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
             if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
                 for rs in rslts: 
                     rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
-        return rslts
+        return list(rslts)
 
     def spectralInterp(rslt, waveNew, verbose, check4oddKeys=True):
         """
