@@ -1041,15 +1041,15 @@ class pixel():
         if np.isclose(newValue, 1.0, rtol=1e-3, atol=1e-3):
             warnings.warn('land_prct provided was %4.2f – this value is a percentage (100 => completely land)' % newValue)
         self.land_prct = newValue
-
-    def addMeas(self, wl, msTyp=[], nbvm=[], sza=[], thtv=[], phi=[], msrmnts=[], errModel=None):
+    #g
+    def addMeas(self, wl, msTyp=[], nbvm=[], sza=[], thtv=[], phi=[], msrmnts=[],gaspar=[], errModel=None):  #gaspar=[]
         """ This method is called once for each wavelength of data (see frmtMsg below)
             The index i where the new data is stored in self.measVals[i] is returned
             Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)
         """
         assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!'
         if type(msTyp) is int: msTyp=[msTyp]
-        newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts, errorModel=errModel)
+        newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts,gaspar = gaspar, errorModel=errModel)  #,gaspar = gaspar
         newMeas = self.formatMeas(newMeas)
         insertInd = np.nonzero([z['wl'] > newMeas['wl'] for z in self.measVals])[0] # we want to insert in order
         self.nwl += 1
@@ -1065,8 +1065,8 @@ class pixel():
             meas_type, nbvm, nip, measurements, sza, thetav, phi, datetime, latitude, longitude, land_prct
             if self.meas == [] when called, populateFromRslt will add a measurement for each wvl in rslt
             radianceNoiseFun will override (and permanently set) self.measVals[n]['errorModel']
-        """
-        msTypMap = {'I':41, 'Q':42, 'U':43, 'P':44, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
+        """ ''' P= 44 for P and P= 46 for P/I'''
+        msTypMap = {'I':41, 'Q':42, 'U':43, 'P':46, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
         msTyps = np.array([key.replace(dataStage+'_','') for key in rslt.keys() if dataStage in key]) # names of all keys with dataStage (e.g. "fit_")
         
         if 'P' in msTyps: 
@@ -1079,23 +1079,32 @@ class pixel():
             msTyps[msTyps=='UoI'] = 'U'
 
         for l, lVal in enumerate(rslt['lambda']): # loop over wavelength
+            # print(l, lVal)
             msTypInd = np.nonzero([not np.isnan(rslt[dataStage+'_'+mt][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
+            # print(msTypInd)
             if msTypInd.size>0: # there are measurements at this wavelength
                 measValsInd = self.addMeas(lVal)
                 msDct = self.measVals[measValsInd] # lists and dicts are mutable so changes to msDct['key'] persist in self.measVals
                 msDct['meas_type'] = [msTypMap[mt] for mt in msTyps[msTypInd]] # this is numberic key for measurements avaiable at current λ
                 msTypsNowSorted = msTyps[msTypInd[np.argsort(msDct['meas_type'])]] # need msType names at this λ, sorted by above numeric measurement type keys
+                # print(msTypsNowSorted)
                 msDct['nbvm'] = [len(rslt[dataStage+'_'+mt][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
                 msDct['meas_type'] = np.sort(msDct['meas_type'])
                 msDct['nip'] = len(msDct['meas_type'])
+                #g
+                msDct['gaspar'] = msDct['gaspar']
+                
                 if np.all(msDct['meas_type'] < 40): # lidar data
                     msDct['sza'] = 0.01 # we assume vertical lidar
                     msDct['thetav'] = rslt['RangeLidar'][:,l]
                     msDct['phi'] = np.repeat(0, len(msDct['thetav']))
+                    #g
+                    # msDct['gaspar'] = msDct['gaspar'][l]
                 elif np.all(msDct['meas_type'] > 40): # polarimeter data
                     msDct['sza'] = rslt['sza'][0,l] # GRASP/rslt dictionary return seperate SZA for every view, even though SDATA doesn't support it
                     msDct['thetav'] = rslt['vis'][:,l]
                     msDct['phi'] = rslt['fis'][:,l]
+
                     if radianceNoiseFun: msDct['errorModel'] = radianceNoiseFun
                 else:
                     assert False, 'Both polarimeter and lidar data at the same wavelength is not supported.'
@@ -1106,13 +1115,17 @@ class pixel():
                         msDct['measurements'] = msDct['errorModel'](l, rslt)
                 else:
                     msDct['measurements'] = np.reshape([rslt[dataStage+'_'+msStr][:,l] for msStr in msTypsNowSorted], -1)
+                
+                
                 msDct = self.formatMeas(msDct) # this will tile the above msTyp times
+                # print(msDct)
         if 'datetime' in rslt: self.dtObj = rslt['datetime']
         if 'latitude' in rslt: self.lat = rslt['latitude']
         if 'longitude' in rslt: self.lon = rslt['longitude']
         if 'land_prct' in rslt: self.set_land_prct(rslt['land_prct'])
         if 'masl' in rslt: self.masl = rslt['masl']
         if 'OBS_hght' in rslt: self.obsHght = rslt['OBS_hght'] # rslt['OBS_hght'] should be in meters (not km)!
+        
 
     def formatMeas(self, newMeas, lowThresh=1e-10):
         frmtMsg = '\n\
@@ -1125,6 +1138,8 @@ class pixel():
         newMeas['thetav'] = np.atleast_1d(newMeas['thetav'])
         newMeas['phi'] = np.atleast_1d(newMeas['phi'])
         newMeas['measurements'] = np.atleast_1d(newMeas['measurements'])
+        #Added by greema
+        newMeas['gaspar'] = np.atleast_1d(newMeas['gaspar'])
         if len(newMeas['measurements']) > 0: # we have at least one measurement
             newMeas['measurements'][np.abs(newMeas['measurements']) < lowThresh] = lowThresh
             if len(newMeas['thetav']) == len(newMeas['measurements'])/newMeas['nip']: # viewing zenith not provided for each measurement type
@@ -1143,7 +1158,9 @@ class pixel():
         return newMeas
 
     def genString(self):
-        baseStrFrmt = '%2d %2d 1 0 0 %10.5f %10.5f %7.2f %6.2f %d' # everything up to meas fields
+        #if len(meas['gaspar'] != 0 , then baseStrFrmt with 1 )
+        baseStrFrmt = '%2d %2d 1 0 1 %10.5f %10.5f %7.2f %6.2f %d' # everything up to meas fields 1 if gas absorption
+        #baseStrFrmt = '%2d %2d 1 0 0 %10.5f %10.5f %7.2f %6.2f %d' # everything up to meas fields
         baseStr = baseStrFrmt % (self.ix, self.iy, self.lon, self.lat, self.masl, self.land_prct, self.nwl)
         wlStr = " ".join(['%6.4f' % obj['wl'] for obj in self.measVals])
         nipStr = " ".join(['%d' % obj['nip'] for obj in self.measVals])
@@ -1158,8 +1175,11 @@ class pixel():
         phiStr = " ".join(['%7.3f' % n for n in allVals])
         allVals = np.block([obj['measurements'] for obj in self.measVals])
         measStr = " ".join(['%14.10f' % n for n in allVals])
+        #Added by Greema for gas absorption correction
+        allVals = np.block([obj['gaspar'] for obj in self.measVals])
+        GasAbsorb = " ".join(['%14.10f' % n for n in allVals]) #Molecular depolarization ration if DP is used or Tau of LS is used
         settingStr = '0 '*2*len(meas_typeStr.split(" "))
-        measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr))
+        measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr,GasAbsorb))  #,GasAbsorb
         return " ".join((baseStr, measStrAll, settingStr, '\n'))
 
 

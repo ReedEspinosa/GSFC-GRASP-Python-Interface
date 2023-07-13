@@ -290,6 +290,8 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     Bsca[:,0] = df['355_bsc_Sa'][:]
     Bsca[:,1] = df['532_bsc_Sa'] [:]
     Bsca[:,2] = df['1064_bsc_Sa'][:]
+
+    # Nor_Bca = 
     # Bsca[0,2] = np.nan 
 
     Dep = np.ones((height_shape,3))
@@ -314,5 +316,126 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
     f1.close() 
     return rslt
+
+## Reading the Multiangle Polarimeter data ()
+
+def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
+
+    f1= h5py.File(file_path + file_name,'r+')  #reading Lidar measurements 
+    HSRL = f1['DataProducts']
+    latitude,longitude = f1['Nav_Data']['gps_lat'][:],f1['Nav_Data']['gps_lon'][:]
+    AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
+    print(AirAlt)
+
+    Data_dic ={} #This dictionary stores 
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
+    #Setting negative values to zero, Teh negative values are due to low signal so we can replace with 0 without loss of info.
+    for i in range (len(inp)):
+        Data_dic[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo]
+        HSRL_checkFillVals(Data_dic[f'{inp[i]}']) # set all negative values to zero
+        if (inp[i] == '355_dep') or (inp[i] == '532_dep') or (inp[i] == '1064_dep'):
+            Data_dic[f'{inp[i]}'] = np.where(HSRL[f'{inp[i]}'][PixNo][:]>= 0.6 , np.nan, HSRL[f'{inp[i]}'][PixNo])  #CH: This should be changed, 0.7 has been set arbitarily
+
+    #Caculating range, Range is defined as distance from the instrument to the aersosol layer, i.e. range at instrument heright = 0. We have to make sure that The range is in decending order
+    Data_dic['Altitude'] = AirAlt - HSRL['Altitude'][0] 
+    df_new = pd.DataFrame(Data_dic)
+    df_new.interpolate(inplace=True, limit_area= 'inside')
+
+    # Filtering and removing the pixels with bad data: 
+    Removed_index = []  # Removed_index holds indices of pixels to be removed
+    # Filter values greater than flight altitude
+    Removed_index.append(np.nonzero(np.array(df_new['Altitude'][:]) > AirAlt)[0][:])
+    # Filter values less than or equal to zero altitude
+    Removed_index.append(np.nonzero(np.array(df_new['Altitude'][:]) <= 0)[0][:])
+    # Filter values less than or equal to zero range
+    Removed_index.append(np.nonzero(f1['UserInput']['range_interp'][PixNo] <= 0)[0])
+    # Filter values less than 1800 in range interpolation
+    Removed_index.append(np.nonzero(f1['UserInput']['range_interp'][PixNo] < 1800)[0])
+    # Filter NaN values in range interpolation
+    Removed_index.append(np.nonzero(np.isnan(f1['UserInput']['range_interp'][PixNo]))[0])
+    # Filter NaN values in low gain signal limit data mask
+    Removed_index.append(np.nonzero(np.isnan(HSRL["mask_low"][PixNo]))[0])
+
+    # Cloud Correction
+    CloudCorr_1064 = np.nonzero(np.isnan(HSRL["1064_bsc_cloud_screened"][PixNo]))[0]
+    CloudCorr_355 = np.nonzero(np.isnan(HSRL["355_bsc_cloud_screened"][PixNo]))[0]
+    CloudCorr_532 = np.nonzero(np.isnan(HSRL["532_bsc_cloud_screened"][PixNo]))[0]
+    
+    Removed_index.append(CloudCorr_1064)
+    Removed_index.append(CloudCorr_355)
+    Removed_index.append(CloudCorr_532)
+    Removed_index.append(np.nonzero(np.isnan(HSRL['355_ext'][PixNo]))[0])
+
+    # Concatenate all removed indices and remove duplicates
+    rm_pix=[]
+    for lis in Removed_index:
+        rm_pix += list(lis)[:] # concatenating the lists
+    rm_pix = np.unique(rm_pix)
+
+    # Create dictionaries to hold filtered and interpolated data
+    del_dict = {}
+    # Delete removed pixels and set negative values to zero for each data type
+    inp2 = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude']
+    for i in range (10):
+        del_dict[f'{inp2[i]}'] = np.delete(np.array(df_new[f'{inp2[i]}']), rm_pix)
+
+    df_mean = pd.DataFrame()
+    npoints = 10 #no of height pixels averaged 
+    Mod_value = np.array(del_dict['Altitude']).shape[0] % npoints  #Skip these values for reshaping the array
+    for i in range (10): #taking mean 
+        df_mean[f'{inp2[i]}'] = nanmean(np.array(del_dict[f'{inp2[i]}'][Mod_value:]).reshape( int(np.array(del_dict[f'{inp2[i]}']).shape[0]/npoints),npoints),axis=1)
+
+    for k in df_mean.keys():
+        print(df_mean[k].shape)
+
+    df = df_mean[:]
+    rslt = {} # 
+    height_shape = np.array(df['Altitude'][:]).shape[0] #to avoint the height of the sea salt, this should be removed 
+
+    Range = np.ones((height_shape,3))
+    Range[:,0] = df['Altitude'][:]
+    Range[:,1] = df['Altitude'][:]
+    Range[:,2] = df['Altitude'][:]  # in meters
+    rslt['RangeLidar'] = Range
+
+    Bext = np.ones((height_shape,3))
+    Bext[:,0] = (df['355_ext'][:]/1000)/(np.trapz(df['355_ext'][::-1]/1000, df['Altitude'][::-1]))
+    Bext[:,1] = (df['532_ext'][:]/1000)/(np.trapz(df['532_ext'][::-1]/1000, df['Altitude'][::-1]))
+    Bext[:,2] = (df['1064_ext'] [:]/1000)/(np.trapz(df['1064_ext'][::-1]/1000, df['Altitude'][::-1]))
+    # Bext[0,2] = np.nan 
+
+    Bsca = np.ones((height_shape,3))
+    Bsca[:,0] =(df['355_bsc_Sa'][:]/1000)/(np.trapz(df['355_bsc_Sa'][::-1]/ 1000, df['Altitude'][::-1]))
+    Bsca[:,1] = (df['532_bsc_Sa'] [:]/1000)/(np.trapz(df['532_bsc_Sa'][::-1]/ 1000, df['Altitude'][::-1]))
+    Bsca[:,2] = (df['1064_bsc_Sa'][:]/1000)/(np.trapz(df['1064_bsc_Sa'][::-1]/ 1000, df['Altitude'][::-1]))
+
+    # Nor_Bca = 
+    # Bsca[0,2] = np.nan 
+
+    Dep = np.ones((height_shape,3))
+    Dep[:,0] = df['355_dep'][:]
+    Dep[:,1] = df['532_dep'][:]
+    Dep[:,2] = df['1064_dep'] [:]
+
+    rslt['meas_VExt'] = Bext
+    rslt['meas_VBS'] = Bsca # converting units from km-1 tp m-1
+    rslt['meas_DP'] = Dep*100  #_aer
+    # print(rslt['meas_DP'])
+
+    rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
+    rslt['wl'] = np.array([355,532,1064])/1000
+    rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+    rslt['latitude'] = latitude[PixNo]
+    rslt['longitude']= longitude[PixNo]
+    rslt['OBS_hght']=  AirAlt# aircraft altitude. 
+    rslt['land_prct'] = 0 #Ocean Surface
+
+    #Substitude the actual value
+    rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
+    f1.close() 
+    return rslt
+
+
+
 
 
