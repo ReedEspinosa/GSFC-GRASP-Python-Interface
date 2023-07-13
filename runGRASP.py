@@ -17,7 +17,7 @@ import pandas as pd
 from scipy.stats import gaussian_kde
 import numpy as np
 import yaml # may require `conda install pyyaml`
-import miscFunctions as mf
+import miscFunctions as ms
 
 try:
     from netCDF4 import Dataset
@@ -31,33 +31,6 @@ try:
 except ImportError:
     PLOT_LOADED = False
 
-vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
-
-def frmtLoadedRslts(rslts_raw):
-    # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
-    # If a rslts list of dicts is loaded from a file it should be filtered through this function
-    rslts = np.array(rslts_raw)
-    if 'r' in rslts[0] and rslts[0]['r'].ndim == 1:
-        for i, rs in enumerate(rslts): 
-            rslts[i]['r'] = rs['r'][None, :]
-            rslts[i]['dVdlnr'] = rs['dVdlnr'][None, :]
-    if 'version' in rslts[0] and float(rslts[0]['version'])>1: return rslts # rslts loaded are ≥v1.01
-    if 'dVdlnr' in rslts[0]: # prior to 21/05/2021 we saved normalized; we now use absolute
-        psdNormUnityRTOL = 1e-2 # if relative difference between unity and integral of PSD over r is greater than this we assume PSD is absolute
-        psdTruncThresh = 1e-3 # if first or last PSD bin is greater than this fraction of max(PSD[:]) then this particular PSD is significantly truncated and we ignore it when checking for normalization b/c it is expected to integrate to <1 in normalized case
-#             ra = np.concatenate([[dv[[0,-1]]/dv.max() for dv in rs['dVdlnr']] for rs in rslts]).max(axis=1) # %timeit -> 600 ms
-        ra = np.concatenate([rs['dVdlnr'][:,[0,-1]].max(axis=1)/rs['dVdlnr'].max(axis=1) for rs in rslts]) # %timeit -> 229 ms
-        nonTruncInd = ra < psdTruncThresh
-        if not nonTruncInd.any():
-            warnings.warn('All PSDs were significantly truncated and normalization could not be detemrined. dVdlnr may or may not be in absolute units.')
-            return rslts
-        trp = np.concatenate([np.trapz(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
-        if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
-            for rs in rslts: 
-                rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
-    return rslts
-
-RSLT_DICT_VERSION = '1.01' # Need to increment this if any meaningful changes made to rslts list of dicts
 
 class graspDB():
 
@@ -133,7 +106,7 @@ class graspDB():
         if len(self.rslts)==0: warnings.warn('\nNo pixels were successfully processed!\n')
         print('%d pixels processed in %8.2f seconds (%5.2f pixels/second)' % (len(self.rslts), dtSec, len(self.rslts)/dtSec))
         if savePath:
-            self.rslts[0]['version'] = RSLT_DICT_VERSION
+            self.rslts[0]['version'] = rsltDictTools.VERSION
             with open(savePath, 'wb') as f:
                 pickle.dump(self.rslts, f, pickle.HIGHEST_PROTOCOL)
         self.rslts = np.array(self.rslts) # numpy lists indexed w/ only assignment (no copy) but prior code built for std. list
@@ -142,7 +115,7 @@ class graspDB():
     def loadResults(self, loadPath):
         try:
             with open(loadPath, 'rb') as f:
-                self.rslts = frmtLoadedRslts(pickle.load(f))
+                self.rslts = rsltDictTools.frmtLoadedRslts(pickle.load(f))
             return self.rslts
         except EnvironmentError:
             warnings.warn('Could not load valid pickle data from %s.' % loadPath)
@@ -547,6 +520,7 @@ class graspRun():
         if not NC4_LOADED:
             print('netCDF4 module failed to import, file could not be written.')
             return
+        vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
         rsltDict = self._findRslts(rsltDict, customOUT)
         with Dataset(nc4Path, 'w', format='NETCDF4') as root_grp: # open/create netCDF4 data file
             root_grp.description = 'Results of a GRASP run'
@@ -680,7 +654,7 @@ class graspRun():
                 varNm = 'ROD'
                 varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (λName))
                 varHnds[varNm].units = 'none'
-                varHnds[varNm][:] = self.seaLevelROD(varHnds[λName][:])
+                varHnds[varNm][:] = seaLevelROD(varHnds[λName][:])
                 varHnds[varNm].long_name = 'Rayleigh Optical Depth'
                 varNm = 'rayleigh_depol'
                 varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (λName))
@@ -714,12 +688,6 @@ class graspRun():
         else:
             assert False, 'This method can not currently handle a variables with more than 4 dimensions.' # easy to add one more dim, but fully generalizing the above is really tricky
         return True
-
-    def seaLevelROD(self, λtarget):
-        λ =   np.r_[0.3600, 0.3800, 0.4100, 0.5500, 0.6700, 0.8700, 1.5500, 1.6500]
-        rod = np.r_[0.5612, 0.4474, 0.3259, 0.0973, 0.0436, 0.0152, 0.0015, 0.0012]
-        assert λ.min()<=λtarget.min() and λ.max()>=λtarget.max(), 'λtarget falls outside the range of pre-programed values!'
-        return np.interp(λtarget, λ, rod**-0.25)**-4
 
     def parseOutDateTime(self, contents):
         results = []
@@ -848,11 +816,11 @@ class graspRun():
                     λ550Ind = np.argmin(np.abs(rs['lambda']-0.55))
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
-                        rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
+                        rs['βext'][mode,:] = 1e6*ms.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
         if ('dVdlnr' in results[0]):
             for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
             if 'rEff' not in results[0]:
-                rEffs = mf.integratePSD(results, moment='rEff')
+                rEffs = ms.integratePSD(results, moment='rEff')
                 for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
         return results, wavelengths
 
@@ -869,6 +837,9 @@ class graspRun():
             self.parseMultiParamFld(contents, i, results, ptrnBPDF, 'bpdf')
             self.parseMultiParamFld(contents, i, results, ptrnWater, 'wtrSurf', Nλ=Nλ)
             i += 1
+        for key in ['bpdf', 'albedo']: # spectral variables we want to ensure are 2D (1 x Nlambda) [May be better to do this inside parseMultiParamFld() at some point]
+            if key in results[0]: 
+                for rs in results: rs[key] = np.atleast_2d(rs[key])
         return results
 
     def parsePhaseMatrix(self, contents, wavelengths): # wavelengths is need here specificly b/c PM elements don't give index (only value in um)
@@ -1018,6 +989,107 @@ class graspRun():
         return nStr+dtStr+endstr
 
 
+
+class rsltDictTools():
+
+    VERSION = '1.02' # Need to increment this if any meaningful changes made to rslts list of dicts
+    MEAS_TYPES = ('I','Q','U','P','QoI','UoI','PoI','DP','VExt','VBS','LS','DP')
+    END_STRS = ('ocean', 'land', 'oceanStd', 'landStd', 'sky')
+    KEYS = { # See README.md for a complete list (which this currently is not)
+        'stateTotSpctrl'   :('aod','ssa','albedo','g','LidarRatio','LidarDepol'),
+        'stateModeSpctrl'  :('aodMode','ssaMode','n','k','gMode','LidarRatioMode','LidarDepolMode'),
+        'stateSurfSpctrl'  :('albedo','brdf','bpdf','wtrSurf','cxMunk'), # wtrSurf is output by GRASP, but cxMunk is used in case where it is known to be Cox Munk (e.g., YAML writer keys)
+        'statePMSpctrl'  :('angle','p11','p12','p22','p33','p34','p44'),
+        'observeSpctrlGeom':('sca_ang','sza','vis','fis','RangeLidar'),
+        'observeSpctrlFit' :tuple('fit_'+mt for mt in MEAS_TYPES),
+        'observeSpctrlMeas':tuple('meas_'+mt for mt in MEAS_TYPES),
+        } # All in a single tuple: sum((x for x in rsltDictTools.KEYS.values()), ())
+
+    def frmtLoadedRslts(rslts_raw):
+        # Function to do conditioning on loaded pkl data; used in graspDB and simulation (from simulateRetrieval.py)
+        # If a rslts list of dicts is loaded from a file it should be filtered through this function
+        rslts = np.array(rslts_raw)
+        for i, rs in enumerate(rslts):
+            if 'r' in rs and rs['r'].ndim == 1:
+                rslts[i]['r'] = rs['r'][None, :]
+                rslts[i]['dVdlnr'] = rs['dVdlnr'][None, :]
+            for szaKeyEnd in rsltDictTools.END_STRS+('',):
+                szaKey = 'sza_'+szaKeyEnd
+                if szaKey in rs and rs[szaKey].ndim==0: 
+                    rs[szaKey] = np.tile(rs[szaKey], rs['fis_'+szaKeyEnd].shape)
+            for key in ['bpdf', 'albedo','n','k']: # spectral variables we want to ensure are 2D (1 x Nlambda) (graspRun.readOutput() handles this correctly now but old files and other sources may not)
+                if key in rs: rs[key] = np.atleast_2d(rs[key])
+        if 'version' in rslts[0] and float(rslts[0]['version'])>1: return list(rslts)
+        # Applied only to results older than Version 1.01
+        if 'dVdlnr' in rslts[0]: # prior to 21/05/2021 we saved normalized; we now use absolute
+            psdNormUnityRTOL = 1e-2 # if relative difference between unity and integral of PSD over r is greater than this we assume PSD is absolute
+            psdTruncThresh = 1e-3 # if first or last PSD bin is greater than this fraction of max(PSD[:]) then this particular PSD is significantly truncated and we ignore it when checking for normalization b/c it is expected to integrate to <1 in normalized case
+            # ra = np.concatenate([[dv[[0,-1]]/dv.max() for dv in rs['dVdlnr']] for rs in rslts]).max(axis=1) # %timeit -> 600 ms
+            ra = np.concatenate([rs['dVdlnr'][:,[0,-1]].max(axis=1)/rs['dVdlnr'].max(axis=1) for rs in rslts]) # %timeit -> 229 ms
+            nonTruncInd = ra < psdTruncThresh
+            if not nonTruncInd.any():
+                warnings.warn('All PSDs were significantly truncated and normalization could not be detemrined. dVdlnr may or may not be in absolute units.')
+                return list(rslts)
+            trp = np.concatenate([np.trapz(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
+            if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
+                for rs in rslts: 
+                    rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
+        return list(rslts)
+
+    def spectralInterp(rslt, waveNew, verbose, check4oddKeys=True):
+        """
+        Performs linear interpolation on all aerosol state vars, except AOD which use angstrom exponent interpolation.
+        rslt - a single (not list of) rslt dict; waveNew – wavelengths to interpolate to in μm
+        """
+        keys1D = rsltDictTools.KEYS['stateTotSpctrl']
+        cats2D = ['stateModeSpctrl','stateSurfSpctrl','observeSpctrlGeom','observeSpctrlFit','observeSpctrlMeas']
+        keys2D = sum((rsltDictTools.KEYS[typ] for typ in cats2D), ())
+        keys3D = rsltDictTools.KEYS['statePMSpctrl']
+        if check4oddKeys: 
+            keys1D = keys1D + rsltDictTools._findUnusualKeys(rslt, keys1D)
+            keys2D = keys2D + rsltDictTools._findUnusualKeys(rslt, keys2D)
+            keys3D = keys3D + rsltDictTools._findUnusualKeys(rslt, keys3D)
+        waveOld = rslt['lambda']
+        for key, val in rslt.items():
+            if key in keys1D: # 1D variables with lambda as only dim
+                rslt[key] = rsltDictTools._intrpHelp(waveOld, val, waveNew, key)
+            elif key in keys2D: # 2D arrays (N_modes, N_lambda)
+                yNew = np.empty((rslt[key].shape[0], len(waveNew)))
+                for i in range(len(yNew)):
+                    yNew[i] = rsltDictTools._intrpHelp(waveOld, val[i], waveNew, key)
+                rslt[key] = yNew
+            elif key in keys3D: # 3D arrays (N_ang, N_modes, N_lambda)
+                yNew = np.empty(rslt[key].shape[0:2] + (len(waveNew),))
+                for i in range(yNew.shape[0]): # vect2D has shape (N_modes, N_lambda)
+                    for j in range(yNew.shape[1]): # vect1D has shape (N_lambda)
+                        yNew[i,j] = rsltDictTools._intrpHelp(waveOld, val[i,j], waveNew, key)
+                rslt[key] = yNew
+            elif type(val) is np.ndarray and val.shape[-1]==len(waveOld) and key!='lambda' and verbose:
+                warnings.warn('rslt key %s was not interpolated but was an array with final dimension matching length of lambda' % key)
+        rslt['lambda'] = waveNew
+        return rslt
+
+    def _intrpHelp(x, y, xn, key):
+        if np.isnan(y).any():
+            if np.isnan(y).all(): return np.full(xn.shape, np.nan)
+            x = x[~np.isnan(y)] # without these 2 lines np.interp (and maybe angstrmIntrp) will return nans, in some circustances
+            y = y[~np.isnan(y)]
+        if 'aod' in key.lower():
+            return np.asarray([ms.angstrmIntrp(x,y,xNew) for xNew in xn])
+        else:
+            return np.interp(xn, x, y)
+
+    def _findUnusualKeys(rslt, baseKeys=None):
+        if baseKeys is None: baseKeys = sum((x for x in rsltDictTools.KEYS.values()), ())
+        unslKeys = []
+        for key in baseKeys:
+            for endStr in rsltDictTools.END_STRS:
+                testKey = '%s_%s' % (key, endStr)
+                if testKey in rslt: unslKeys.append(testKey)
+        return tuple(unslKeys)
+
+
+
 class pixel():
     def __init__(self, dtObj=None, ix=1, iy=1, lon=0, lat=0, masl=0, land_prct=100, obsHghtKM=700):
         """ dtObj - a datetime object corresponding to measurement time (also accepts matlab style datenum)
@@ -1060,35 +1132,36 @@ class pixel():
             self.measVals.insert(insertInd[0], newMeas)
             return insertInd
 
-    def populateFromRslt(self, rslt, radianceNoiseFun=None, dataStage='fit', verbose=False):
+    def populateFromRslt(self, rslt, radianceNoiseFun=None, dataStage='fit', endStr='', verbose=False):
         """ This method will overwrite any previously existing data in the pixel at the following keys:
             meas_type, nbvm, nip, measurements, sza, thetav, phi, datetime, latitude, longitude, land_prct
             if self.meas == [] when called, populateFromRslt will add a measurement for each wvl in rslt
             radianceNoiseFun will override (and permanently set) self.measVals[n]['errorModel']
-        """ ''' P= 44 for P and P= 46 for P/I'''
+
+        """
+        # find types of measurement to be used
         msTypMap = {'I':41, 'Q':42, 'U':43, 'P':46, 'LS':31, 'DP':35, 'VBS':39, 'VExt':36}
-        msTyps = np.array([key.replace(dataStage+'_','') for key in rslt.keys() if dataStage in key]) # names of all keys with dataStage (e.g. "fit_")
-        
-        if 'P' in msTyps: 
+        keyPtrn = (dataStage + '_%s_' + endStr) if len(endStr)>0 else (dataStage + '_%s')
+        msTyps = np.array([key for key in msTypMap.keys() if (keyPtrn % key) in rslt])
+        # adjust units of polarized radiance data
+        if 'P' in msTyps:
+
             msTyps[msTyps=='P'] = 'P'
         if 'QoI' in msTyps:
-            rslt[dataStage+'_Q'] = rslt[dataStage+'_QoI']*rslt[dataStage+'_I']
+            rslt[keyPtrn % 'Q'] = rslt[keyPtrn % 'QoI']*rslt[keyPtrn % 'I']
             msTyps[msTyps=='QoI'] = 'Q'
         if 'UoI' in msTyps:
-            rslt[dataStage+'_U'] = rslt[dataStage+'_UoI']*rslt[dataStage+'_I']
+            rslt[keyPtrn % 'U'] = rslt[keyPtrn % 'UoI']*rslt[keyPtrn % 'I']
             msTyps[msTyps=='UoI'] = 'U'
-
+        # loop over wavelengths and add measurements and geometry
         for l, lVal in enumerate(rslt['lambda']): # loop over wavelength
-            # print(l, lVal)
-            msTypInd = np.nonzero([not np.isnan(rslt[dataStage+'_'+mt][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
-            # print(msTypInd)
+            msTypInd = np.nonzero([~np.isnan(rslt[keyPtrn % mt][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
             if msTypInd.size>0: # there are measurements at this wavelength
                 measValsInd = self.addMeas(lVal)
                 msDct = self.measVals[measValsInd] # lists and dicts are mutable so changes to msDct['key'] persist in self.measVals
                 msDct['meas_type'] = [msTypMap[mt] for mt in msTyps[msTypInd]] # this is numberic key for measurements avaiable at current λ
                 msTypsNowSorted = msTyps[msTypInd[np.argsort(msDct['meas_type'])]] # need msType names at this λ, sorted by above numeric measurement type keys
-                # print(msTypsNowSorted)
-                msDct['nbvm'] = [len(rslt[dataStage+'_'+mt][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
+                msDct['nbvm'] = [len(rslt[keyPtrn % mt][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
                 msDct['meas_type'] = np.sort(msDct['meas_type'])
                 msDct['nip'] = len(msDct['meas_type'])
                 #g
@@ -1114,11 +1187,9 @@ class pixel():
                     except TypeError:
                         msDct['measurements'] = msDct['errorModel'](l, rslt)
                 else:
-                    msDct['measurements'] = np.reshape([rslt[dataStage+'_'+msStr][:,l] for msStr in msTypsNowSorted], -1)
-                
-                
+                    msDct['measurements'] = np.reshape([rslt[keyPtrn % mt][:,l] for mt in msTypsNowSorted], -1)
                 msDct = self.formatMeas(msDct) # this will tile the above msTyp times
-                # print(msDct)
+        # add pixel metadata
         if 'datetime' in rslt: self.dtObj = rslt['datetime']
         if 'latitude' in rslt: self.lat = rslt['latitude']
         if 'longitude' in rslt: self.lon = rslt['longitude']
@@ -1233,9 +1304,9 @@ class graspYAML():
             'brdf':'surface_land_brdf_ross_li',
             'bpdf':'surface_land_polarized_maignan_breon',
             'cxMnk':'surface_water_cox_munk_iso'}
-        spectralFlds = ['n','k','brdf','bpdf','cxMnk']
+        spctrlFlds = rsltDictTools.KEYS['stateTotSpctrl']+rsltDictTools.KEYS['stateModeSpctrl']+rsltDictTools.KEYS['stateSurfSpctrl']
         for key in vals.keys(): # loop over characteristics
-            if key in spectralFlds:
+            if key in spctrlFlds:
                 shapeValsKey = np.array(vals[key]).shape
                 assert len(shapeValsKey) <= 2, '%s had %d dimensions – It should be 2D!' % (key, len(shapeValsKey))
                 if Nlambda is None:
@@ -1277,7 +1348,10 @@ class graspYAML():
         self.writeYAML()
 
     def scrambleInitialGuess(self, fracOfSpace=1, skipTypes=['aerosol_concentration']):
-        """Set a random initial guess for all types (excluding skipTypes), uniformly choosen from the range between min and max."""
+        """
+        Set a random initial guess for all types that are not skipTypes
+        Random values are uniformly chosen in linear space in range fracOfSpace*(min, max)
+        """
         self.loadYAML()
         fracOfSpace = min(fracOfSpace, 0.999) # ensure we don't hit min/max exactly
         for char in self.dl['retrieval']['constraints'].values():
@@ -1293,8 +1367,10 @@ class graspYAML():
 
     def adjustLambda(self, Nlambda):
         """Change YAML settings to match a specific number of wavelenths, cutting and adding from the longest wavelength."""
-        for lt in self.lambdaTypes: self._repeatElementsInField(fldName=lt, Nrepeats=Nlambda, λonly=True)  # loop over constraint types
-        assert self.access('retrieval.inversion.noises') is not None, 'Could not find YAML field for noises! Note that only GRASP version 1.0 or later YAML files work with this verison of GSFC-GRASP-Python-Interface.'
+        for lt in self.lambdaTypes:
+            self._repeatElementsInField(fldName=lt, Nrepeats=Nlambda, λonly=True)  # loop over constraint types
+        msg = 'Could not find YAML noises field! Note GSFC-GRASP-Python-Interface only works with GRASP version ≥1.0.'
+        assert self.access('retrieval.inversion.noises') is not None, msg
         for n in range(len(self.access('retrieval.inversion.noises'))): # adjust the noise lambda as well
             m = 1
             while self.access('retrieval.inversion.noises.noise[%d].measurement_type[%d]' % (n+1, m)):
@@ -1313,21 +1389,24 @@ class graspYAML():
         """This will cut/repeat using the last element of characteristic fldName so that the number of entries is Nrepeats
             NOTE: This is a helper function that DOES NOT WRITE CHANGES TO THE FILE """
         assert np.issubdtype(type(Nrepeats), np.integer), 'Nrepeats must be an integer!'
+        lSubFlds = ['index_of_wavelength_involved', 'value', 'min', 'max', 'a_priori_estimates.lagrange_multiplier']
         m = 1
         while self.access('%s.%d' % (fldName, m)): # loop over each mode
             λField = self.access('%s.%d.index_of_wavelength_involved' % (fldName, m))[0] > 0 # otherwise yaml specified [0] implying the parameter should be spectrally invarient
             if not λonly or λField:
-                for f in ['index_of_wavelength_involved', 'value', 'min', 'max']:  # loop over each field
+                for f in lSubFlds:  # loop over each field
                     orgVal = self.access('%s.%d.%s' % (fldName, m, f))
-                    if len(orgVal) >= Nrepeats:
+                    if orgVal is not None and len(orgVal) >= Nrepeats:
                         self.access('%s.%d.%s' % (fldName, m, f), orgVal[0:Nrepeats], write2disk=False)
-                    else:
+                    elif orgVal is not None:
                         rpts = Nrepeats - len(orgVal)
                         if f == 'index_of_wavelength_involved' and λField:
                             newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
                         else:
                             newVal = orgVal + np.repeat(orgVal[-1], rpts).tolist()
                         self.access('%s.%d.%s' % (fldName, m, f), newVal, write2disk=False)
+                    else: # orgVal is None 
+                        assert f=='a_priori_estimates.lagrange_multiplier', '%s not found in %s (it is mandatory)' % (f,fldName)
             m += 1
 
     def adjustVertBins(self, Nbins):
@@ -1353,7 +1432,8 @@ class graspYAML():
             if mtch: # we may still be able to add the value if we append a mode
                 lastModePath = np.r_[fldPath.split('.')[0:3] + ['mode[%d]' % (int(mtch.group(1))-1)] + fldPath.split('.')[4:]]
                 if self.YAMLrecursion(self.dl, lastModePath): # this field does exist in the previous mode, we will copy it
-                    if verbose: print('The field does exists in previous mode of the same characterisitics, using it as a template to append a new mode...')
+                    if verbose: 
+                        print('%s exists in prior mode, using as template for new mode...' % fldPath)
                     lastModeVal = self.YAMLrecursion(self.dl, lastModePath[0:4])
                     self.dl['retrieval']['constraints'][fldPath.split('.')[2]]['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lastModeVal)
                     prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal) # new mode exist now, write value to it
@@ -1365,20 +1445,28 @@ class graspYAML():
 
     def exapndFldPath(self, fldPath):
         self.loadYAML()
-        if fldPath == 'path_to_internal_files': # <-SHORTCUT: fldPath='path_to_internal_files'
+        if fldPath == 'path_to_internal_files': 
             return 'retrieval.general.path_to_internal_files'
-        if fldPath == 'stop_before_performing_retrieval': # <-SHORTCUT:
+        if fldPath == 'stop_before_performing_retrieval':
             return 'retrieval.mode'
-        if fldPath == 'stream_fn': # <-SHORTCUT:
+        if fldPath == 'stream_fn':
             return 'output.segment.stream'
-        if fldPath == 'sdata_fn': # <-SHORTCUT:
+        if fldPath == 'sdata_fn':
             return 'input.file'
         charN = np.nonzero([val['type'] in fldPath for val in self.dl['retrieval']['constraints'].values()])[0]
-        if charN.size > 0: # <-SHORTCUT: any type, ex. fldPath='aerosol_concentration' (set mode 1, value)
+        if charN.size > 0: # any type, ex. fldPath='aerosol_concentration' (set mode 1, value)
             fPvct = fldPath.split('.') # OR fldPath='aerosol_concentration.2' (mode 2, value)
             mode = fPvct[1] if len(fPvct) > 1 else 1 # OR fldPath='aerosol_concentration.2.min' (mode 3, min)
-            fld = fPvct[2] if len(fPvct) > 2 else 'value'
-            return 'retrieval.constraints.characteristic[%d].mode[%s].initial_guess.%s' % (charN[0]+1, mode, fld)
+            if len(fPvct)==4 and fPvct[2]=='a_priori_estimates': # e.g., 'aerosol_concentration.2.a_priori_estimates.lagrange_multiplier
+                fld = '.'.join(fPvct[2:])
+                overFld = 'single_pixel' # probably will be: 'single_pixel.a_priori_estimates.lagrange_multiplier'
+            elif len(fPvct)<4:
+                overFld = 'initial_guess'
+                fld = fPvct[2] if len(fPvct) > 2 else 'value'
+            else:
+                assert False, 'Failed expanding %s. Characteristic found but %s not understood.' % (fldPath, '.'.join(fPvct[2:]))
+            pthPtrn = 'retrieval.constraints.characteristic[%d].mode[%s].%s.%s'
+            return pthPtrn % (charN[0]+1, mode, overFld, fld)
         return fldPath
 
     def writeYAML(self):
