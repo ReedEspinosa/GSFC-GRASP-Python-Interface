@@ -1398,15 +1398,35 @@ class graspYAML():
                     orgVal = self.access('%s.%d.%s' % (fldName, m, f))
                     if orgVal is not None and len(orgVal) >= Nrepeats:
                         self.access('%s.%d.%s' % (fldName, m, f), orgVal[0:Nrepeats], write2disk=False)
+                    # elif orgVal is not None:
+                    #     rpts = Nrepeats - len(orgVal)
+                    #     if f == 'index_of_wavelength_involved' and λField:
+                    #         newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
+                    #     else:
+                    #         newVal = orgVal + np.repeat(orgVal[-1], rpts).tolist()
+                    #     self.access('%s.%d.%s' % (fldName, m, f), newVal, write2disk=False)
+                       
+                       
+                        # modified by greema: Repeating second to last instead of last value in the yaml file. 
                     elif orgVal is not None:
                         rpts = Nrepeats - len(orgVal)
                         if f == 'index_of_wavelength_involved' and λField:
                             newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
+                            if fldName =='vertical_profile_normalized': 
+                                newVal = orgVal[:-1] + [orgVal[-2]]+  np.r_[(orgVal[-2]+1):(orgVal[-2]+1+rpts)].tolist()
+                                newVal[-1] = orgVal[-1]
+
                         else:
                             newVal = orgVal + np.repeat(orgVal[-1], rpts).tolist()
+                            if fldName =='vertical_profile_normalized': 
+                                newVal = orgVal[:-1]+ [orgVal[-2]] + np.repeat(orgVal[-2], rpts).tolist()
+                                newVal[-1] = orgVal[-1]
                         self.access('%s.%d.%s' % (fldName, m, f), newVal, write2disk=False)
+                        
                     else: # orgVal is None 
                         assert f=='a_priori_estimates.lagrange_multiplier', '%s not found in %s (it is mandatory)' % (f,fldName)
+
+                    
             m += 1
 
     def adjustVertBins(self, Nbins):
