@@ -29,6 +29,7 @@ def HSRL2_checkFillVals(param):
     param[:] = np.where(param < 0, 0, param)
     param[:] = np.where(np.isnan(param), 0, param)
     return param
+
 #Checks for negative values and replaces them by nan
 def HSRL_checkFillVals(param):
     param[:] = np.where(param[:] < 0 , np.nan, param[:])     
@@ -208,6 +209,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
 
 
 
+
 def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
 
     f1= h5py.File(file_path + file_name,'r+')  #reading Lidar measurements 
@@ -227,8 +229,8 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
             Data_dic[f'{inp[i]}'] = np.where(HSRL[f'{inp[i]}'][PixNo][:]>= 0.6 , np.nan, HSRL[f'{inp[i]}'][PixNo])  #CH: This should be changed, 0.7 has been set arbitarily
 
     #Caculating range, Range is defined as distance from the instrument to the aersosol layer, i.e. range at instrument heright = 0. We have to make sure that The range is in decending order
-    Data_dic['Altitude'] = AirAlt - HSRL['Altitude'][0]   #using definition of range: distance from the instrument
-    # Data_dic['Altitude'] = HSRL['Altitude'][0]  #Using altitude above sea level
+    Data_dic['Altitude'] = HSRL['Altitude'][0]  # altitude above sea level
+    # Data_dic['Altitude'] = HSRL['Altitude'][0]  
     df_new = pd.DataFrame(Data_dic)
     df_new.interpolate(inplace=True, limit_area= 'inside')
 
@@ -279,8 +281,10 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     for k in df_mean.keys():
         print(df_mean[k].shape)
 
-    df = df_mean[:]
-    rslt = {} # 
+    df = df_mean[::-1] # GRASP requires the vertical profiles to be arranged in descending order, hence reversing the data.
+    
+    
+    rslt = {} # This dictionary will store the values arranged in GRASP's format. 
     height_shape = np.array(df['Altitude'][:]).shape[0] #to avoid the height of the sea salt, this should be removed 
 
     Range = np.ones((height_shape,3))
@@ -328,16 +332,16 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
 
 #Read_Data_HSRL_Oracles Version .2 
 # Using different averaging method for vertical profile averaging 
+
+
 def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
 
-        #Specify the Path and the name of the HSRL file
-
-
+ #Specify the Path and the name of the HSRL file
     #Reading the HSRL data
     f1= h5py.File(file_path + file_name,'r+')  #reading Lidar measurements 
 
     HSRL = f1['DataProducts']
-    AirAlt = f1['Nav_Data']['gps_alt'][PixNo]-2000 #Altitude of the aircraft
+    AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
 
     Data_dic ={} #This dictionary stores all the HSRL variables used for GRASP forward simulation
     inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep',]
@@ -355,9 +359,6 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
         HSRL2_checkFillVals(Data_dic[f'{inp[i]}']) # set all negative values to zero
         Data_dic['Altitude'] = HSRL2_checkFillVals(HSRL['Altitude'][0][hminInd:hmaxInd])  # Height of the aerosol layer from the sea level
         df_new = pd.DataFrame(Data_dic)
-
-
-
 
     Plot_avg_prof = True
     avgProf = pd.DataFrame() # Vertical Averaged Profiles
@@ -395,11 +396,10 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
             a=a+1 # Indexing variable
         #Storing the values of profile
         avgProf[f'{inp[k]}'] = averaged_values[np.where(hgtAvg>0)] #Averaged profile values with height >0 
-        avgProf['Altitude'] = AirAlt - hgtAvg[np.where(hgtAvg>0)] #Averaged height values greater than 0
-        # avgProf['Altitude'] =  hgtAvg[np.where(hgtAvg>0)]
+        avgProf['Altitude'] =  hgtAvg[np.where(hgtAvg>0)]
         
-    df = avgProf[:]  ## GRASP requires the vertical profiles to be in decendong order, so reversing the entire profile
-    # df = avgProf[::-1]
+    ## GRASP requires the vertical profiles to be in decendong order, so reversing the entire profile
+    df = avgProf[::-1]
     if Plot_avg_prof ==True:
         fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
         for i in range (0,len(inp)):
@@ -437,7 +437,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     # Bsca[0,2] = np.nan 
 
     Dep = np.ones((height_shape,3))
-    Dep[:,0] = df['355_dep'][:]
+    Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
     Dep[:,1] = df['532_dep'][:]
     Dep[:,2] = df['1064_dep'] [:]
 
@@ -452,13 +452,11 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
     rslt['latitude'] = f1['Nav_Data']['gps_lat'][PixNo]
     rslt['longitude']= f1['Nav_Data']['gps_lon'][PixNo]
-    rslt['OBS_hght']=  AirAlt# aircraft altitude in m
+    rslt['OBS_hght']= AirAlt # aircraft altitude in m
     rslt['land_prct'] = 0 #Ocean Surface
 
     f1.close()
     return rslt
-
-
 
 
 
