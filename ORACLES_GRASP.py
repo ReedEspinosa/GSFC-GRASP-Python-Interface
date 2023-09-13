@@ -63,7 +63,7 @@ def VariableNoise(YamlFileName,nwl=3): #This will store the inforamtion of the c
     Info = []
     with open(YamlFileName, 'r') as f:  
         data = yaml.safe_load(f)
-    for i in range (1,nwl):
+    for i in range (1,nwl+1):
         Noise_yaml = data['retrieval']['inversion']['noises'][f'noise[{i}]']
         errType =  Noise_yaml['error_type']
         noiseName = Noise_yaml[f'measurement_type[1]']['type'] #type of measurement
@@ -451,9 +451,27 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, forward = None, retrieval = None, Createpdf
     font_name = "Times New Roman"
     plt.rcParams['font.size'] = '18'
 
+
     
 
     pdf_pages = PdfPages(PdfName) 
+
+    if Createpdf == True:
+        
+        x = np.arange(10, 1000, 0.1)
+        y = np.zeros(len(x))
+        plt.figure(figsize=(30,15)) 
+        #adding text inside the plot
+        plt.text(-10, 0.000005,combinedVal , fontsize = 22)
+        
+        plt.plot(x, y, c='w')
+        
+        plt.xlabel("X-axis", fontsize = 15)
+        plt.ylabel("Y-axis",fontsize = 15)
+        
+        
+        pdf_pages.savefig()
+            
     if forward == True:
         #Converting range to altitude
         altd = (Hsph['RangeLidar'][:,0])/1000 #altitude for spheriod
@@ -561,19 +579,10 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, forward = None, retrieval = None, Createpdf
         dt_t = Hex['datetime']
         plt.suptitle(f'HSRL2 Aerosol Retrieval \n  Lat:{lat_t} Lon :{lon_t}\n Date: {dt_t}')
         pdf_pages.savefig()
-        
+        pdf_pages.close()
         fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{dt_t}_RSPRetrieval.png', dpi = 400)
         
-        if Createpdf == True:
-            
-            fig, axs = plt.subplots(nrows= 1, ncols=1, figsize=(38, 30))
         
-            # Define font properties for the title
-            title_font = FontProperties(family='Times New Roman', size=20)
-            # Set the title with the custom font properties
-            axs.set_title(combinedVal, fontdict={'fontproperties': title_font})
-            pdf_pages.savefig()
-            pdf_pages.close()
     return
 
 
@@ -631,7 +640,8 @@ for i in range(1):
     # LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn, updateYaml= None)
     
     print('SPH',"tam" )
-    print(HSRL_sphrod[0]['aod'],HSRL_Tamu[0]['aod'])
+    print(HSRL_sphrod[0][0]['aod'],HSRL_Tamu[0][0]['aod'])
+    plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="HSRL_Plots.pdf", combinedVal =HSRL_sphrod[2])
 
 
 # #Running GRASP for HSRL, HSRL_sphrod = for spheriod kernels,HSRL_Tamu = Hexahedral kernels
