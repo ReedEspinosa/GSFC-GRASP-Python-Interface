@@ -38,14 +38,15 @@ class graspDB():
         """
         The graspDB class is designed to run many instances of GRASP in parallel/sequence (depending on maxCPU and maxT below).
         It also contains a variety of (rather old) plotting functions to apply to many grasp results
-        INPUTS: graspRunObjs - what it sounds like, a list of grasp run objects
+        INPUTS: graspRunObjs - what it sounds like, a list of grasp run objects OR just a graspRun with LOTS of pixels
                 maxCPU - the maximum number of GRASP process to run at any given time (each process consumes one core); Default is 2
                 maxT - the maximum number of pixels to include in a single GRASP process; None for no max (not used if graspRunObjs is list)
         """
         self.maxCPU = maxCPU
-        if type(graspRunObjs) is list:
+        if type(graspRunObjs) is list: # already a list of i_n objects; totalPixels = Σi len(graspRunObjs[i].pixels)
+            if maxT: warnings.warn('graspDB was explicitly initiated with maxT=%d but maxT is ignored when graspRunObjs is a list.')
             self.grObjs = graspRunObjs
-        elif 'graspRun' in type(graspRunObjs).__name__:
+        elif 'graspRun' in type(graspRunObjs).__name__: # single run that needs to be subdivided
             assert maxCPU or maxT, 'maxCPU or maxT must be provided to subdivide the graspRun! If you want to process a single run sequentially pass it as a single element list.'
             self.grObjs = []
             Npix = len(graspRunObjs.pixels)
@@ -55,7 +56,7 @@ class graspDB():
                 grspChnkSz = int(maxT if maxT else int(np.ceil(Npix/maxCPU)))
             strtInds = np.r_[0:Npix:grspChnkSz]
             for strtInd in strtInds:
-                gObj = graspRun(graspRunObjs.yamlObj.YAMLpath, graspRunObjs.orbHght/1e3, releaseYAML=graspRunObjs.releaseYAML) # not specifying dirGRASP so a new temp dir is created
+                gObj = graspRun(graspRunObjs.yamlObj.YAMLpath, releaseYAML=graspRunObjs.releaseYAML) # not specifying dirGRASP so a new temp dir is created
                 endInd = min(strtInd+grspChnkSz, Npix)
                 for ind in range(strtInd, endInd):
                     gObj.addPix(graspRunObjs.pixels[ind])
@@ -520,7 +521,6 @@ class graspRun():
         if not NC4_LOADED:
             print('netCDF4 module failed to import, file could not be written.')
             return
-        vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
         rsltDict = self._findRslts(rsltDict, customOUT)
         with Dataset(nc4Path, 'w', format='NETCDF4') as root_grp: # open/create netCDF4 data file
             root_grp.description = 'Results of a GRASP run'
@@ -577,6 +577,8 @@ class graspRun():
                 varHnds[angName][:] = rsltDict[0]['angle'][:,0,0] # assume scattering angle same for all pixels, modes, wavelengths (fundamental to NC4 concept)
                 varHnds[angName].units = 'degrees'
                 varHnds[angName].long_name = 'Scattering angle for PM'
+            else:
+                angName = None
 
             # write data variables
             for key in rsltDict[0].keys(): # loop over keys
@@ -666,6 +668,7 @@ class graspRun():
         """ Creates and writes data to a new netCDF variable """
         if not srchKey==trgtKey: return False
         if nc4Key is None: nc4Key = trgtKey
+        vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
         varHnds[nc4Key] = root_grp.createVariable(nc4Key, 'f8', dimTuple)
         varHnds[nc4Key].units = units
         varHnds[nc4Key].long_name = desc
@@ -1114,7 +1117,7 @@ class pixel():
             warnings.warn('land_prct provided was %4.2f – this value is a percentage (100 => completely land)' % newValue)
         self.land_prct = newValue
     #g
-    def addMeas(self, wl, msTyp=[], nbvm=[], sza=[], thtv=[], phi=[], msrmnts=[],gaspar=[], errModel=None):  #gaspar=[]
+    def addMeas(self, wl, msTyp=[], nbvm=[], sza=[], thtv=[], phi=[], msrmnts=[], gaspar=[], errModel=None): 
         """ This method is called once for each wavelength of data (see frmtMsg below)
             The index i where the new data is stored in self.measVals[i] is returned
             Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)
@@ -1134,7 +1137,7 @@ class pixel():
 
     def populateFromRslt(self, rslt, radianceNoiseFun=None, dataStage='fit', endStr='', verbose=False):
         """ This method will overwrite any previously existing data in the pixel at the following keys:
-            meas_type, nbvm, nip, measurements, sza, thetav, phi, datetime, latitude, longitude, land_prct
+            measVals(includes meas_type, nbvm, nip, measurements, sza, thetav, phi, etc.), datetime, latitude, longitude, land_prct
             if self.meas == [] when called, populateFromRslt will add a measurement for each wvl in rslt
             radianceNoiseFun will override (and permanently set) self.measVals[n]['errorModel']
 
@@ -1154,25 +1157,22 @@ class pixel():
             rslt[keyPtrn % 'U'] = rslt[keyPtrn % 'UoI']*rslt[keyPtrn % 'I']
             msTyps[msTyps=='UoI'] = 'U'
         # loop over wavelengths and add measurements and geometry
+        self.measVals = []; self.nwl=0 # wipe out any existing measVals – start from scratch, even if rslt has fewer wavelengths that measVals did originally
         for l, lVal in enumerate(rslt['lambda']): # loop over wavelength
             msTypInd = np.nonzero([~np.isnan(rslt[keyPtrn % mt][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
             if msTypInd.size>0: # there are measurements at this wavelength
                 measValsInd = self.addMeas(lVal)
-                msDct = self.measVals[measValsInd] # lists and dicts are mutable so changes to msDct['key'] persist in self.measVals
+                msDct = self.measVals[measValsInd] # cleaner syntax (lists and dicts are mutable so changes to msDct['key'] persist in self.measVals)
                 msDct['meas_type'] = [msTypMap[mt] for mt in msTyps[msTypInd]] # this is numberic key for measurements avaiable at current λ
                 msTypsNowSorted = msTyps[msTypInd[np.argsort(msDct['meas_type'])]] # need msType names at this λ, sorted by above numeric measurement type keys
                 msDct['nbvm'] = [len(rslt[keyPtrn % mt][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
                 msDct['meas_type'] = np.sort(msDct['meas_type'])
                 msDct['nip'] = len(msDct['meas_type'])
-                #g
-                msDct['gaspar'] = msDct['gaspar']
                 
                 if np.all(msDct['meas_type'] < 40): # lidar data
                     msDct['sza'] = 0.01 # we assume vertical lidar
                     msDct['thetav'] = rslt['RangeLidar'][:,l]
                     msDct['phi'] = np.repeat(0, len(msDct['thetav']))
-                    #g
-                    # msDct['gaspar'] = msDct['gaspar'][l]
                 elif np.all(msDct['meas_type'] > 40): # polarimeter data
                     msDct['sza'] = rslt['sza'][0,l] # GRASP/rslt dictionary return seperate SZA for every view, even though SDATA doesn't support it
                     msDct['thetav'] = rslt['vis'][:,l]
