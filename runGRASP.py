@@ -752,12 +752,12 @@ class graspRun():
                     dtNow = dt.combine(dates_list[j], times_list[j])
                     results.append(dict(datetime=dtNow))
             if not ptrnLon.match(line) is None: # longitude
-                lonVals = np.array(line[ptrnLon.match(line).end():-1].split(), dtype=np.float64)
+                lonVals = np.array(line[ptrnLon.match(line).end():-1].split(), dtype=np.float32)
                 for k,lon in enumerate(lonVals):
                     results[k]['longitude'] = lon
                 LatLonLinesFnd += 1
             if not ptrnLat.match(line) is None: # longitude
-                latVals = np.array(line[ptrnLat.match(line).end():-1].split(), dtype=np.float64)
+                latVals = np.array(line[ptrnLat.match(line).end():-1].split(), dtype=np.float32)
                 for k,lat in enumerate(latVals):
                     results[k]['latitude'] = lat
                 LatLonLinesFnd += 1
