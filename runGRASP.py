@@ -720,7 +720,7 @@ class graspRun():
     def parseSingleParamFld(self, line, results, ptrn, fdlName):
         ptrnMatch = ptrn.match(line)
         if ptrnMatch is not None: 
-            vals = np.array(line[ptrnMatch.end():-1].split(), dtype=np.float)
+            vals = np.array(line[ptrnMatch.end():-1].split(), dtype=float)
             for k,val in enumerate(vals):
                 results[k][fdlName] = val
         return ptrnMatch is not None                
