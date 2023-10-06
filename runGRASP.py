@@ -982,6 +982,9 @@ class graspRun():
     def genSDATAHead(self, unqTimes):
         nx = max([pix.ix for pix in self.pixels])
         ny = max([pix.iy for pix in self.pixels])
+        if nx==1 and ny==1 and len(self.pixels)>len(unqTimes):
+            msg = "\n>>> Nx=Ny=1 with %d pixels but only %d unique times. GRASP likes pixel locations to be distinct in spacetime.\n"
+            warnings.warn(msg % (len(self.pixels), len(unqTimes)))
         Nstr = ' %d %d %d : NX NY NT' % (nx, ny, len(unqTimes))
         return 'SDATA version 2.0\n%s\n' % Nstr
 
