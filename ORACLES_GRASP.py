@@ -298,7 +298,7 @@ def RSP_Run(Kernel_type,PixNo,ang1,ang2,TelNo,nwl):
         rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
         return rslts
 #Running the GRASP for spherical or hexahedral shape model for HSRL data
-def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo,nwl, updateYaml= None,ConsType = None,releaseYAML=True):
+def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None,ConsType = None,releaseYAML =True):
         #Path to the kernel files
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
         
@@ -859,7 +859,7 @@ for i in range(1):
     
 #     # Retrieval_type = 'NosaltStrictConst_final'
 #     # #Running GRASP for HSRL, HSRL_sphrod = for spheriod kernels,HSRL_Tamu = Hexahedral kernels
-    HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,nwl,HSRLPixNo,updateYaml= False,releaseYAML= True) 
+    HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,updateYaml= False,releaseYAML= True) 
     HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, nwl,HSRLPixNo,updateYaml= False,releaseYAML= True)
 
     print('Cost Value Sph, tamu: ',  HSRL_sphrod[0][0]['costVal'],HSRL_Tamu[0][0]['costVal'])
