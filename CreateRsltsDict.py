@@ -125,7 +125,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     vzi =  np.radians(Viewing_Azimuth)
     
     Relative_Azi = (180/np.pi)*(np.arccos((np.cos((Scattering_ang *np.pi)/180)  + np.cos(sza)*np.cos(vza))/(- np.sin(sza)*np.sin(vza)) ))
-
+    #TODO
     # Relative_Azi = Solar_Azimuth - Viewing_Azimuth
     # for i in range (len(Relative_Azi)): 
     #     if Relative_Azi[i]<0 : Relative_Azi[i] =  Relative_Azi[i]+360
@@ -238,6 +238,7 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     Removed_index = []  # Removed_index holds indices of pixels to be removed
     # Filter values greater than flight altitude
     Removed_index.append(np.nonzero(np.array(df_new['Altitude'][:]) > AirAlt)[0][:])
+    # Removed_index.append(np.nonzero(np.array(df_new['Altitude'][:]) < 1000)[0][:]) #this removes the profile below 1000m 
     # Filter values less than or equal to zero altitude
     Removed_index.append(np.nonzero(np.array(df_new['Altitude'][:]) <= 0)[0][:])
     # Filter values less than or equal to zero range
@@ -304,7 +305,8 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     Bsca[:,1] = df['532_bsc_Sa'] [:]
     Bsca[:,2] = df['1064_bsc_Sa'][:]
 
-    # Bsca[0,2] = np.nan 
+    Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
+
 
     Dep = np.ones((height_shape,3))
     Dep[:,0] = df['355_dep'][:]
@@ -319,7 +321,7 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
 
     rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
     rslt['wl'] = np.array([355,532,1064])/1000
-    rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+    rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
     rslt['latitude'] = latitude[PixNo]
     rslt['longitude']= longitude[PixNo]
     rslt['OBS_hght']=  AirAlt# aircraft altitude in m
@@ -427,14 +429,14 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     Bext[:,0] = df['355_ext'][:]
     Bext[:,1] = df['532_ext'][:]
     Bext[:,2] = df['1064_ext'] [:]
-    Bext[0,2] = np.nan 
+    Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
 
     Bsca = np.ones((height_shape,3))
     Bsca[:,0] = df['355_bsc_Sa'][:]
     Bsca[:,1] = df['532_bsc_Sa'] [:]
     Bsca[:,2] = df['1064_bsc_Sa'][:]
 
-    # Bsca[0,2] = np.nan 
+    Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
     Dep = np.ones((height_shape,3))
     Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
@@ -449,7 +451,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
 
     rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
     rslt['wl'] = np.array([355,532,1064])/1000
-    rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+    rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
     rslt['latitude'] = f1['Nav_Data']['gps_lat'][PixNo]
     rslt['longitude']= f1['Nav_Data']['gps_lon'][PixNo]
     rslt['OBS_hght']= AirAlt # aircraft altitude in m
@@ -573,7 +575,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
 
 #     rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
 #     rslt['wl'] = np.array([355,532,1064])/1000
-#     rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+#     rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
 #     rslt['latitude'] = latitude[PixNo]
 #     rslt['longitude']= longitude[PixNo]
 #     rslt['OBS_hght']=  AirAlt# aircraft altitude. 
