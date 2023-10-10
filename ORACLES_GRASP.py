@@ -46,7 +46,7 @@ HSRLfile_name =  "/HSRL2_P3_20180922_R2.h5" #Name of the ORACLES file
 GasAbsFn = '/home/gregmi/ORACLES/UNL_VRTM/shortwave_gas.unlvrtm.nc'
 
 #This is required if we want to configure the HSRL yaml file based on the GRASP output for the RSP
-noMod =2  #number of aerosol mode, here 2 for fine+coarse mode configuration
+noMod =3  #number of aerosol mode, here 2 for fine+coarse mode configuration
 maxr=1.05  #set max and min value : here max = 5% incease, min 5% decrease : this is a very narrow distribution
 minr =0.95
 a=1 #no of char # this is a varible added to char and modes to avoid char[0]/ mod[0] which doesnt exist
@@ -268,17 +268,18 @@ def RSP_Run(Kernel_type,PixNo,ang1,ang2,TelNo,nwl):
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
         # Kernel_type =  sphro is for the GRASP spheriod kernal, while TAMU is to run with Hexahedral Kernal
         if Kernel_type == "sphro":
-            fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_2modes_SphrodShape_ORACLE.yml'
-            # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes_Shape_ORACLE_DoLP_2COARSE.yml'
+            # fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_2modes_SphrodShape_ORACLE.yml'
+            fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_3modes_SphrodShape_ORACLE.yml'
             # binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP_v112/bin/grasp_app' 
-            
+            binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
+           
             savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
         
         if Kernel_type == "TAMU":
-            fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_2modes_HexShape_ORACLE.yml'
-            # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes_Shape_ORACLE_DoLP_dust_2Coarse.yml'
-            # binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
-            binPathGRASP ='/home/shared/GRASP_GSFC/build_HexV112_4Modes/bin/grasp_app'
+            # fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_2modes_HexShape_ORACLE.yml'
+            fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_3modes_HexShape_ORACLE.yml'
+            binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
+            # binPathGRASP ='/home/shared/GRASP_GSFC/build_HexV112_4Modes/bin/grasp_app'
             savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
 
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
@@ -297,6 +298,9 @@ def RSP_Run(Kernel_type,PixNo,ang1,ang2,TelNo,nwl):
         #rslts contain all the results form the GRASP inverse run
         rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
         return rslts
+
+
+
 #Running the GRASP for spherical or hexahedral shape model for HSRL data
 def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None,ConsType = None,releaseYAML =True):
         #Path to the kernel files
@@ -366,21 +370,21 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     if Kernel_type == "sphro":  #If spheriod model
         #Path to the yaml file for sphriod model
         fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_V.1.2.yml'
-        # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLARandLIDAR_10Vbins_2modes_ORACLES_2Coarse.yml'
+        fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_3modes_V.1.2.yml'
         if updateYaml == True:  # True if init conditions for Yaml file for HSRL is updated from the GRASP output from RSP
             update_HSRLyaml(fwdModelYAMLpath, rslts_Sph[0], noMod, maxr, minr, a,Kernel_type)
             
             fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/Settings_Sphd_RSP_HSRL.yaml'
         # binPathGRASP = path toGRASP Executable for spheriod model
         # binPathGRASP ='/home/shared/GRASP_GSFC/build_SphrdV112_Noise/bin/grasp_app'
-        binPathGRASP ='/home/shared/GRASP_GSFC/build_HexV112_4Modes/bin/grasp_app'  #This will work for both the kernels as it has more parameter wettings
+        binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'  #This will work for both the kernels as it has more parameter wettings
        
         # binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP_v112/bin/grasp_app' 
         savePath=f"/home/gregmi/ORACLES/HSRL1_P3_20180922_R03_{Kernel_type}"
     
     if Kernel_type == "TAMU":
-        fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_V.1.2_TAMU.yml'
-        # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLARandLIDAR_10Vbins_2modes_Tamu_2Coarse.yml'
+        # fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_V.1.2_TAMU.yml'
+        fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_3modes_V.1.2_TAMU.yml'
         if updateYaml == True:# True if init conditions for Yaml file for HSRL is updated from the GRASP output from RSP
             update_HSRLyaml(fwdModelYAMLpath, rslts_Tamu[0], noMod, maxr, minr, a,Kernel_type)
             fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/Settings_TAMU_RSP_HSRL.yaml'
@@ -388,7 +392,7 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
         #Path to the GRASP Executable for TAMU
         # binPathGRASP ='/home/shared/GRASP_GSFC/build_HexV112_Noise/bin/grasp_app' #Recompiled to account for more noise parameter
         # binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
-        binPathGRASP ='/home/shared/GRASP_GSFC/build_HexV112_4Modes/bin/grasp_app'
+        binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
         #Path to save output plot
         savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
 
@@ -579,9 +583,9 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, forward = None, retrieval = None, Createpdf
 
 
         if Spheriod['r'].shape[0] ==2 :
-            mode_v = ["fine","marine", "dust"]
+            mode_v = ["fine", "dust","marine"]
         if Spheriod['r'].shape[0] ==3 :
-            mode_v = ["fine","marine", "dust"]
+            mode_v = ["fine", "dust","marine"]
         
         linestyle =[':', '-','-.']
 
@@ -625,7 +629,18 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, forward = None, retrieval = None, Createpdf
         pdf_pages.close()
         fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{dt_t}_RSPRetrieval.png', dpi = 400)
         
-        
+        fig, axs = plt.subplots(nrows= 1, ncols=2, figsize=(10, 5), sharey=True)
+   
+        for i in range(3):
+            axs[0].plot(HSRL_sphrod[0][0]['βext'][i],HSRL_sphrod[0][0]['range'][i]/1000, label =i+1)
+            axs[1].plot(HSRL_Tamu[0][0]['βext'][i],HSRL_Tamu[0][0]['range'][i]/1000, label =i+1)
+            axs[1].set_xlabel('βext')
+            axs[0].set_title('Spheriod')
+            axs[0].set_xlabel('βext')
+            axs[0].set_ylabel('Height km')
+            axs[1].set_title('Hexahedral')
+        plt.legend()
+
     return
 
 def CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU): #should be updated to 
@@ -717,11 +732,14 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo, LIDARPOL= None):
     # Plot the AOD data
     y = [0,1,2,0,1,2,]
     x = np.repeat((0,1),3)
-    mode_v = ["fine", "coarse"]
-    linestyle =[':', '-']
+    if Spheriod['r'].shape[0] ==2 :
+            mode_v = ["fine", "dust","marine"]
+    if Spheriod['r'].shape[0] ==3 :
+        mode_v = ["fine", "dust","marine"]
+    linestyle =[':', '-','-.']
 
-    cm_sp = ['#008080',"#C1E1C1" ]
-    cm_t = ['#900C3F',"#FF5733" ]
+    cm_sp = ['#008080',"#C1E1C1", 'c' ]
+    cm_t = ['#900C3F',"#FF5733", 'b']
     color_sph = '#0c7683'
     color_tamu = "#BC106F"
 
@@ -832,8 +850,8 @@ for i in range(1):
     # PixNo = find_dust(file_path,file_name)[1][0]
     TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
     nwl = 5 # first  nwl wavelengths
-    ang1 = 10
-    ang2 = 130 # :ang angles  #Remove
+    ang1 = 20
+    ang2 = 120 # :ang angles  #Remove
 
     f1_MAP = h5py.File(file_path+file_name,'r+')   
     Data = f1_MAP['Data']
@@ -850,29 +868,28 @@ for i in range(1):
     HSRLPixNo = FindPix(LatH,LonH,LatRSP,LonRSP)[0]  # Or can manually give the index of the pixel that you are intrested in
  
 # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
-#     rslts_Sph = RSP_Run("sphro",RSP_PixNo,ang1,ang2,TelNo,nwl)
-#     rslts_Tamu = RSP_Run("TAMU",RSP_PixNo,ang1,ang2,TelNo,nwl)
+    rslts_Sph = RSP_Run("sphro",RSP_PixNo,ang1,ang2,TelNo,nwl)
+    rslts_Tamu = RSP_Run("TAMU",RSP_PixNo,ang1,ang2,TelNo,nwl)
 
-    # print('Cost Value Sph, tamu: ',  rslts_Sph[0]['costVal'], rslts_Tamu[0]['costVal'])
-    # RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
-    # plot_HSRL(rslts_Sph[0],rslts_Tamu[0], forward = False, retrieval = True, Createpdf = True,PdfName =f"/home/gregmi/ORACLES/rsltPdf/RSP_only_{RSP_PixNo}.pdf")
+    print('Cost Value Sph, tamu: ',  rslts_Sph[0]['costVal'], rslts_Tamu[0]['costVal'])
+    RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
+    plot_HSRL(rslts_Sph[0],rslts_Tamu[0], forward = False, retrieval = True, Createpdf = True,PdfName =f"/home/gregmi/ORACLES/rsltPdf/RSP_only_{RSP_PixNo}.pdf")
     
 #     # Retrieval_type = 'NosaltStrictConst_final'
 #     # #Running GRASP for HSRL, HSRL_sphrod = for spheriod kernels,HSRL_Tamu = Hexahedral kernels
-    HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,updateYaml= False,releaseYAML= True) 
-    HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, nwl,HSRLPixNo,updateYaml= False,releaseYAML= True)
-
+    HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,updateYaml= False,releaseYAML= False) 
+    HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,updateYaml= False,releaseYAML= False)
     print('Cost Value Sph, tamu: ',  HSRL_sphrod[0][0]['costVal'],HSRL_Tamu[0][0]['costVal'])
    
 #     # # #Constrining HSRL retrievals by 5% 
-    HSRL_sphro_5 = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,updateYaml= True) 
-    HSRL_Tamu_5 = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name,HSRLPixNo,updateYaml= True)
+    HSRL_sphro_5 = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,updateYaml= True,releaseYAML= False) 
+    HSRL_Tamu_5 = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,updateYaml= True,releaseYAML= False)
 
     print('Cost Value Sph, tamu: ',  HSRL_sphro_5[0][0]['costVal'],HSRL_Tamu_5[0][0]['costVal'])
 
 #     #Strictly Constrining HSRL retrievals to values from RSP retrievals
-    HSRL_sphrod_strict = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,updateYaml= True, ConsType = 'strict') 
-    HSRL_Tamu_strict = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name,HSRLPixNo,updateYaml= True, ConsType = 'strict')
+    HSRL_sphrod_strict = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,updateYaml= True, ConsType = 'strict',releaseYAML= False) 
+    HSRL_Tamu_strict = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,updateYaml= True, ConsType = 'strict',releaseYAML= False)
 
     print('Cost Value Sph, tamu: ',  HSRL_sphrod_strict[0][0]['costVal'],HSRL_Tamu_strict[0][0]['costVal'])
     
@@ -884,13 +901,13 @@ for i in range(1):
     # print('SPH',"tam" )
 
 
-    # %matplotlib inline
-    # plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
-    # plot_HSRL(HSRL_sphro_5[0][0],HSRL_Tamu_5[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/5%_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
-    # plot_HSRL(HSRL_sphrod_strict[0][0],HSRL_Tamu_strict[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/STR_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
-    # plot_HSRL(LidarPolSph[0],LidarPolTAMU[0], forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
-    # plot_HSRL(LidarPolSph[0],LidarPolTAMU[0], forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
-    # CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU)
+    %matplotlib inline
+    plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
+    plot_HSRL(HSRL_sphro_5[0][0],HSRL_Tamu_5[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/5%_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
+    plot_HSRL(HSRL_sphrod_strict[0][0],HSRL_Tamu_strict[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/STR_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
+    plot_HSRL(LidarPolSph[0],LidarPolTAMU[0], forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
+    plot_HSRL(LidarPolSph[0],LidarPolTAMU[0], forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
+    CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU)
 
 # #Running GRASP for HSRL, HSRL_sphrod = for spheriod kernels,HSRL_Tamu = Hexahedral kernels
 # HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,updateYaml= False) 
