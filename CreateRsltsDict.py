@@ -46,6 +46,7 @@ def VertP(Data, hgtInterv):
     avgProf = pd.DataFrame()
     hgt = Data['Altitude']
 
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude']
 
     altitude_diff = np.gradient(Data['Altitude'])
     numInterv = int(hgtInterv / np.mean(altitude_diff))  # Calculate numInterv based on mean altitude difference
@@ -84,7 +85,7 @@ def VertP(Data, hgtInterv):
     df = avgProf[::-1]
     if Plot_avg_prof ==True:
         fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
-        for i in range (0,len(inp)):
+        for i in range (0,len(inp)-1):
             axs[i].plot(Data[f'{inp[i]}'],Data['Altitude'], marker= '.', label = "Org" )
             axs[i].plot(df[f'{inp[i]}'],df['Altitude'], marker= '.' , label = "Avg Prof")
 
@@ -440,6 +441,178 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
 
 
 def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
+
+ #Specify the Path and the name of the HSRL file
+    #Reading the HSRL data
+    
+    f1= h5py.File(file_path + file_name,'r+')  #reading Lidar measurements 
+    HSRL = f1['DataProducts']
+    #Latitude and longitude values 
+    latitude,longitude = f1['Nav_Data']['gps_lat'][:],f1['Nav_Data']['gps_lon'][:]
+    AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
+    print(AirAlt)
+
+    del_dict ={} #This dictionary stores 
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
+    #Setting negative values to zero, The negative values are due to low signal so we can replace with 0 without loss of info.
+    for i in range (len(inp)):
+        del_dict[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo]
+        HSRL_checkFillVals(del_dict[f'{inp[i]}']) # set all negative values to zero
+        if (inp[i] == '355_dep') or (inp[i] == '532_dep') or (inp[i] == '1064_dep'):
+            del_dict[f'{inp[i]}'] = np.where(HSRL[f'{inp[i]}'][PixNo][:]>= 0.6 , np.nan, HSRL[f'{inp[i]}'][PixNo])  #CH: This should be changed, 0.7 has been set arbitarily
+
+    #Caculating range, Range is defined as distance from the instrument to the aersosol layer, i.e. range at instrument heright = 0. We have to make sure that The range is in decending order
+    del_dict['Altitude'] = HSRL['Altitude'][0]  # altitude above sea level
+    # del_dict['Altitude'] = HSRL['Altitude'][0]  
+    df_new = pd.DataFrame(del_dict)
+    df_new.interpolate(inplace=True, limit_area= 'inside')
+
+    #Filtering and removing the pixels with bad data: 
+    Removed_index = []  # Removed_index holds indices of pixels to be removed
+    # Filter values greater than flight altitude
+    Removed_index.append(np.nonzero(np.array(df_new['Altitude'][:]) > AirAlt)[0][:])
+    # Removed_index.append(np.nonzero(np.array(df_new['Altitude'][:]) < 1000)[0][:]) #this removes the profile below 1000m 
+    # Filter values less than or equal to zero altitude
+    Removed_index.append(np.nonzero(np.array(df_new['Altitude'][:]) <= 0)[0][:])
+    # Filter values less than or equal to zero range
+    Removed_index.append(np.nonzero(f1['UserInput']['range_interp'][PixNo] <= 0)[0])
+    # Filter values less than 1800 in range interpolation
+    Removed_index.append(np.nonzero(f1['UserInput']['range_interp'][PixNo] < 1800)[0])
+    # Filter NaN values in range interpolation
+    Removed_index.append(np.nonzero(np.isnan(f1['UserInput']['range_interp'][PixNo]))[0])
+    # Filter NaN values in low gain signal limit data mask
+    Removed_index.append(np.nonzero(np.isnan(HSRL["mask_low"][PixNo]))[0])
+
+    # Cloud Correction
+    CloudCorr_1064 = np.nonzero(np.isnan(HSRL["1064_bsc_cloud_screened"][PixNo]))[0]
+    CloudCorr_355 = np.nonzero(np.isnan(HSRL["355_bsc_cloud_screened"][PixNo]))[0]
+    CloudCorr_532 = np.nonzero(np.isnan(HSRL["532_bsc_cloud_screened"][PixNo]))[0]
+
+    Removed_index.append(CloudCorr_1064)
+    Removed_index.append(CloudCorr_355)
+    Removed_index.append(CloudCorr_532)
+    Removed_index.append(np.nonzero(np.isnan(HSRL['355_ext'][PixNo]))[0])
+
+    # Concatenate all removed indices and remove duplicates
+    rm_pix=[]
+    for lis in Removed_index:
+        rm_pix += list(lis)[:] # concatenating the lists
+    rm_pix = np.unique(rm_pix)
+
+    # Create dictionaries to hold filtered and interpolated data
+    del_dictt = {}
+    # Delete removed pixels and set negative values to zero for each data type
+    inp2 = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude']
+    for i in range (len(inp2)): #
+        del_dictt[f'{inp2[i]}'] = np.delete(np.array(df_new[f'{inp2[i]}']), rm_pix)
+
+            
+
+    BLh = 1200
+    UpH = 4000
+
+    belowBL ={}
+    MidAtm={}
+    UpAtm={}
+
+
+    hgt = del_dictt['Altitude']
+
+    for i in range (len(inp2)): 
+        belowBL[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt<= BLh)]
+        MidAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where((hgt> BLh) &(hgt< UpH))]
+        UpAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt> UpH)]
+        
+
+
+    BLiIntv = 50
+    MidInv = 150
+    UpInv = 250
+    BLIntv = 80
+
+
+    BLProf= VertP(belowBL, BLIntv)
+    MidProf= VertP(MidAtm, MidInv)
+    UpProf= VertP(UpAtm, UpInv)
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
+
+    FullAvgProf = {}
+
+    for i in range (len(inp2)): 
+        FullAvgProf[inp2[i]] =  np.concatenate((np.array(UpProf[inp2[i]]), np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
+        
+    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    for i in range (0,len(inp)):
+        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+        axs[i].plot(FullAvgProf[f'{inp[i]}'],FullAvgProf['Altitude'], marker= '.' , label = "Avg Prof")
+
+        axs[i].set_xlabel(f'{inp[i]}')
+
+    axs[0].legend()
+    axs[0].set_ylabel('Height m ') 
+
+
+
+
+    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    for i in range (0,len(inp)):
+        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+        axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
+        axs[i].plot(MidAtm[f'{inp[i]}'],MidAtm['Altitude'], marker= '.' , label = "bl")
+        axs[i].plot(UpAtm[f'{inp[i]}'],UpAtm['Altitude'], marker= '.' , label = "bl")
+        
+
+        axs[i].set_xlabel(f'{inp[i]}')
+
+    axs[0].legend()
+    axs[0].set_ylabel('Height m ') 
+    #Creating GRASP rslt dictionary for runGRASP.py    
+    df = pd.DataFrame(FullAvgProf)
+    rslt = {} # 
+    height_shape = np.array(df['Altitude'][:]).shape[0]   #setting the lowermos value to zero to avoid GRASP intgration
+
+    Range = np.zeros((height_shape,3))
+    Range[:,0] = df['Altitude'][:]
+    Range[:,1] = df['Altitude'][:]
+    Range[:,2] = df['Altitude'][:]  # in meters
+    rslt['RangeLidar'] = Range
+
+    Bext = np.zeros((height_shape,3))
+    Bext[:,0] = df['355_ext'][:]
+    Bext[:,1] = df['532_ext'][:]
+    Bext[:,2] = df['1064_ext'] [:]
+    Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
+
+    Bsca = np.zeros((height_shape,3))
+    Bsca[:,0] = df['355_bsc_Sa'][:]
+    Bsca[:,1] = df['532_bsc_Sa'] [:]
+    Bsca[:,2] = df['1064_bsc_Sa'][:]
+
+    Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
+
+    Dep = np.zeros((height_shape,3))
+    Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
+    Dep[:,1] = df['532_dep'][:]
+    Dep[:,2] = df['1064_dep'] [:]
+
+    #Unit conversion 
+    rslt['meas_VExt'] = Bext / 1000
+    rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 to m-1
+    rslt['meas_DP'] = Dep *100  # in percentage
+
+
+    rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
+    rslt['wl'] = np.array([355,532,1064])/1000
+    rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+    rslt['latitude'] = f1['Nav_Data']['gps_lat'][PixNo]
+    rslt['longitude']= f1['Nav_Data']['gps_lon'][PixNo]
+    rslt['OBS_hght']= AirAlt # aircraft altitude in m
+    rslt['land_prct'] = 0 #Ocean Surface
+
+    f1.close()
+    return rslt
+
+def Read_Data_HSRL_constHgt(file_path,file_name,PixNo):
 
  #Specify the Path and the name of the HSRL file
     #Reading the HSRL data
