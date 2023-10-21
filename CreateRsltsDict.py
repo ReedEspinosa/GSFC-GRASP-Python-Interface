@@ -38,7 +38,64 @@ def HSRL_checkFillVals(param):
 '''  GasAbsFn: Format of file: .nc, Description: file containing the value of combined optical depth for different gases in the atmosphere using radiatiove tranfer code
      altIndex = Type: integer , Description: index of the vertical height at which we want to calculate the absorption, In this case we've taken the maximum altitude of RSP aircraft 
      SpecResFn = Format of file: .txt ,Description: file containing the  response funtion of the instruent at a particular wl (Wlname = interger, wavelength in the file name ) '''
+    
+def VertP(Data, hgtInterv):
+    
+    df_new = pd.DataFrame(Data)
+    Plot_avg_prof = True
+    avgProf = pd.DataFrame()
+    hgt = Data['Altitude']
 
+
+    altitude_diff = np.gradient(Data['Altitude'])
+    numInterv = int(hgtInterv / np.mean(altitude_diff))  # Calculate numInterv based on mean altitude difference
+    Npoint = int(len(Data['Altitude'])/numInterv) # No of vertical bins after averaging
+    
+    #assert hgtInterv > min(Data['Altitude']), "hgtInterv should be higher than the minimum altitude value."
+    
+
+    # Create an array to store the averaged values
+    for i in range(numInterv):
+        strtVal = i*numInterv
+        endVal = (i+1)*numInterv    
+
+        hgtAvg = np.zeros(Npoint)
+    for k in range (len(inp)):
+        a = 0   # Indexing variable
+        averaged_values = np.zeros(Npoint)
+
+        for i in range(Npoint):
+            start_range = hgt[i * numInterv]
+            end_range = hgt[(i + 1) * numInterv]
+            indexAvg= np.where((hgt >= start_range) & (hgt < end_range)) #Index of values in the start-stop range 
+            
+            #Taking mean
+            if len(indexAvg[0]) > 0:
+                averaged_values[a]= np.mean(np.array(df_new[f'{inp[k]}'])[indexAvg])
+            
+            if k ==0: # Avoiding repetition 
+                hgtAvg[a]= np.mean(np.array(df_new['Altitude'])[indexAvg][np.where(np.array(df_new['Altitude'])[indexAvg] != 0)])
+            a=a+1 # Indexing variable
+        #Storing the values of profile
+        avgProf[f'{inp[k]}'] = averaged_values[np.where(hgtAvg>0)] #Averaged profile values with height >0 
+        avgProf['Altitude'] =  hgtAvg[np.where(hgtAvg>0)]
+        
+    ## GRASP requires the vertical profiles to be in decendong order, so reversing the entire profile
+    df = avgProf[::-1]
+    if Plot_avg_prof ==True:
+        fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+        for i in range (0,len(inp)):
+            axs[i].plot(Data[f'{inp[i]}'],Data['Altitude'], marker= '.', label = "Org" )
+            axs[i].plot(df[f'{inp[i]}'],df['Altitude'], marker= '.' , label = "Avg Prof")
+
+            axs[i].set_xlabel(f'{inp[i]}')
+            
+        axs[0].legend()
+        axs[0].set_ylabel('Height m ') 
+        
+#     AProf =  df.to_dict()
+    
+    return df
 def Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn):
     #Gas Absorption correction using UNL_VRTM (provided by Richard,UMBC)
     #Reading the NetCDF file for gas absorption from radiative tranfer code (UNLVRTM)
@@ -210,7 +267,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
 
 
 
-def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
+def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
 
     f1= h5py.File(file_path + file_name,'r+')  #reading Lidar measurements 
     HSRL = f1['DataProducts']
@@ -219,19 +276,19 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
     print(AirAlt)
 
-    Data_dic ={} #This dictionary stores 
-    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
+    del_dict ={} #This dictionary stores 
+    inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep']
     #Setting negative values to zero, The negative values are due to low signal so we can replace with 0 without loss of info.
     for i in range (len(inp)):
-        Data_dic[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo]
-        HSRL_checkFillVals(Data_dic[f'{inp[i]}']) # set all negative values to zero
+        del_dict[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo]
+        HSRL_checkFillVals(del_dict[f'{inp[i]}']) # set all negative values to zero
         if (inp[i] == '355_dep') or (inp[i] == '532_dep') or (inp[i] == '1064_dep'):
-            Data_dic[f'{inp[i]}'] = np.where(HSRL[f'{inp[i]}'][PixNo][:]>= 0.6 , np.nan, HSRL[f'{inp[i]}'][PixNo])  #CH: This should be changed, 0.7 has been set arbitarily
+            del_dict[f'{inp[i]}'] = np.where(HSRL[f'{inp[i]}'][PixNo][:]>= 0.6 , np.nan, HSRL[f'{inp[i]}'][PixNo])  #CH: This should be changed, 0.7 has been set arbitarily
 
     #Caculating range, Range is defined as distance from the instrument to the aersosol layer, i.e. range at instrument heright = 0. We have to make sure that The range is in decending order
-    Data_dic['Altitude'] = HSRL['Altitude'][0]  # altitude above sea level
-    # Data_dic['Altitude'] = HSRL['Altitude'][0]  
-    df_new = pd.DataFrame(Data_dic)
+    del_dict['Altitude'] = HSRL['Altitude'][0]  # altitude above sea level
+    # del_dict['Altitude'] = HSRL['Altitude'][0]  
+    df_new = pd.DataFrame(del_dict)
     df_new.interpolate(inplace=True, limit_area= 'inside')
 
     #Filtering and removing the pixels with bad data: 
@@ -267,23 +324,69 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     rm_pix = np.unique(rm_pix)
 
     # Create dictionaries to hold filtered and interpolated data
-    del_dict = {}
+    del_dictt = {}
     # Delete removed pixels and set negative values to zero for each data type
-    inp2 = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude']
+    inp2 = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep', 'Altitude']
     for i in range (len(inp2)): #
-        del_dict[f'{inp2[i]}'] = np.delete(np.array(df_new[f'{inp2[i]}']), rm_pix)
+        del_dictt[f'{inp2[i]}'] = np.delete(np.array(df_new[f'{inp2[i]}']), rm_pix)
+    avgProf = pd.DataFrame() # Vertical Averaged Profiles
 
-    df_mean = pd.DataFrame()
-    npoints = 10 #no of height pixels averaged 
-    Mod_value = np.array(del_dict['Altitude']).shape[0] % npoints  #Skip these values for reshaping the array
-    for i in range (len(inp2)): #taking mean 
-        df_mean[f'{inp2[i]}'] = nanmean(np.array(del_dict[f'{inp2[i]}'][Mod_value:]).reshape( int(np.array(del_dict[f'{inp2[i]}']).shape[0]/npoints),npoints),axis=1)
-
-    for k in df_mean.keys():
-        print(df_mean[k].shape)
-
-    df = df_mean[::-1] # GRASP requires the vertical profiles to be arranged in descending order, hence reversing the data.
+    #Averaging the vertical profile to reduce noise
     
+    
+    hgt = del_dictt['Altitude']
+    
+    
+    hgtInterv = 120  # new height interval, for now it is set to 150 m
+
+    altitude_diff = np.gradient(del_dictt['Altitude'])
+    numInterv = int(hgtInterv / np.mean(altitude_diff))  # Calculate numInterv based on mean altitude difference
+    Npoint = int(len(del_dictt['Altitude'])/numInterv) # No of vertical bins after averaging
+    
+    # Create an array to store the averaged values
+    for i in range(numInterv):
+        strtVal = i*numInterv
+        endVal = (i+1)*numInterv    
+
+        hgtAvg = np.zeros(Npoint)
+    for k in range (len(inp)):
+        a = 0   # Indexing variable
+        averaged_values = np.zeros(Npoint)
+
+        for i in range(Npoint):
+            start_range = hgt[i * numInterv]
+            end_range = hgt[(i + 1) * numInterv]
+            indexAvg= np.where((hgt >= start_range) & (hgt < end_range)) #Index of values in the start-stop range 
+            
+            #Taking mean
+            if len(indexAvg[0]) > 0:
+                averaged_values[a]= np.mean(np.array(df_new[f'{inp[k]}'])[indexAvg])
+            
+            if k ==0: # Avoiding repetition 
+                hgtAvg[a]= np.mean(np.array(df_new['Altitude'])[indexAvg])
+            a=a+1 # Indexing variable
+        #Storing the values of profile
+        avgProf[f'{inp[k]}'] = averaged_values #Averaged profile values with height >0 
+        avgProf['Altitude'] =  hgtAvg
+        
+    ## GRASP requires the vertical profiles to be in decendong order, so reversing the entire profile
+    df = avgProf[::-1]
+    
+    
+    if Plot_avg_prof ==True:
+        fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+        for i in range (0,len(inp)):
+            axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+            axs[i].plot(df[f'{inp[i]}'],df['Altitude'], marker= '.' , label = "Avg Prof")
+
+            axs[i].set_xlabel(f'{inp[i]}')
+            
+        axs[0].legend()
+        axs[0].set_ylabel('Height m ')  
+        
+        
+    #Creating GRASP rslt dictionary for runGRASP.py    
+
     
     rslt = {} # This dictionary will store the values arranged in GRASP's format. 
     height_shape = np.array(df['Altitude'][:]).shape[0] #to avoid the height of the sea salt, this should be removed 
@@ -294,16 +397,16 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
     Range[:,2] = df['Altitude'][:]  # in meters
     rslt['RangeLidar'] = Range
 
-    Bext = np.ones((height_shape,3))
+    Bext = np.ones((height_shape,3)) 
     Bext[:,0] = df['355_ext'][:]
     Bext[:,1] = df['532_ext'][:]
-    Bext[:,2] = df['1064_ext'] [:]
+    Bext[:,2] = df['1064_ext'][:]
     Bext[0,2] = np.nan 
 
     Bsca = np.ones((height_shape,3))
-    Bsca[:,0] = df['355_bsc_Sa'][:]
-    Bsca[:,1] = df['532_bsc_Sa'] [:]
-    Bsca[:,2] = df['1064_bsc_Sa'][:]
+    Bsca[:,0] = df['355_bsc'][:]
+    Bsca[:,1] = df['532_bsc'] [:]
+    Bsca[:,2] = df['1064_bsc'][:]
 
     Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
@@ -367,7 +470,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
 
     #Averaging the vertical profile to reduce noise
     hgt = Data_dic['Altitude']
-    hgtInterv = 150  # new height interval, for now it is set to 150 m
+    hgtInterv = 200  # new height interval, for now it is set to 150 m
 
 
     altitude_diff = np.gradient(Data_dic['Altitude'])
@@ -417,28 +520,28 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     #Creating GRASP rslt dictionary for runGRASP.py    
 
     rslt = {} # 
-    height_shape = np.array(df['Altitude'][:]).shape[0] 
+    height_shape = np.array(df['Altitude'][:]).shape[0]   #setting the lowermos value to zero to avoid GRASP intgration
 
-    Range = np.ones((height_shape,3))
+    Range = np.zeros((height_shape,3))
     Range[:,0] = df['Altitude'][:]
     Range[:,1] = df['Altitude'][:]
     Range[:,2] = df['Altitude'][:]  # in meters
     rslt['RangeLidar'] = Range
 
-    Bext = np.ones((height_shape,3))
+    Bext = np.zeros((height_shape,3))
     Bext[:,0] = df['355_ext'][:]
     Bext[:,1] = df['532_ext'][:]
     Bext[:,2] = df['1064_ext'] [:]
     Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
 
-    Bsca = np.ones((height_shape,3))
+    Bsca = np.zeros((height_shape,3))
     Bsca[:,0] = df['355_bsc_Sa'][:]
     Bsca[:,1] = df['532_bsc_Sa'] [:]
     Bsca[:,2] = df['1064_bsc_Sa'][:]
 
     Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
-    Dep = np.ones((height_shape,3))
+    Dep = np.zeros((height_shape,3))
     Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
     Dep[:,1] = df['532_dep'][:]
     Dep[:,2] = df['1064_dep'] [:]
