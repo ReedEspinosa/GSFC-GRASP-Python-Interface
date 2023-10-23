@@ -1124,9 +1124,12 @@ class pixel():
         """ This method is called once for each wavelength of data (see frmtMsg below)
             The index i where the new data is stored in self.measVals[i] is returned
             Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)
+            * If there is already a measurement at wl, and msTyp is empty, this function just returns the index of the measVal with that wavelength
         """
-        assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!'
         if type(msTyp) is int: msTyp=[msTyp]
+        fndInd = np.nonzero(wl==np.asarray([mv['wl'] for mv in self.measVals]))[0]
+        if len(msTyp)==0 and len(fndInd)>0: return fndInd[0] # the measurement wavelength is already there and we have nothing to add – return index and leave it be
+        assert len(fndInd)==0, 'New measurements can not be added at an existing wavelength!'
         newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts,gaspar = gaspar, errorModel=errModel)  #,gaspar = gaspar
         newMeas = self.formatMeas(newMeas)
         insertInd = np.nonzero([z['wl'] > newMeas['wl'] for z in self.measVals])[0] # we want to insert in order
@@ -1160,7 +1163,6 @@ class pixel():
             rslt[keyPtrn % 'U'] = rslt[keyPtrn % 'UoI']*rslt[keyPtrn % 'I']
             msTyps[msTyps=='UoI'] = 'U'
         # loop over wavelengths and add measurements and geometry
-        self.measVals = []; self.nwl=0 # wipe out any existing measVals – start from scratch, even if rslt has fewer wavelengths that measVals did originally
         for l, lVal in enumerate(rslt['lambda']): # loop over wavelength
             msTypInd = np.nonzero([~np.isnan(rslt[keyPtrn % mt][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
             if msTypInd.size>0: # there are measurements at this wavelength
@@ -1180,7 +1182,6 @@ class pixel():
                     msDct['sza'] = rslt['sza'][0,l] # GRASP/rslt dictionary return seperate SZA for every view, even though SDATA doesn't support it
                     msDct['thetav'] = rslt['vis'][:,l]
                     msDct['phi'] = rslt['fis'][:,l]
-
                     if radianceNoiseFun: msDct['errorModel'] = radianceNoiseFun
                 else:
                     assert False, 'Both polarimeter and lidar data at the same wavelength is not supported.'
