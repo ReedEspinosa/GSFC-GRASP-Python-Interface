@@ -69,11 +69,15 @@ def VertP(Data, hgtInterv):
             start_range = hgt[i * numInterv]
             end_range = hgt[(i + 1) * numInterv]
             indexAvg= np.where((hgt >= start_range) & (hgt < end_range)) #Index of values in the start-stop range 
-            
-            #Taking mean
+        
+    
+                #Taking mean
             if len(indexAvg[0]) > 0:
-                averaged_values[a]= np.mean(np.array(df_new[f'{inp[k]}'])[indexAvg])
-            
+                non_zero_vals = np.array(df_new[f'{inp[k]}'])[indexAvg]
+                non_zero_vals = non_zero_vals[non_zero_vals > 0]
+            if len(non_zero_vals) > 0:
+                averaged_values[a] = np.mean(non_zero_vals)
+
             if k ==0: # Avoiding repetition 
                 hgtAvg[a]= np.mean(np.array(df_new['Altitude'])[indexAvg][np.where(np.array(df_new['Altitude'])[indexAvg] != 0)])
             a=a+1 # Indexing variable
@@ -442,6 +446,145 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
 
 def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
 
+    #Specify the Path and the name of the HSRL file
+    #Reading the HSRL data
+    f1= h5py.File(file_path + file_name,'r+')  #reading Lidar measurements 
+
+    HSRL = f1['DataProducts']
+    AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
+
+    Data_dic ={} #This dictionary stores all the HSRL variables used for GRASP forward simulation
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep',]
+    inp2 = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude']
+
+    #Setting negative values to zero, The negative values are due to low signal so we can replace with 0 without loss of info.
+    for i in range (len(inp)):
+        
+        #Index of values below aircraft and above ground
+        hmaxInd = np.max(np.where(HSRL['Altitude'][0] <=AirAlt -1000)[0])  #-1000 os added to avoid values vary close to the aircraft
+        hminInd = np.min(np.where(HSRL['Altitude'][0] >0 )[0]) #28 is set randomly to avoid values very close to the ground #filtering the values that have negative vales for the height on the data
+        
+        #Storing Bsca, Bext and DP values for all HSRL wavelengths
+        Data_dic[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo][hminInd:hmaxInd]
+        
+        HSRL2_checkFillVals(Data_dic[f'{inp[i]}']) # set all negative values to zero
+        Data_dic['Altitude'] = HSRL2_checkFillVals(HSRL['Altitude'][0][hminInd:hmaxInd])  # Height of the aerosol layer from the sea level
+        df_new = pd.DataFrame(Data_dic)
+
+
+ #Specify the Path and the name of the HSRL file
+    #Reading the HSRL data
+    
+    del_dictt = Data_dic     
+    #Height limits
+    BLh = 1500
+    UpH = 4000
+
+    belowBL ={}
+    MidAtm={}
+    UpAtm={}
+
+
+    hgt = del_dictt['Altitude']
+
+    for i in range (len(inp2)): 
+        belowBL[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt<= BLh)]
+        MidAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where((hgt> BLh) &(hgt< UpH))]
+        UpAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt> UpH)]
+        
+    #TODO make this part more general
+    #No of height grids in each ses in meters
+    BLiIntv = 50
+    MidInv = 150
+    UpInv = 450
+    BLIntv =  100
+
+
+    BLProf= VertP(belowBL, BLIntv)
+    MidProf= VertP(MidAtm, MidInv)
+    UpProf= VertP(UpAtm, UpInv)
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
+
+    FullAvgProf = {}
+
+    for i in range (len(inp2)): 
+        FullAvgProf[inp2[i]] =  np.concatenate((np.array(UpProf[inp2[i]]), np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
+        
+    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    for i in range (0,len(inp)):
+        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+        axs[i].plot(FullAvgProf[f'{inp[i]}'],FullAvgProf['Altitude'], marker= '.' , label = "Avg Prof")
+
+        axs[i].set_xlabel(f'{inp[i]}')
+
+    axs[0].legend()
+    axs[0].set_ylabel('Height m ') 
+
+
+
+
+    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    for i in range (0,len(inp)):
+        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+        axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
+        axs[i].plot(MidAtm[f'{inp[i]}'],MidAtm['Altitude'], marker= '.' , label = "bl")
+        axs[i].plot(UpAtm[f'{inp[i]}'],UpAtm['Altitude'], marker= '.' , label = "bl")
+        
+
+        axs[i].set_xlabel(f'{inp[i]}')
+
+    axs[0].legend()
+    axs[0].set_ylabel('Height m ') 
+    #Creating GRASP rslt dictionary for runGRASP.py    
+    df = pd.DataFrame(FullAvgProf)
+    rslt = {} # 
+    height_shape = np.array(df['Altitude'][:]).shape[0]   #setting the lowermos value to zero to avoid GRASP intgration
+
+    Range = np.zeros((height_shape,3))
+    Range[:,0] = df['Altitude'][:]
+    Range[:,1] = df['Altitude'][:]
+    Range[:,2] = df['Altitude'][:]  # in meters
+    rslt['RangeLidar'] = Range
+
+    Bext = np.zeros((height_shape,3))
+    Bext[:,0] = df['355_ext'][:]
+    Bext[:,1] = df['532_ext'][:]
+    Bext[:,2] = df['1064_ext'] [:]
+    Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
+
+    Bsca = np.zeros((height_shape,3))
+    Bsca[:,0] = df['355_bsc_Sa'][:]
+    Bsca[:,1] = df['532_bsc_Sa'] [:]
+    Bsca[:,2] = df['1064_bsc_Sa'][:]
+
+    # Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
+
+    Dep = np.zeros((height_shape,3))
+    Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
+    Dep[:,1] = df['532_dep'][:]
+    Dep[:,2] = df['1064_dep'] [:]
+
+    #Unit conversion 
+    rslt['meas_VExt'] = Bext / 1000
+    rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 to m-1
+    rslt['meas_DP'] = Dep *100  # in percentage
+
+
+    rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
+    rslt['wl'] = np.array([355,532,1064])/1000
+    rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+    rslt['latitude'] = f1['Nav_Data']['gps_lat'][PixNo]
+    rslt['longitude']= f1['Nav_Data']['gps_lon'][PixNo]
+    rslt['OBS_hght']= AirAlt # aircraft altitude in m
+    rslt['land_prct'] = 0 #Ocean Surface
+
+    f1.close()
+    return rslt
+
+
+
+def Read_Data_HSRL_Oracles_Height_V2_1(file_path,file_name,PixNo):
+
  #Specify the Path and the name of the HSRL file
     #Reading the HSRL data
     
@@ -507,7 +650,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
         del_dictt[f'{inp2[i]}'] = np.delete(np.array(df_new[f'{inp2[i]}']), rm_pix)
 
             
-
+    #Height limits
     BLh = 1200
     UpH = 4000
 
@@ -523,12 +666,12 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
         MidAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where((hgt> BLh) &(hgt< UpH))]
         UpAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt> UpH)]
         
-
-
+    #TODO make this part more general
+    #No of height grids in each ses in meters
     BLiIntv = 50
     MidInv = 150
-    UpInv = 250
-    BLIntv = 80
+    UpInv = 50
+    BLIntv = 110
 
 
     BLProf= VertP(belowBL, BLIntv)
@@ -588,7 +731,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     Bsca[:,1] = df['532_bsc_Sa'] [:]
     Bsca[:,2] = df['1064_bsc_Sa'][:]
 
-    Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
+    # Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
     Dep = np.zeros((height_shape,3))
     Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
@@ -622,7 +765,7 @@ def Read_Data_HSRL_constHgt(file_path,file_name,PixNo):
     AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
 
     Data_dic ={} #This dictionary stores all the HSRL variables used for GRASP forward simulation
-    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep',]
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
 
     #Setting negative values to zero, The negative values are due to low signal so we can replace with 0 without loss of info.
     for i in range (len(inp)):
@@ -712,7 +855,7 @@ def Read_Data_HSRL_constHgt(file_path,file_name,PixNo):
     Bsca[:,1] = df['532_bsc_Sa'] [:]
     Bsca[:,2] = df['1064_bsc_Sa'][:]
 
-    Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
+    # Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
     Dep = np.zeros((height_shape,3))
     Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
