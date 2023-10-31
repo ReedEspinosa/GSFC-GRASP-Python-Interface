@@ -87,16 +87,16 @@ def VertP(Data, hgtInterv):
         
     ## GRASP requires the vertical profiles to be in decendong order, so reversing the entire profile
     df = avgProf[::-1]
-    if Plot_avg_prof ==True:
-        fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
-        for i in range (0,len(inp)-1):
-            axs[i].plot(Data[f'{inp[i]}'],Data['Altitude'], marker= '.', label = "Org" )
-            axs[i].plot(df[f'{inp[i]}'],df['Altitude'], marker= '.' , label = "Avg Prof")
+    # if Plot_avg_prof ==True:
+    #     fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    #     for i in range (0,len(inp)-1):
+    #         axs[i].plot(Data[f'{inp[i]}'],Data['Altitude'], marker= '.', label = "Org" )
+    #         axs[i].plot(df[f'{inp[i]}'],df['Altitude'], marker= '.' , label = "Avg Prof")
 
-            axs[i].set_xlabel(f'{inp[i]}')
+    #         axs[i].set_xlabel(f'{inp[i]}')
             
-        axs[0].legend()
-        axs[0].set_ylabel('Height m ') 
+    #     axs[0].legend()
+    #     axs[0].set_ylabel('Height m ') 
         
 #     AProf =  df.to_dict()
     
@@ -462,11 +462,12 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
         
         #Index of values below aircraft and above ground
         hmaxInd = np.max(np.where(HSRL['Altitude'][0] <=AirAlt -1000)[0])  #-1000 os added to avoid values vary close to the aircraft
-        hminInd = np.min(np.where(HSRL['Altitude'][0] >0 )[0]) #28 is set randomly to avoid values very close to the ground #filtering the values that have negative vales for the height on the data
+        hminInd = np.min(np.where(HSRL['Altitude'][0] > 85 )[0]) #80 is set randomly to avoid values very close to the ground #filtering the values that have negative vales for the height on the data
         
         #Storing Bsca, Bext and DP values for all HSRL wavelengths
+
         Data_dic[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo][hminInd:hmaxInd]
-        
+         
         HSRL2_checkFillVals(Data_dic[f'{inp[i]}']) # set all negative values to zero
         Data_dic['Altitude'] = HSRL2_checkFillVals(HSRL['Altitude'][0][hminInd:hmaxInd])  # Height of the aerosol layer from the sea level
         df_new = pd.DataFrame(Data_dic)
@@ -477,13 +478,19 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     
     del_dictt = Data_dic     
     #Height limits
-    BLh = 1500
+    BLh = 1200
     UpH = 4000
 
     belowBL ={}
     MidAtm={}
     UpAtm={}
 
+    #TODO make this part more general
+    #No of height grids in each ses in meters
+    BLiIntv = 50
+    MidInv = 150
+    UpInv = 450
+    BLIntv =  110
 
     hgt = del_dictt['Altitude']
 
@@ -491,14 +498,6 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
         belowBL[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt<= BLh)]
         MidAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where((hgt> BLh) &(hgt< UpH))]
         UpAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt> UpH)]
-        
-    #TODO make this part more general
-    #No of height grids in each ses in meters
-    BLiIntv = 50
-    MidInv = 150
-    UpInv = 450
-    BLIntv =  100
-
 
     BLProf= VertP(belowBL, BLIntv)
     MidProf= VertP(MidAtm, MidInv)
@@ -510,60 +509,78 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     for i in range (len(inp2)): 
         FullAvgProf[inp2[i]] =  np.concatenate((np.array(UpProf[inp2[i]]), np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
         
-    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
-    for i in range (0,len(inp)):
-        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
-        axs[i].plot(FullAvgProf[f'{inp[i]}'],FullAvgProf['Altitude'], marker= '.' , label = "Avg Prof")
+    # fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    # for i in range (0,len(inp)):
+    #     axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+    #     axs[i].plot(FullAvgProf[f'{inp[i]}'],FullAvgProf['Altitude'], marker= '.' , label = "Avg Prof")
 
-        axs[i].set_xlabel(f'{inp[i]}')
+    #     axs[i].set_xlabel(f'{inp[i]}')
 
-    axs[0].legend()
-    axs[0].set_ylabel('Height m ') 
-
-
+    # axs[0].legend()
+    # axs[0].set_ylabel('Height m ') 
 
 
-    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
-    for i in range (0,len(inp)):
-        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
-        axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
-        axs[i].plot(MidAtm[f'{inp[i]}'],MidAtm['Altitude'], marker= '.' , label = "bl")
-        axs[i].plot(UpAtm[f'{inp[i]}'],UpAtm['Altitude'], marker= '.' , label = "bl")
+
+
+    # fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    # for i in range (0,len(inp)):
+    #     axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+    #     axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
+    #     axs[i].plot(MidAtm[f'{inp[i]}'],MidAtm['Altitude'], marker= '.' , label = "bl")
+    #     axs[i].plot(UpAtm[f'{inp[i]}'],UpAtm['Altitude'], marker= '.' , label = "bl")
         
 
-        axs[i].set_xlabel(f'{inp[i]}')
+    #     axs[i].set_xlabel(f'{inp[i]}')
 
-    axs[0].legend()
-    axs[0].set_ylabel('Height m ') 
+    # axs[0].legend()
+    # axs[0].set_ylabel('Height m ') 
     #Creating GRASP rslt dictionary for runGRASP.py    
     df = pd.DataFrame(FullAvgProf)
     rslt = {} # 
-    height_shape = np.array(df['Altitude'][:]).shape[0]   #setting the lowermos value to zero to avoid GRASP intgration
+    
+    height_shape = np.array(df['Altitude'][:]).shape[0]+1   #setting the lowermos value to zero to avoid GRASP intgration
 
-    Range = np.zeros((height_shape,3))
-    Range[:,0] = df['Altitude'][:]
-    Range[:,1] = df['Altitude'][:]
-    Range[:,2] = df['Altitude'][:]  # in meters
+    Range = np.ones((height_shape,3))
+    Range[:-1,0] = df['Altitude'][:]
+    Range[:-1,1] = df['Altitude'][:]
+    Range[:-1,2] = df['Altitude'][:]  # in meters
     rslt['RangeLidar'] = Range
+    
 
     Bext = np.zeros((height_shape,3))
-    Bext[:,0] = df['355_ext'][:]
-    Bext[:,1] = df['532_ext'][:]
-    Bext[:,2] = df['1064_ext'] [:]
+    
+    Bext[-2:,0] = df['355_ext'][height_shape-2:]
+    Bext[:-1,0] = df['355_ext'][:]
+
+    
+    Bext[-2:,1] = df['532_ext'][height_shape-2:]
+    Bext[:-1,1] = df['532_ext'][:]
+    
+    Bext[-2:,2] = df['1064_ext'][height_shape-2:]
+    Bext[:-1,2] = df['1064_ext'] [:]
     Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
 
     Bsca = np.zeros((height_shape,3))
-    Bsca[:,0] = df['355_bsc_Sa'][:]
-    Bsca[:,1] = df['532_bsc_Sa'] [:]
-    Bsca[:,2] = df['1064_bsc_Sa'][:]
-
+    
+    Bsca[-2:,0] = df['355_bsc_Sa'][height_shape-2:]
+    Bsca[:-1,0] = df['355_bsc_Sa'][:]
+    
+    Bsca[-2:,1] = df['532_bsc_Sa'][height_shape-2:]
+    Bsca[:-1,1] = df['532_bsc_Sa'] [:]
+    
+    Bsca[-2:,2] = df['1064_bsc_Sa'][height_shape-2:]
+    Bsca[:-1,2] = df['1064_bsc_Sa'][:]
+  
     # Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
     Dep = np.zeros((height_shape,3))
-    Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
-    Dep[:,1] = df['532_dep'][:]
-    Dep[:,2] = df['1064_dep'] [:]
-
+    Dep[-2:,0] = df['355_dep'][height_shape-2:] #Total depolarization ratio
+    Dep[-2:,1] = df['532_dep'][height_shape-2:]
+    Dep[-2:,2] = df['1064_dep'] [height_shape-2:]
+    
+    Dep[:-1,0] = df['355_dep'][:]  #Total depolarization ratio
+    Dep[:-1,1] = df['532_dep'][:]
+    Dep[:-1,2] = df['1064_dep'] [:]
     #Unit conversion 
     rslt['meas_VExt'] = Bext / 1000
     rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 to m-1
@@ -670,7 +687,7 @@ def Read_Data_HSRL_Oracles_Height_V2_1(file_path,file_name,PixNo):
     #No of height grids in each ses in meters
     BLiIntv = 50
     MidInv = 150
-    UpInv = 50
+    UpInv = 200
     BLIntv = 110
 
 
@@ -684,31 +701,31 @@ def Read_Data_HSRL_Oracles_Height_V2_1(file_path,file_name,PixNo):
     for i in range (len(inp2)): 
         FullAvgProf[inp2[i]] =  np.concatenate((np.array(UpProf[inp2[i]]), np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
         
-    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
-    for i in range (0,len(inp)):
-        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
-        axs[i].plot(FullAvgProf[f'{inp[i]}'],FullAvgProf['Altitude'], marker= '.' , label = "Avg Prof")
+    # fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    # for i in range (0,len(inp)):
+    #     axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+    #     axs[i].plot(FullAvgProf[f'{inp[i]}'],FullAvgProf['Altitude'], marker= '.' , label = "Avg Prof")
 
-        axs[i].set_xlabel(f'{inp[i]}')
+    #     axs[i].set_xlabel(f'{inp[i]}')
 
-    axs[0].legend()
-    axs[0].set_ylabel('Height m ') 
-
-
+    # axs[0].legend()
+    # axs[0].set_ylabel('Height m ') 
 
 
-    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
-    for i in range (0,len(inp)):
-        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
-        axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
-        axs[i].plot(MidAtm[f'{inp[i]}'],MidAtm['Altitude'], marker= '.' , label = "bl")
-        axs[i].plot(UpAtm[f'{inp[i]}'],UpAtm['Altitude'], marker= '.' , label = "bl")
+
+
+    # fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    # for i in range (0,len(inp)):
+    #     axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+    #     axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
+    #     axs[i].plot(MidAtm[f'{inp[i]}'],MidAtm['Altitude'], marker= '.' , label = "bl")
+    #     axs[i].plot(UpAtm[f'{inp[i]}'],UpAtm['Altitude'], marker= '.' , label = "bl")
         
 
-        axs[i].set_xlabel(f'{inp[i]}')
+    #     axs[i].set_xlabel(f'{inp[i]}')
 
-    axs[0].legend()
-    axs[0].set_ylabel('Height m ') 
+    # axs[0].legend()
+    # axs[0].set_ylabel('Height m ') 
     #Creating GRASP rslt dictionary for runGRASP.py    
     df = pd.DataFrame(FullAvgProf)
     rslt = {} # 
@@ -719,8 +736,10 @@ def Read_Data_HSRL_Oracles_Height_V2_1(file_path,file_name,PixNo):
     Range[:,1] = df['Altitude'][:]
     Range[:,2] = df['Altitude'][:]  # in meters
     rslt['RangeLidar'] = Range
-
+    
     Bext = np.zeros((height_shape,3))
+    
+    
     Bext[:,0] = df['355_ext'][:]
     Bext[:,1] = df['532_ext'][:]
     Bext[:,2] = df['1064_ext'] [:]

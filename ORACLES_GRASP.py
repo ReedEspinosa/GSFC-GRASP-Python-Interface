@@ -15,7 +15,7 @@ This code reads Polarimetric data from the Campaigns and runs GRASP. This code w
 
 import sys
 from CreateRsltsDict import Read_Data_RSP_Oracles
-from CreateRsltsDict import Read_Data_HSRL_Oracles,Read_Data_HSRL_Oracles_Height
+from CreateRsltsDict import Read_Data_HSRL_Oracles,Read_Data_HSRL_Oracles_Height,Read_Data_HSRL_Oracles_Height_V2_1
 import netCDF4 as nc
 from runGRASP import graspDB, graspRun, pixel, graspYAML
 from matplotlib import pyplot as plt
@@ -146,8 +146,8 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,Co
             # #     # print("Updating",YamlChar[i])
             initCond = data['retrieval']['constraints'][f'characteristic[{i+a}]'][f'mode[{noMd+a}]']['initial_guess']
             if YamlChar[i] == 'aerosol_concentration': #Update the in and max values from aerosol properties retrieved from the RSP measurements
-                # initCond['max'] = float(np.max(RSP_rslt['dVdlnr'][noMd])) #value from the GRASP result for RSP
-                # initCond['min'] = float(RSP_rslt['dVdlnr'][noMd][1])
+            #     # initCond['max'] = float(np.max(RSP_rslt['vol'][noMd])*maxr) #value from the GRASP result for RSP
+            #     # initCond['min'] = float(RSP_rslt['vol'][noMd]*minr)
                 initCond['value'] = float(RSP_rslt['vol'][noMd]) #value from the GRASP result for RSP
             if YamlChar[i] == 'size_distribution_lognormal':
                 initCond['value'] = float(RSP_rslt['rv'][noMd]),float(RSP_rslt['sigma'][noMd])
@@ -180,9 +180,12 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,Co
                     data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
             
             if YamlChar[i] == 'sphere_fraction':
+               
                 initCond['value'] = float(RSP_rslt['sph'][noMd]/100)
-                # initCond['max'] =float(RSP_rslt['sph'][noMd]/100 *maxr) #GARSP output is in %
-                # initCond['min'] =float(RSP_rslt['sph'][noMd]/100 *minr)
+            
+                initCond['max'] =float(RSP_rslt['sph'][noMd] *maxr/100) #GARSP output is in %
+             
+                initCond['min'] =float(RSP_rslt['sph'][noMd] *minr/100)
                 # print("Updating",YamlChar[i])
                 if ConsType == 'strict':
                     data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
@@ -355,7 +358,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
 
     
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
-        rslt = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,PixNo)
+        rslt = Read_Data_HSRL_Oracles_Height_V2_1(HSRLfile_path,HSRLfile_name,PixNo)
         max_alt = rslt['OBS_hght']
         print(rslt['OBS_hght'])
 
@@ -639,9 +642,19 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, forward = None, retrieval = None, Createpdf
         # axs[2,1].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
         meas_aod = []
         for i in range (3):
-            meas_aod.append(np.trapz(Hsph['meas_VExt'][:,i][::-1],HTam['range'][i,:][::-1] ))
-
-        axs[2,1].scatter( Spheriod['lambda'],meas_aod,color = "k", marker = '*' ,,markersize=20, label = "AOD cal")    
+            meas_aod.append(np.trapz(Hsph['meas_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] ))
+        meas_aodsph = []
+        for i in range (3):
+            meas_aodsph.append(np.trapz(Hsph['fit_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] ))
+        meas_aodhex = []
+        for i in range (3):
+            meas_aodhex.append(np.trapz(HTam['fit_VExt'][:,i][::-1],HTam['range'][i,:][::-1] ))
+        
+        axs[2,1].plot( Spheriod['lambda'],meas_aod,color = "k", ls = "--", marker = '*' ,markersize=20, label = " cal meas")    
+        axs[2,1].plot( Spheriod['lambda'],meas_aodsph,color = "r", ls = "-.", marker = '*' ,markersize=20, label = "cal sph")    
+        axs[2,1].plot( Spheriod['lambda'],meas_aod,color = "b", ls = "-.", marker = '*' ,markersize=20, label = "cal hex")    
+       
+        
         axs[2,1].set_xlabel(r'$\lambda$')
         axs[2,1].set_ylabel('Total AOD')
         axs[0,0].legend(prop = { "size": 22 }, ncol=2)
@@ -920,8 +933,7 @@ for i in range(1):
     
     
     HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True)
-    
-    plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
+    # plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
 
     HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True)
     plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
@@ -935,17 +947,17 @@ for i in range(1):
     
 #     print('Cost Value Sph, tamu: ',  HSRL_sphrod[0][0]['costVal'],HSRL_Tamu[0][0]['costVal'])
    
-# #     # # #Constrining HSRL retrievals by 5% 
-    HSRL_sphro_5 = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3,updateYaml= True,releaseYAML= True) 
-    HSRL_Tamu_5 = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3,updateYaml= True,releaseYAML= True)
+# # #     # # #Constrining HSRL retrievals by 5% 
+#     HSRL_sphro_5 = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3,updateYaml= True,releaseYAML= True) 
+#     HSRL_Tamu_5 = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3,updateYaml= True,releaseYAML= True)
 
-#     print('Cost Value Sph, tamu: ',  HSRL_sphro_5[0][0]['costVal'],HSRL_Tamu_5[0][0]['costVal'])
+# #     print('Cost Value Sph, tamu: ',  HSRL_sphro_5[0][0]['costVal'],HSRL_Tamu_5[0][0]['costVal'])
 
-# #     #Strictly Constrining HSRL retrievals to values from RSP retrievals
-    HSRL_sphrod_strict = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3,updateYaml= True, ConsType = 'strict',releaseYAML= True) 
-    HSRL_Tamu_strict = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3,updateYaml= True, ConsType = 'strict',releaseYAML= True)
+# # #     #Strictly Constrining HSRL retrievals to values from RSP retrievals
+#     HSRL_sphrod_strict = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3,updateYaml= True, ConsType = 'strict',releaseYAML= True) 
+#     HSRL_Tamu_strict = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3,updateYaml= True, ConsType = 'strict',releaseYAML= True)
 
-#     print('Cost Value Sph, tamu: ',  HSRL_sphrod_strict[0][0]['costVal'],HSRL_Tamu_strict[0][0]['costVal'])
+# #     print('Cost Value Sph, tamu: ',  HSRL_sphrod_strict[0][0]['costVal'],HSRL_Tamu_strict[0][0]['costVal'])
     
      #Lidar+pol combined retrieval
     LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
