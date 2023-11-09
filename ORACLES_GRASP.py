@@ -145,10 +145,10 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,Co
             # data['retrieval']['constraints'][f'characteristic[0]'][f'mode[{noMd+a}]']['min'][0] =1e-9
             # #     # print("Updating",YamlChar[i])
             initCond = data['retrieval']['constraints'][f'characteristic[{i+a}]'][f'mode[{noMd+a}]']['initial_guess']
-            if YamlChar[i] == 'aerosol_concentration': #Update the in and max values from aerosol properties retrieved from the RSP measurements
-            #     # initCond['max'] = float(np.max(RSP_rslt['vol'][noMd])*maxr) #value from the GRASP result for RSP
-            #     # initCond['min'] = float(RSP_rslt['vol'][noMd]*minr)
-                initCond['value'] = float(RSP_rslt['vol'][noMd]) #value from the GRASP result for RSP
+            # if YamlChar[i] == 'aerosol_concentration': #Update the in and max values from aerosol properties retrieved from the RSP measurements
+            # #     # initCond['max'] = float(np.max(RSP_rslt['vol'][noMd])*maxr) #value from the GRASP result for RSP
+            # #     # initCond['min'] = float(RSP_rslt['vol'][noMd]*minr)
+            #     initCond['value'] = float(RSP_rslt['vol'][noMd]) #value from the GRASP result for RSP
             if YamlChar[i] == 'size_distribution_lognormal':
                 initCond['value'] = float(RSP_rslt['rv'][noMd]),float(RSP_rslt['sigma'][noMd])
                 initCond['max'] =float(RSP_rslt['rv'][noMd]*maxr),float(RSP_rslt['sigma'][noMd]*maxr)
@@ -215,7 +215,6 @@ def FindPix(LatH,LonH,Lat,Lon):
     indexLon = np.argwhere(diffLon == diffLon.min())[0] # Find the indices of all elements that minimize the difference
     return indexLat[0], indexLat[1]
 def find_dust(HSRLfile_path, HSRLfile_name, plot=None):
-
 
     # Open the HDF5 file in read mode
     f1 = h5py.File(HSRLfile_path + HSRLfile_name, 'r+')
@@ -358,9 +357,11 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
 
     
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
-        rslt = Read_Data_HSRL_Oracles_Height_V2_1(HSRLfile_path,HSRLfile_name,PixNo)
+        rslt = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,PixNo)[0]
         max_alt = rslt['OBS_hght']
         print(rslt['OBS_hght'])
+
+        Vext = rslt['meas_VExt']
 
         maxCPU = 3 #maximum CPU allocated to run GRASP on server
         gRuns = []
@@ -909,7 +910,7 @@ for i in range(1):
     TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
     nwl = 5 # first  nwl wavelengths
     ang1 = 20
-    ang2 = 110 # :ang angles  #Remove
+    ang2 = 100 # :ang angles  #Remove
 
     f1_MAP = h5py.File(file_path+file_name,'r+')   
     Data = f1_MAP['Data']
@@ -926,19 +927,19 @@ for i in range(1):
     HSRLPixNo = FindPix(LatH,LonH,LatRSP,LonRSP)[0]  # Or can manually give the index of the pixel that you are intrested in
  
 # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
-    rslts_Sph = RSP_Run("sphro",RSP_PixNo,ang1,ang2,TelNo,nwl)
-    rslts_Tamu = RSP_Run("TAMU",RSP_PixNo,ang1,ang2,TelNo,nwl)
-    RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
+    # rslts_Sph = RSP_Run("sphro",RSP_PixNo,ang1,ang2,TelNo,nwl)
+    # rslts_Tamu = RSP_Run("TAMU",RSP_PixNo,ang1,ang2,TelNo,nwl)
+    # RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
   
     
     
     HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True)
-    # plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
+    plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
 
     HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True)
     plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
 
-    # print('Cost Value Sph, tamu: ',  rslts_Sph[0]['costVal'], rslts_Tamu[0]['costVal'])
+    # # print('Cost Value Sph, tamu: ',  rslts_Sph[0]['costVal'], rslts_Tamu[0]['costVal'])
     # RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
     # plot_HSRL(rslts_Sph[0],rslts_Tamu[0], forward = False, retrieval = True, Createpdf = True,PdfName =f"/home/gregmi/ORACLES/rsltPdf/RSP_only_{RSP_PixNo}.pdf")
     

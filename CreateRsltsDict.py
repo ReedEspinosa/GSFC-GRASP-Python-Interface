@@ -65,7 +65,7 @@ def VertP(Data, hgtInterv):
         a = 0   # Indexing variable
         averaged_values = np.zeros(Npoint)
 
-        for i in range(Npoint):
+        for i in range(Npoint-1):
             start_range = hgt[i * numInterv]
             end_range = hgt[(i + 1) * numInterv]
             indexAvg= np.where((hgt >= start_range) & (hgt < end_range)) #Index of values in the start-stop range 
@@ -337,7 +337,8 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
     avgProf = pd.DataFrame() # Vertical Averaged Profiles
 
     #Averaging the vertical profile to reduce noise
-    
+    Humidity = f1["State"]['Relative_Humidity'][PixNo]*100
+
     
     hgt = del_dictt['Altitude']
     
@@ -475,11 +476,24 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
 
  #Specify the Path and the name of the HSRL file
     #Reading the HSRL data
-    
+    #Dividing the height into 3 layers> Boundary layer, dust dominated layer( for ORACLES case, spt 22, 2018), and high layer
     del_dictt = Data_dic     
+    #Calculating the marine boundary layer height, Because we are interested in aerosol shape, usin Dp as a parameter to determine boundary layer height
+    
+    """Another potential parameter for boundary layer height is the relative humidity, as it potentially helps to differentiate the layer with spherical and non-spherical layer
+    Note: this is this case specific (marine in the boundary layer (spherical) and dust layer above(NonSph)) and cannot be applied to other cases
+    """
+
+    #TODO : cacluating blh with respect to temp or humidity
+
+    BLHIndx = np.where(np.gradient(df_new['1064_dep'],df_new['Altitude']) ==np.nanmax(np.gradient(df_new['1064_dep'],df_new['Altitude']))) #index of the BLH
+    print(BLHIndx)
     #Height limits
-    BLh = 1200
-    UpH = 4000
+    # BLh = 1200 #Boundary layer height 
+    BLh = np.array(df_new['Altitude'][:])[BLHIndx] #Boundary layer height 
+    # print(df_new['Altitude'][:])
+    print(BLh)
+    UpH = 4000 
 
     belowBL ={}
     MidAtm={}
@@ -490,15 +504,21 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     BLiIntv = 50
     MidInv = 150
     UpInv = 450
+
     BLIntv =  110
 
-    hgt = del_dictt['Altitude']
+    
+    # BLIntv =  110
 
+    hgt = del_dictt['Altitude']
+    #Dividing the profile 
     for i in range (len(inp2)): 
         belowBL[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt<= BLh)]
         MidAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where((hgt> BLh) &(hgt< UpH))]
         UpAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt> UpH)]
-
+    
+    
+    #Average profiles
     BLProf= VertP(belowBL, BLIntv)
     MidProf= VertP(MidAtm, MidInv)
     UpProf= VertP(UpAtm, UpInv)
@@ -596,7 +616,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     rslt['land_prct'] = 0 #Ocean Surface
 
     f1.close()
-    return rslt
+    return rslt,BLh
 
 
 
@@ -750,7 +770,7 @@ def Read_Data_HSRL_Oracles_Height_V2_1(file_path,file_name,PixNo):
     Bsca[:,1] = df['532_bsc_Sa'] [:]
     Bsca[:,2] = df['1064_bsc_Sa'][:]
 
-    # Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
+    Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
     Dep = np.zeros((height_shape,3))
     Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
@@ -874,7 +894,7 @@ def Read_Data_HSRL_constHgt(file_path,file_name,PixNo):
     Bsca[:,1] = df['532_bsc_Sa'] [:]
     Bsca[:,2] = df['1064_bsc_Sa'][:]
 
-    # Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
+    Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
     Dep = np.zeros((height_shape,3))
     Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
