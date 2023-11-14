@@ -15,7 +15,7 @@ This code reads Polarimetric data from the Campaigns and runs GRASP. This code w
 
 import sys
 from CreateRsltsDict import Read_Data_RSP_Oracles
-from CreateRsltsDict import Read_Data_HSRL_Oracles,Read_Data_HSRL_Oracles_Height,Read_Data_HSRL_Oracles_Height_V2_1
+from CreateRsltsDict import Read_Data_HSRL_Oracles,Read_Data_HSRL_Oracles_Height,Read_Data_HSRL_Oracles_Height_V2_1,Read_Data_HSRL_constHgt
 import netCDF4 as nc
 from runGRASP import graspDB, graspRun, pixel, graspYAML
 from matplotlib import pyplot as plt
@@ -355,17 +355,71 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
             #Path to save output plot
             savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
 
-    
+        #This section is for the normalization paramteter in the yaml settings file
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
-        rslt = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,PixNo)[0]
-        max_alt = rslt['OBS_hght']
+        DictHsrl = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,PixNo)
+        
+        rslt = DictHsrl[0]
+        #Boundary layer height 
+        BLH= DictHsrl[1]
+        Vext1 = rslt['meas_VExt'][:,0]
+        hgt =  rslt['RangeLidar'][:,0]
+        #Dust layer above the boundary layer height
+        DstVExt = Vext1[np.where(hgt>=BLH)] 
+        DstHgt = hgt[np.where(hgt>=BLH)]
+        #Assuming the sea salt layer to be confined within the boundary layer
+        SeaHgt = hgt[np.where(hgt<BLH)]
+        SeaVExt = Vext1[np.where(hgt<BLH)] 
+        
+        DstProf1 = np.concatenate((DstVExt,1e-9*np.ones(len(Vext1) - len(DstVExt) )))
+        #The sea salt profile us caculated by substracting the contribution of dust from the measured profile
+        
+        SeaProf1 = np.concatenate((1e-9*np.ones(len(Vext1) - len(SeaVExt)),SeaVExt ))
+
+        SeaProf =SeaProf1/ np.trapz(SeaProf1[::-1],hgt[::-1])
+        DstProf = DstProf1/ np.trapz(DstProf1[::-1],hgt[::-1])
+
+        #For validation purposes
+        print(np.trapz(SeaProf[::-1],hgt[::-1]),np.trapz(DstProf[::-1],hgt[::-1]))
+
+        plt.plot(SeaProf1,hgt)
+        plt.plot(DstProf1,hgt)
+
+        plt.plot(SeaProf,hgt)
+        plt.plot(DstProf,hgt)
+
+        #Updating the normalization values in the settings file. 
+        with open(fwdModelYAMLpath, 'r') as f:  
+            data = yaml.safe_load(f)
+
+        for noMd in range(4): #loop over the aerosol modes (i.e 2 for fine and coarse)
+                #State Varibles from yaml file: 
+            if noMd ==2:
+                data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  DstProf.tolist()
+            if noMd ==3:
+                data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  SeaProf.tolist()
+        
+        if Kernel_type == "sphro":
+            UpKerFile = 'settings_BCK_POLAR_3modes_Shape_Sph_Update.yml' #for spheroidal kernel
+        if Kernel_type == "TAMU":
+            UpKerFile = 'settings_BCK_POLAR_3modes_Shape_HEX_Update.yml'#for hexahedral kernel
+    
+        ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+        
+
+        with open(ymlPath+UpKerFile, 'w') as f2: #write the chnages to new yaml file
+            yaml.safe_dump(data, f2)
+            #     # print("Updating",YamlChar[i])
+
+        max_alt = rslt['OBS_hght'] #altitude of the aircraft
         print(rslt['OBS_hght'])
 
         Vext = rslt['meas_VExt']
+        Updatedyaml = ymlPath+UpKerFile
 
         maxCPU = 3 #maximum CPU allocated to run GRASP on server
         gRuns = []
-        yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
+        yamlObj = graspYAML(baseYAMLpath=Updatedyaml)
         # ymlO = yamlObj._repeatElementsInField(fldName=fwdModelYAMLpath, Nrepeats =10, λonly=False)
 
 
@@ -419,7 +473,7 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
         savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
 
 # /tmp/tmpn596k7u8$
-    rslt_HSRL = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo)
+    rslt_HSRL = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo)[0]
     rslt_RSP = Read_Data_RSP_Oracles(file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn)
     
     rslt= {}  # Teh order of the data is  First lidar(number of wl ) and then Polarimter data 
@@ -977,6 +1031,31 @@ for i in range(1):
     CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU)
 
 
+
+"""
+BLH= 900
+Vext1 = HSRL_sphrod[0][0]['meas_VExt'][:,0][::-1]
+hgt = HSRL_sphrod[0][0]['range'][0,:][::-1]
+
+SeaVExt = Vext1[np.where(hgt<=BLH)]
+SeaHgt = hgt[np.where(hgt<=BLH)]
+
+SeaNorm = SeaVExt/np.trapz(SeaVExt,SeaHgt)
+
+DstVExt = Vext1[np.where(hgt>BLH)]
+DstHgt = hgt[np.where(hgt>BLH)]
+
+DstNorm = DstVExt/np.trapz(DstVExt,DstHgt)
+
+print(np.trapz(SeaNorm,SeaHgt),np.trapz(DstNorm,DstHgt))
+
+SeaProf = np.concatenate((1e-8*np.ones(len(DstNorm)),SeaNorm[::-1] ))
+DstProf = np.concatenate((DstNorm[::-1],1e-8*np.ones(len(SeaNorm) )))
+
+plt.plot(SeaProf,hgt[::-1])
+plt.plot(DstProf,hgt[::-1])
+
+"""
 
 # #Running GRASP for HSRL, HSRL_sphrod = for spheriod kernels,HSRL_Tamu = Hexahedral kernels
 # HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,updateYaml= False) 

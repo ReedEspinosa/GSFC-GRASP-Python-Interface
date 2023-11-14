@@ -27,7 +27,7 @@ def checkFillVals(param , negative_check = None):
 #This sets the nan values to 0 
 def HSRL2_checkFillVals(param):
     param[:] = np.where(param < 0, 0, param)
-    param[:] = np.where(np.isnan(param), 0, param)
+    param[:] = np.where(np.isnan(param), 1e-10, param)
     return param
 
 #Checks for negative values and replaces them by nan
@@ -296,6 +296,12 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
     df_new = pd.DataFrame(del_dict)
     df_new.interpolate(inplace=True, limit_area= 'inside')
 
+    BLHIndx = np.where(np.gradient(df_new['1064_dep'],df_new['Altitude']) ==np.nanmax(np.gradient(df_new['1064_dep'],df_new['Altitude']))) #index of the BLH
+    print(BLHIndx)
+    #Height limits
+    # BLh = 1200 #Boundary layer height 
+    BLh = np.array(df_new['Altitude'][:])[BLHIndx]
+
     #Filtering and removing the pixels with bad data: 
     Removed_index = []  # Removed_index holds indices of pixels to be removed
     # Filter values greater than flight altitude
@@ -343,7 +349,7 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
     hgt = del_dictt['Altitude']
     
     
-    hgtInterv = 120  # new height interval, for now it is set to 150 m
+    hgtInterv = 150  # new height interval, for now it is set to 150 m
 
     altitude_diff = np.gradient(del_dictt['Altitude'])
     numInterv = int(hgtInterv / np.mean(altitude_diff))  # Calculate numInterv based on mean altitude difference
@@ -439,7 +445,7 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
     #Substitude the actual value
     # rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
     f1.close() 
-    return rslt
+    return rslt,BLh
 
 #Read_Data_HSRL_Oracles Version .2 
 # Using different averaging method for vertical profile averaging 
@@ -493,8 +499,8 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     BLh = np.array(df_new['Altitude'][:])[BLHIndx] #Boundary layer height 
     # print(df_new['Altitude'][:])
     print(BLh)
-    UpH = 4000 
-
+    UpH = 4500 
+    # BLh =700
     belowBL ={}
     MidAtm={}
     UpAtm={}
@@ -503,19 +509,63 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     #No of height grids in each ses in meters
     BLiIntv = 50
     MidInv = 150
-    UpInv = 450
+    UpInv = 350
 
-    BLIntv =  110
+    BLIntv = 120
 
     
     # BLIntv =  110
+    avgProf = pd.DataFrame()
 
     hgt = del_dictt['Altitude']
+
+    # hgtInterv = 150  # new height interval, for now it is set to 150 m
+
+    # altitude_diff = np.gradient(del_dictt['Altitude'])
+    # numInterv = int(hgtInterv / np.mean(altitude_diff))  # Calculate numInterv based on mean altitude difference
+    # Npoint = int(len(del_dictt['Altitude'])/numInterv) # No of vertical bins after averaging
+    
+    # # Create an array to store the averaged values
+    # for i in range(numInterv):
+    #     strtVal = i*numInterv
+    #     endVal = (i+1)*numInterv    
+
+    #     hgtAvg = np.zeros(Npoint)
+    # for k in range (len(inp)):
+    #     a = 0   # Indexing variable
+    #     averaged_values = np.zeros(Npoint)
+
+    #     for i in range(Npoint):
+    #         start_range = hgt[i * numInterv]
+    #         end_range = hgt[(i + 1) * numInterv]
+    #         indexAvg= np.where((hgt >= start_range) & (hgt < end_range)) #Index of values in the start-stop range 
+            
+    #         #Taking mean
+    #         if len(indexAvg[0]) > 0:
+    #             averaged_values[a]= np.mean(np.array(df_new[f'{inp[k]}'])[indexAvg])
+            
+    #         if k ==0: # Avoiding repetition 
+    #             hgtAvg[a]= np.mean(np.array(df_new['Altitude'])[indexAvg])
+    #         a=a+1 # Indexing variable
+    #     #Storing the values of profile
+    #     avgProf[f'{inp[k]}'] = averaged_values #Averaged profile values with height >0 
+    #     avgProf['Altitude'] =  hgtAvg
+        
+    # ## GRASP requires the vertical profiles to be in decendong order, so reversing the entire profile
+    # df = avgProf[::-1]
+
+
+
+
+
+
+
+
     #Dividing the profile 
     for i in range (len(inp2)): 
-        belowBL[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt<= BLh)]
-        MidAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where((hgt> BLh) &(hgt< UpH))]
-        UpAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt> UpH)]
+        belowBL[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt< BLh)]
+        MidAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where((hgt>= BLh) &(hgt< UpH))]
+        UpAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt>= UpH)]
     
     
     #Average profiles
@@ -529,78 +579,79 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     for i in range (len(inp2)): 
         FullAvgProf[inp2[i]] =  np.concatenate((np.array(UpProf[inp2[i]]), np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
         
-    # fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
-    # for i in range (0,len(inp)):
-    #     axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
-    #     axs[i].plot(FullAvgProf[f'{inp[i]}'],FullAvgProf['Altitude'], marker= '.' , label = "Avg Prof")
+    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    for i in range (0,len(inp)):
+        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+        axs[i].plot(FullAvgProf[f'{inp[i]}'],FullAvgProf['Altitude'], marker= '.' , label = "Avg Prof")
 
-    #     axs[i].set_xlabel(f'{inp[i]}')
+        axs[i].set_xlabel(f'{inp[i]}')
 
-    # axs[0].legend()
-    # axs[0].set_ylabel('Height m ') 
-
-
+    axs[0].legend()
+    axs[0].set_ylabel('Height m ') 
 
 
-    # fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
-    # for i in range (0,len(inp)):
-    #     axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
-    #     axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
-    #     axs[i].plot(MidAtm[f'{inp[i]}'],MidAtm['Altitude'], marker= '.' , label = "bl")
-    #     axs[i].plot(UpAtm[f'{inp[i]}'],UpAtm['Altitude'], marker= '.' , label = "bl")
+
+
+    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    for i in range (0,len(inp)):
+        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+        axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
+        axs[i].plot(MidAtm[f'{inp[i]}'],MidAtm['Altitude'], marker= '.' , label = "bl")
+        axs[i].plot(UpAtm[f'{inp[i]}'],UpAtm['Altitude'], marker= '.' , label = "bl")
         
 
-    #     axs[i].set_xlabel(f'{inp[i]}')
+        axs[i].set_xlabel(f'{inp[i]}')
 
-    # axs[0].legend()
-    # axs[0].set_ylabel('Height m ') 
-    #Creating GRASP rslt dictionary for runGRASP.py    
+    axs[0].legend()
+    axs[0].set_ylabel('Height m ') 
+    # Creating GRASP rslt dictionary for runGRASP.py    
     df = pd.DataFrame(FullAvgProf)
+    # df = pd.DataFrame(df_new)
     rslt = {} # 
     
-    height_shape = np.array(df['Altitude'][:]).shape[0]+1   #setting the lowermos value to zero to avoid GRASP intgration
+    height_shape = np.array(df['Altitude'][:]).shape[0]   #setting the lowermos value to zero to avoid GRASP intgration
 
     Range = np.ones((height_shape,3))
-    Range[:-1,0] = df['Altitude'][:]
-    Range[:-1,1] = df['Altitude'][:]
-    Range[:-1,2] = df['Altitude'][:]  # in meters
+    Range[:,0] = df['Altitude'][:]
+    Range[:,1] = df['Altitude'][:]
+    Range[:,2] = df['Altitude'][:]  # in meters
     rslt['RangeLidar'] = Range
     
 
     Bext = np.zeros((height_shape,3))
     
-    Bext[-2:,0] = df['355_ext'][height_shape-2:]
-    Bext[:-1,0] = df['355_ext'][:]
+    # Bext[:,0] = df['355_ext'][:]
+    Bext[:,0] = df['355_ext'][:]
 
     
-    Bext[-2:,1] = df['532_ext'][height_shape-2:]
-    Bext[:-1,1] = df['532_ext'][:]
+    # Bext[:,1] = df['532_ext'][height_shape-2:]
+    Bext[:,1] = df['532_ext'][:]
     
-    Bext[-2:,2] = df['1064_ext'][height_shape-2:]
-    Bext[:-1,2] = df['1064_ext'] [:]
+    # Bext[-2:,2] = df['1064_ext'][height_shape-2:]
+    Bext[:,2] = df['1064_ext'] [:]
     Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
 
     Bsca = np.zeros((height_shape,3))
     
-    Bsca[-2:,0] = df['355_bsc_Sa'][height_shape-2:]
-    Bsca[:-1,0] = df['355_bsc_Sa'][:]
+    # Bsca[:,0] = df['355_bsc_Sa'][height_shape-2:]
+    Bsca[:,0] = df['355_bsc_Sa'][:]
     
-    Bsca[-2:,1] = df['532_bsc_Sa'][height_shape-2:]
-    Bsca[:-1,1] = df['532_bsc_Sa'] [:]
+    # Bsca[-2:,1] = df['532_bsc_Sa'][height_shape-2:]
+    Bsca[:,1] = df['532_bsc_Sa'] [:]
     
-    Bsca[-2:,2] = df['1064_bsc_Sa'][height_shape-2:]
-    Bsca[:-1,2] = df['1064_bsc_Sa'][:]
+    # Bsca[-2:,2] = df['1064_bsc_Sa'][height_shape-2:]
+    Bsca[:,2] = df['1064_bsc_Sa'][:]
   
     # Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
     Dep = np.zeros((height_shape,3))
-    Dep[-2:,0] = df['355_dep'][height_shape-2:] #Total depolarization ratio
-    Dep[-2:,1] = df['532_dep'][height_shape-2:]
-    Dep[-2:,2] = df['1064_dep'] [height_shape-2:]
+    # Dep[-2:,0] = df['355_dep'][height_shape-2:] #Total depolarization ratio
+    # Dep[-2:,1] = df['532_dep'][height_shape-2:]
+    # Dep[-2:,2] = df['1064_dep'] [height_shape-2:]
     
-    Dep[:-1,0] = df['355_dep'][:]  #Total depolarization ratio
-    Dep[:-1,1] = df['532_dep'][:]
-    Dep[:-1,2] = df['1064_dep'] [:]
+    Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
+    Dep[:,1] = df['532_dep'][:]
+    Dep[:,2] = df['1064_dep'] [:]
     #Unit conversion 
     rslt['meas_VExt'] = Bext / 1000
     rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 to m-1
@@ -810,7 +861,7 @@ def Read_Data_HSRL_constHgt(file_path,file_name,PixNo):
     for i in range (len(inp)):
         
         #Index of values below aircraft and above ground
-        hmaxInd = np.max(np.where(HSRL['Altitude'][0] <=AirAlt)[0])
+        hmaxInd = np.max(np.where(HSRL['Altitude'][0] <=AirAlt-1200)[0])
         hminInd = np.min(np.where(HSRL['Altitude'][0] >0)[0]) #filtering the values that have negative vales for the height on the data
         
         #Storing Bsca, Bext and DP values for all HSRL wavelengths
