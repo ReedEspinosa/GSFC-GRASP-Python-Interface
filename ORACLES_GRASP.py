@@ -371,10 +371,12 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
         SeaHgt = hgt[np.where(hgt<BLH)]
         SeaVExt = Vext1[np.where(hgt<BLH)] 
         
-        DstProf1 = np.concatenate((DstVExt,1e-9*np.ones(len(Vext1) - len(DstVExt) )))
-        #The sea salt profile us caculated by substracting the contribution of dust from the measured profile
+        DstProf1 = np.concatenate((DstVExt,np.geomspace(DstVExt[-1], 1e-9, len(Vext1) - len(DstVExt) )))
         
-        SeaProf1 = np.concatenate((1e-9*np.ones(len(Vext1) - len(SeaVExt)),SeaVExt ))
+        
+        #The sea salt profile us caculated by substracting the contribution of dust from the measured profile
+        DstProf1[DstProf1==0]= 1e-9
+        SeaProf1 = np.concatenate((1e-9*np.ones(len(Vext1) - len(SeaVExt)),SeaVExt-np.geomspace(DstVExt[-1], 1e-9, len(Vext1) - len(DstVExt) ) ))
 
         SeaProf =SeaProf1/ np.trapz(SeaProf1[::-1],hgt[::-1])
         DstProf = DstProf1/ np.trapz(DstProf1[::-1],hgt[::-1])
@@ -685,15 +687,16 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, forward = None, retrieval = None, Createpdf
                 else:
                     axs[a,b].plot(Spheriod['lambda'], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_sp[mode],lw = 2,ls = linestyle[mode],markersize=15, label=f"Sphrod_{mode_v[mode]}")
                     axs[a,b].plot(Hex['lambda'],Hex[Retrival[i]][mode], marker = "H",color = cm_t[mode] ,lw = 2,  ls = linestyle[mode],markersize=15, label=f"Hex_{mode_v[mode]}")
-                    axs[a,b].set_xticks(Spheriod['lambda'])
-                    # axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+                    axs[a,b].set_xticks(Spheriod['lambda'],rotation=45)
+                    axs[a,b].set_xticklabels(Spheriod['lambda'],rotation=45)
+
                     axs[a,b].set_xlabel(r'$\lambda \mu m$')
             axs[a,b].set_ylabel(f'{Retrival[i]}')
             
             
         axs[2,1].plot(Spheriod['lambda'], Spheriod['aod'], marker = "$O$",color = color_sph,markersize=15,lw = 2, label=f"Sphroid")
         axs[2,1].plot(Hex['lambda'], Hex['aod'], marker = "H", color = color_tamu ,markersize=15,lw = 2, label=f"Hexahedral")
-        axs[2,1].set_xticks(Spheriod['lambda'])
+        axs[2,1].set_xticklabels(Spheriod['lambda'],rotation=45)
         # axs[2,1].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
         meas_aod = []
         for i in range (3):
@@ -705,9 +708,9 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, forward = None, retrieval = None, Createpdf
         for i in range (3):
             meas_aodhex.append(np.trapz(HTam['fit_VExt'][:,i][::-1],HTam['range'][i,:][::-1] ))
         
-        axs[2,1].plot( Spheriod['lambda'],meas_aod,color = "k", ls = "--", marker = '*' ,markersize=20, label = " cal meas")    
-        axs[2,1].plot( Spheriod['lambda'],meas_aodsph,color = "r", ls = "-.", marker = '*' ,markersize=20, label = "cal sph")    
-        axs[2,1].plot( Spheriod['lambda'],meas_aod,color = "b", ls = "-.", marker = '*' ,markersize=20, label = "cal hex")    
+        # axs[2,1].plot( Spheriod['lambda'],meas_aod,color = "k", ls = "--", marker = '*' ,markersize=20, label = " cal meas")    
+        # axs[2,1].plot( Spheriod['lambda'],meas_aodsph,color = "r", ls = "-.", marker = '*' ,markersize=20, label = "cal sph")    
+        # axs[2,1].plot( Spheriod['lambda'],meas_aod,color = "b", ls = "-.", marker = '*' ,markersize=20, label = "cal hex")    
        
         
         axs[2,1].set_xlabel(r'$\lambda$')
@@ -860,7 +863,7 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo, LIDARPOL= None):
                 axs[a,b].plot(Spheriod['lambda'], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_sp[mode],lw = 2,ls = linestyle[mode],markersize=15, label=f"Sphrod_{mode_v[mode]}")
                 axs[a,b].plot(Hex['lambda'],Hex[Retrival[i]][mode], marker = "H",color = cm_t[mode] ,lw = 2,  ls = linestyle[mode],markersize=15, label=f"Hex_{mode_v[mode]}")
                 axs[a,b].set_xticks(Spheriod['lambda'])
-                axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+                # axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
                 axs[a,b].set_xlabel(r'$\lambda \mu m$')
         axs[a,b].set_ylabel(f'{Retrival[i]}')
         
@@ -868,7 +871,7 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo, LIDARPOL= None):
     axs[2,1].plot(Spheriod['lambda'], Spheriod['aod'], marker = "$O$",color = color_sph,markersize=15,lw = 2, label=f"Sphroid")
     axs[2,1].plot(Hex['lambda'], Hex['aod'], marker = "H", color = color_tamu ,markersize=15,lw = 2, label=f"Hexahedral")
     axs[2,1].set_xticks(Spheriod['lambda'])
-    axs[2,1].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+    # axs[2,1].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
             
     axs[2,1].set_xlabel(r'$\lambda$')
     axs[2,1].set_ylabel('Total AOD')
