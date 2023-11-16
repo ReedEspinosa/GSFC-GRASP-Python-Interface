@@ -46,7 +46,7 @@ def VertP(Data, hgtInterv):
     avgProf = pd.DataFrame()
     hgt = Data['Altitude']
 
-    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude']
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude','Dust_Mixing_Ratio']
 
     altitude_diff = np.gradient(Data['Altitude'])
     numInterv = int(hgtInterv / np.mean(altitude_diff))  # Calculate numInterv based on mean altitude difference
@@ -461,15 +461,15 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
 
     Data_dic ={} #This dictionary stores all the HSRL variables used for GRASP forward simulation
-    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep',]
-    inp2 = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude']
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep','Dust_Mixing_Ratio']
+    inp2 = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude','Dust_Mixing_Ratio']
 
     #Setting negative values to zero, The negative values are due to low signal so we can replace with 0 without loss of info.
     for i in range (len(inp)):
         
         #Index of values below aircraft and above ground
         hmaxInd = np.max(np.where(HSRL['Altitude'][0] <=AirAlt)[0])  #-1000 os added to avoid values vary close to the aircraft
-        hminInd = np.min(np.where(HSRL['Altitude'][0] > 88 )[0]) #80 is set randomly to avoid values very close to the ground #filtering the values that have negative vales for the height on the data
+        hminInd = np.min(np.where(HSRL['Altitude'][0] > 150 )[0]) #80 is set randomly to avoid values very close to the ground #filtering the values that have negative vales for the height on the data
         
         #Storing Bsca, Bext and DP values for all HSRL wavelengths
 
@@ -519,8 +519,6 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
 
     hgt = del_dictt['Altitude']
 
-    
-
     #Dividing the profile 
     for i in range (len(inp2)): 
         belowBL[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt< BLh)]
@@ -532,7 +530,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     BLProf= VertP(belowBL, BLIntv)
     MidProf= VertP(MidAtm, MidInv)
     # UpProf= VertP(UpAtm, UpInv)
-    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Dust_Mixing_Ratio']
 
     FullAvgProf = {}
 
@@ -542,7 +540,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
         # FullAvgProf[inp2[i]] =   np.array(MidProf[inp2[i]])
        
     
-    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    fig, axs = plt.subplots(nrows= 1, ncols=10, figsize=(20, 6), sharey = True)
     for i in range (0,len(inp)):
         axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
         axs[i].plot(FullAvgProf[f'{inp[i]}'],FullAvgProf['Altitude'], marker= '.' , label = "Avg Prof")
@@ -555,7 +553,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
 
 
 
-    fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
+    fig, axs = plt.subplots(nrows= 1, ncols=10, figsize=(20, 6), sharey = True)
     for i in range (0,len(inp)):
         axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
         axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
@@ -571,6 +569,8 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     df = pd.DataFrame(FullAvgProf)
     # df = pd.DataFrame(df_new)
     rslt = {} # 
+
+    DstMR = df['Dust_Mixing_Ratio']
     
     height_shape = np.array(df['Altitude'][:]).shape[0]   #setting the lowermos value to zero to avoid GRASP intgration
 
@@ -630,7 +630,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     rslt['land_prct'] = 0 #Ocean Surface
 
     f1.close()
-    return rslt,BLh
+    return rslt,BLh,DstMR
 
 
 

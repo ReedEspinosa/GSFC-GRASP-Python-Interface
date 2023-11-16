@@ -50,7 +50,8 @@ maxr=1.05  #set max and min value : here max = 5% incease, min 5% decrease : thi
 minr =0.95
 a=1 #no of char # this is a varible added to char and modes to avoid char[0]/ mod[0] which doesnt exist
 
-#Saving state variables and noises from yaml file
+# #Saving state variables and noises from yaml file
+# def Normalize_prof():
 
         
 def VariableNoise(YamlFileName,nwl=3): #This will store the inforamtion of the characteristics and noises from the yaml file to a string for reference. 
@@ -106,9 +107,6 @@ def VariableNoise(YamlFileName,nwl=3): #This will store the inforamtion of the c
     for i in range (len(Info)):
         line = Info[i]
         combined_string = combined_string + "\n" + line
-
-    
-    
 
     return combined_string
 
@@ -359,34 +357,66 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
         DictHsrl = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,PixNo)
         
+        
         rslt = DictHsrl[0]
         #Boundary layer height 
-        BLH= DictHsrl[1]
-        Vext1 = rslt['meas_VExt'][:,0]
-        hgt =  rslt['RangeLidar'][:,0]
-        #Dust layer above the boundary layer height
-        DstVExt = Vext1[np.where(hgt>=BLH)] 
-        DstHgt = hgt[np.where(hgt>=BLH)]
-        #Assuming the sea salt layer to be confined within the boundary layer
-        SeaHgt = hgt[np.where(hgt<BLH)]
-        SeaVExt = Vext1[np.where(hgt<BLH)] 
-        
-        DstProf1 = np.concatenate((DstVExt,np.geomspace(DstVExt[-1], 1e-9, len(Vext1) - len(DstVExt) )))
-        
-        
-        #The sea salt profile us caculated by substracting the contribution of dust from the measured profile
-        DstProf1[DstProf1==0]= 1e-9
-        SeaProf1 = np.concatenate((1e-9*np.ones(len(Vext1) - len(SeaVExt)),SeaVExt-np.geomspace(DstVExt[-1], 1e-9, len(Vext1) - len(DstVExt) ) ))
+        # BLH= DictHsrl[1]
 
-        SeaProf =SeaProf1/ np.trapz(SeaProf1[::-1],hgt[::-1])
-        DstProf = DstProf1/ np.trapz(DstProf1[::-1],hgt[::-1])
+        
+        Vext1 = rslt['meas_VExt'][:,0]
+        hgt =  rslt['RangeLidar'][:,0][:]
+        DP1064= rslt['meas_DP'][:,2][:]
+
+        #Boundary layer height
+        BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]-3
+        BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+        
+        
+        DMR = DictHsrl[2]
+        # DMR[DMR>1] = 1
+        VextDst = DMR*Vext1
+
+        Vextoth = abs(Vext1-VextDst)
+        Vextfine = 0.9e-11*np.ones(len(Vext1))
+        Vextfine[:][:BLH_indx[0]] = Vextoth[:BLH_indx[0]]
+        VextSea = 0.1e-11*np.ones(len(Vext1))
+        VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+
+        Vextfine[ Vextfine==0] =9.00000000e-8
+        VextDst[VextDst==0] = 9.00000000e-11 
+        fig = plt.figure()
+        plt.plot(VextDst,hgt, color = '#067084',label='Dust')
+        plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+        plt.plot(Vextfine,hgt,color ='y',label='fine')
+        plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+        plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
+        plt.legend()
+        plt.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/DMRHSRL2Retrieval.png', dpi = 400)
+        
+
+        
+        #BLH after averaging
+        
+        #Dust layer above the boundary layer height
+        # Vext2 = np.abs(Vext1 - 1e-8)
+        # DstVExt = Vext2[np.where(hgt>=BLH)]
+        # SeaVExt = Vext2[np.where(hgt<BLH)] 
+        # DstProf1 = np.concatenate((DstVExt-1e-10,1e-5*np.ones(len(SeaVExt)-1),1e-10*np.ones(1)))
+        # SeaProf1 = np.concatenate((1e-10*np.ones(len(DstVExt)),SeaVExt[:-1]-1e-5,SeaVExt[-1]*np.ones(1)))
+        # VextDst[VextDst<=0] = 1e-15
+        # VextSea[VextSea<=0] = 1e-15
+
+        FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+        DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+        SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
 
         #For validation purposes
         print(np.trapz(SeaProf[::-1],hgt[::-1]),np.trapz(DstProf[::-1],hgt[::-1]))
 
-        plt.plot(SeaProf1,hgt)
-        plt.plot(DstProf1,hgt)
+        plt.plot(VextDst,hgt)
+        plt.plot(VextSea,hgt)
 
+        plt.plot(FineProf,hgt)
         plt.plot(SeaProf,hgt)
         plt.plot(DstProf,hgt)
 
@@ -395,7 +425,10 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
             data = yaml.safe_load(f)
 
         for noMd in range(4): #loop over the aerosol modes (i.e 2 for fine and coarse)
+            
                 #State Varibles from yaml file: 
+            if noMd ==1:
+                data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  FineProf.tolist()
             if noMd ==2:
                 data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  DstProf.tolist()
             if noMd ==3:
@@ -537,6 +570,24 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     #rslts contain all the results form the GRASP inverse run
     rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
     return rslts
+
+# def randomInitGuess():
+        
+#     gRuns = []
+#     graspYAML.scrambleInitialGuess(self, fracOfSpace=1, skipTypes=['aerosol_concentration']):
+   
+
+#     yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
+#     #eventually have to adjust code for height, this works only for one pixel (single height value)
+#     gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML= True )) # This should copy to new YAML object
+#     pix = pixel()
+#     pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage= 'meas', verbose=False)
+#     gRuns[-1].addPix(pix)
+#     gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU)
+#     #rslts contain all the results form the GRASP inverse run
+#     rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
+    
+
 
 def VrtGrad(HSRL_sphrod):
 
@@ -991,7 +1042,7 @@ for i in range(1):
     
     
     HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True)
-    plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
+    # plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
 
     HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True)
     plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
@@ -1018,7 +1069,7 @@ for i in range(1):
 # #     print('Cost Value Sph, tamu: ',  HSRL_sphrod_strict[0][0]['costVal'],HSRL_Tamu_strict[0][0]['costVal'])
     
      #Lidar+pol combined retrieval
-    LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
+    # LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
     LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
    
     print('Cost Value Sph, tamu: ',  LidarPolSph[0]['costVal'],LidarPolTAMU[0]['costVal'])
