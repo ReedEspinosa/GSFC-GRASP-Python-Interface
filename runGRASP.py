@@ -1268,7 +1268,7 @@ class pixel():
         if hasattr(self, 'gaspar')== True:  #check if gas absorption/molecular depol values are provided
             allVals = np.block([self.gaspar])
             GasAbsorb = " ".join(['%14.10f' % n for n in allVals]) #Molecular depolarization ration if DP is used or Tau of LS is used
-            print("Gasabs",GasAbsorb,len(np.block([self.gaspar])))
+            # print("Gasabs",GasAbsorb,len(np.block([self.gaspar])))
             measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr,GasAbsorb))  #,GasAbsorb
         else: 
             measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr))  #,GasAbsorb
