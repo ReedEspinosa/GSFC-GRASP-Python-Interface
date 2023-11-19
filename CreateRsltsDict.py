@@ -420,7 +420,7 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
     Bsca[:,1] = df['532_bsc'] [:]
     Bsca[:,2] = df['1064_bsc'][:]
 
-    Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
+    # Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
 
     Dep = np.ones((height_shape,3))
@@ -443,7 +443,7 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
     rslt['land_prct'] = 0 #Ocean Surface
 
     #Substitude the actual value
-    # rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
+    rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
     f1.close() 
     return rslt,BLh
 
@@ -508,10 +508,10 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     #TODO make this part more general
     #No of height grids in each ses in meters
     BLiIntv = 50
-    MidInv = 150
+    MidInv = 200
     # UpInv = 300
 
-    BLIntv = 110
+    BLIntv = 150
 
     
     # BLIntv =  110
@@ -592,7 +592,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     
     # Bext[-2:,2] = df['1064_ext'][height_shape-2:]
     Bext[:,2] = df['1064_ext'] [:]
-    Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
+    # Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
 
     Bsca = np.zeros((height_shape,3))
     
@@ -628,6 +628,9 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     rslt['longitude']= f1['Nav_Data']['gps_lon'][PixNo]
     rslt['OBS_hght']= AirAlt # aircraft altitude in m
     rslt['land_prct'] = 0 #Ocean Surface
+    
+    rslt['gaspar'] = np.array([0.0037,0.0037,0.0037])  
+    #TODO make this general
 
     f1.close()
     return rslt,BLh,DstMR

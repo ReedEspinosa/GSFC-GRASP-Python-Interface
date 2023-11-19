@@ -147,26 +147,26 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,Co
             # #     # initCond['max'] = float(np.max(RSP_rslt['vol'][noMd])*maxr) #value from the GRASP result for RSP
             # #     # initCond['min'] = float(RSP_rslt['vol'][noMd]*minr)
             #     initCond['value'] = float(RSP_rslt['vol'][noMd]) #value from the GRASP result for RSP
-            if YamlChar[i] == 'size_distribution_lognormal':
-                initCond['value'] = float(RSP_rslt['rv'][noMd]),float(RSP_rslt['sigma'][noMd])
-                initCond['max'] =float(RSP_rslt['rv'][noMd]*maxr),float(RSP_rslt['sigma'][noMd]*maxr)
-                initCond['min'] =float(RSP_rslt['rv'][noMd]*minr),float(RSP_rslt['sigma'][noMd]*minr)
-                # print("Updating",YamlChar[i])
-                if ConsType == 'strict': #This will set the retrieved parameteter to false. 
-                    data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
+            # if YamlChar[i] == 'size_distribution_lognormal':
+            #     initCond['value'] = float(RSP_rslt['rv'][noMd]),float(RSP_rslt['sigma'][noMd])
+            #     initCond['max'] =float(RSP_rslt['rv'][noMd]*maxr),float(RSP_rslt['sigma'][noMd]*maxr)
+            #     initCond['min'] =float(RSP_rslt['rv'][noMd]*minr),float(RSP_rslt['sigma'][noMd]*minr)
+            #     # print("Updating",YamlChar[i])
+            #     if ConsType == 'strict': #This will set the retrieved parameteter to false. 
+            #         data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
             
-            if YamlChar[i] == 'real_part_of_refractive_index_spectral_dependent':
-                initCond['index_of_wavelength_involved'] = [1,2,3]
-                #Adding off sets because the HSRL abd RSP wavelengths dont match, this should be improved
-                if noMd==0: offs = 0
-                if noMd==1: offs = 0
+            # if YamlChar[i] == 'real_part_of_refractive_index_spectral_dependent':
+            #     initCond['index_of_wavelength_involved'] = [1,2,3]
+            #     #Adding off sets because the HSRL abd RSP wavelengths dont match, this should be improved
+            #     if noMd==0: offs = 0
+            #     if noMd==1: offs = 0
 
-                initCond['value'] =float(RSP_rslt['n'][noMd][1]+offs),float(RSP_rslt['n'][noMd][2]),float(RSP_rslt['n'][noMd][4])
-                initCond['max'] =float((RSP_rslt['n'][noMd][1]+offs)*maxr),float(RSP_rslt['n'][noMd][2]*maxr),float(RSP_rslt['n'][noMd][4]*maxr)
-                initCond['min'] =float((RSP_rslt['n'][noMd][1]+offs)*minr),float(RSP_rslt['n'][noMd][2]*minr),float(RSP_rslt['n'][noMd][4]*minr)
-                # print("Updating",YamlChar[i])
-                if ConsType == 'strict':  # tot set retrival in setting files to False
-                    data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
+            #     initCond['value'] =float(RSP_rslt['n'][noMd][1]+offs),float(RSP_rslt['n'][noMd][2]),float(RSP_rslt['n'][noMd][4])
+            #     initCond['max'] =float((RSP_rslt['n'][noMd][1]+offs)*maxr),float(RSP_rslt['n'][noMd][2]*maxr),float(RSP_rslt['n'][noMd][4]*maxr)
+            #     initCond['min'] =float((RSP_rslt['n'][noMd][1]+offs)*minr),float(RSP_rslt['n'][noMd][2]*minr),float(RSP_rslt['n'][noMd][4]*minr)
+            #     # print("Updating",YamlChar[i])
+            #     if ConsType == 'strict':  # tot set retrival in setting files to False
+            #         data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
             
             if YamlChar[i] == 'imaginary_part_of_refractive_index_spectral_dependent':
                 initCond['index_of_wavelength_involved'] = [1,2,3]
@@ -177,16 +177,16 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,Co
                 if ConsType == 'strict':
                     data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
             
-            if YamlChar[i] == 'sphere_fraction':
+            # if YamlChar[i] == 'sphere_fraction':
                
-                initCond['value'] = float(RSP_rslt['sph'][noMd]/100)
+            #     initCond['value'] = float(RSP_rslt['sph'][noMd]/100)
             
-                initCond['max'] =float(RSP_rslt['sph'][noMd] *maxr/100) #GARSP output is in %
+            #     initCond['max'] =float(RSP_rslt['sph'][noMd] *maxr/100) #GARSP output is in %
              
-                initCond['min'] =float(RSP_rslt['sph'][noMd] *minr/100)
-                # print("Updating",YamlChar[i])
-                if ConsType == 'strict':
-                    data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
+            #     initCond['min'] =float(RSP_rslt['sph'][noMd] *minr/100)
+            #     # print("Updating",YamlChar[i])
+            #     if ConsType == 'strict':
+            #         data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
             
 
 
@@ -363,27 +363,36 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
         # BLH= DictHsrl[1]
 
         
-        Vext1 = rslt['meas_VExt'][:,0]
+        Vext1 = rslt['meas_VExt'][:,1]
         hgt =  rslt['RangeLidar'][:,0][:]
         DP1064= rslt['meas_DP'][:,2][:]
 
         #Boundary layer height
-        BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]-3
+        BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
         BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
         
         
         DMR = DictHsrl[2]
-        # DMR[DMR>1] = 1
+        DMR[DMR>1] = 1
         VextDst = DMR*Vext1
-
         Vextoth = abs(Vext1-VextDst)
-        Vextfine = 0.9e-11*np.ones(len(Vext1))
-        Vextfine[:][:BLH_indx[0]] = Vextoth[:BLH_indx[0]]
-        VextSea = 0.1e-11*np.ones(len(Vext1))
+        VextSea = 0.1e-7*np.ones(len(Vext1))
         VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
 
-        Vextfine[ Vextfine==0] =9.00000000e-8
-        VextDst[VextDst==0] = 9.00000000e-11 
+        Vextfine = Vextoth - VextSea
+
+        Vextfine[Vextfine<=0] =0.1e-7
+        VextDst[VextDst<=0] = 0.1e-7 
+
+
+
+        # Vextfine = 0.9e-11*np.ones(len(Vext1))
+        # Vextfine[:][:BLH_indx[0]] = Vextoth[:BLH_indx[0]]
+        # VextSea = 0.1e-11*np.ones(len(Vext1))
+        # VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+
+        
+
         fig = plt.figure()
         plt.plot(VextDst,hgt, color = '#067084',label='Dust')
         plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
@@ -419,6 +428,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
         plt.plot(FineProf,hgt)
         plt.plot(SeaProf,hgt)
         plt.plot(DstProf,hgt)
+
 
         #Updating the normalization values in the settings file. 
         with open(fwdModelYAMLpath, 'r') as f:  
@@ -508,7 +518,8 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
         savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
 
 # /tmp/tmpn596k7u8$
-    rslt_HSRL = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo)[0]
+    rslt_HSRL_1 = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo)
+    rslt_HSRL =  rslt_HSRL_1[0]
     rslt_RSP = Read_Data_RSP_Oracles(file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn)
     
     rslt= {}  # Teh order of the data is  First lidar(number of wl ) and then Polarimter data 
@@ -555,12 +566,104 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     
     rslt['OBS_hght'] = rslt_RSP['OBS_hght'] #adding the aircraft altitude 
     rslt['lambda'] = rslt['lambda'][sort]
-    # rslt['masl'] = 0  #height of the ground
-    # print(rslt)
+
+    
+    #apriori estimate for the vertical profile
+    Vext1 = rslt['meas_VExt'][:,0]
+    hgt =  rslt['RangeLidar'][:,0][:]
+    DP1064= rslt['meas_DP'][:,-1][:]
+
+    #Boundary layer height
+    BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+    BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+    
+    
+    DMR = rslt_HSRL_1[2]
+    DMR[DMR>1] = 1
+    VextDst = DMR*Vext1
+    Vextoth = abs(Vext1-VextDst)
+    VextSea = 0.1e-7*np.ones(len(Vext1))
+    VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+
+    Vextfine = Vextoth - VextSea
+
+    Vextfine[Vextfine<=0] =0.1e-7
+    VextDst[VextDst<=0] = 0.1e-7 
+
+    fig = plt.figure()
+    plt.plot(VextDst,hgt, color = '#067084',label='Dust')
+    plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+    plt.plot(Vextfine,hgt,color ='y',label='fine')
+    plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+    plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
+    plt.legend()
+    plt.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/DMRHSRL2Retrieval.png', dpi = 400)
+    
+
+    
+    #BLH after averaging
+    
+    #Dust layer above the boundary layer height
+    # Vext2 = np.abs(Vext1 - 1e-8)
+    # DstVExt = Vext2[np.where(hgt>=BLH)]
+    # SeaVExt = Vext2[np.where(hgt<BLH)] 
+    # DstProf1 = np.concatenate((DstVExt-1e-10,1e-5*np.ones(len(SeaVExt)-1),1e-10*np.ones(1)))
+    # SeaProf1 = np.concatenate((1e-10*np.ones(len(DstVExt)),SeaVExt[:-1]-1e-5,SeaVExt[-1]*np.ones(1)))
+    # VextDst[VextDst<=0] = 1e-15
+    # VextSea[VextSea<=0] = 1e-15
+
+    FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+    DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+    SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+
+    #For validation purposes
+    print(np.trapz(SeaProf[::-1],hgt[::-1]),np.trapz(DstProf[::-1],hgt[::-1]))
+
+    plt.plot(VextDst,hgt)
+    plt.plot(VextSea,hgt)
+
+    plt.plot(FineProf,hgt)
+    plt.plot(SeaProf,hgt)
+    plt.plot(DstProf,hgt)
+
+
+    #Updating the normalization values in the settings file. 
+    with open(fwdModelYAMLpath, 'r') as f:  
+        data = yaml.safe_load(f)
+
+    for noMd in range(4): #loop over the aerosol modes (i.e 2 for fine and coarse)
+        
+            #State Varibles from yaml file: 
+        if noMd ==1:
+            data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  FineProf.tolist()
+        if noMd ==2:
+            data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  DstProf.tolist()
+        if noMd ==3:
+            data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  SeaProf.tolist()
+    
+    if Kernel_type == "sphro":
+        UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml' #for spheroidal kernel
+    if Kernel_type == "TAMU":
+        UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_HEX_Update.yml'#for hexahedral kernel
+
+    ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+    
+
+    with open(ymlPath+UpKerFile, 'w') as f2: #write the chnages to new yaml file
+        yaml.safe_dump(data, f2)
+        #     # print("Updating",YamlChar[i])
+
+    max_alt = rslt['OBS_hght'] #altitude of the aircraft
+    print(rslt['OBS_hght'])
+
+    Vext = rslt['meas_VExt']
+    Updatedyaml = ymlPath+UpKerFile
 
     maxCPU = 3 #maximum CPU allocated to run GRASP on server
     gRuns = []
-    yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
+    yamlObj = graspYAML(baseYAMLpath=Updatedyaml)
+
+
     #eventually have to adjust code for height, this works only for one pixel (single height value)
     gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML= True )) # This should copy to new YAML object
     pix = pixel()
@@ -642,9 +745,9 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, forward = None, retrieval = None, Createpdf
         #Converting range to altitude
         altd = (Hsph['RangeLidar'][:,0])/1000 #altitude for spheriod
         altT = (Hsph['RangeLidar'][:,0])/1000 #altitude for hexahedra
-        fig, axs= plt.subplots(nrows = 1, ncols =2, figsize= (11,6))  #TODO make it more general which adjust the no of rows based in numebr of wl
+        fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (11,6))  #TODO make it more general which adjust the no of rows based in numebr of wl
         plt.subplots_adjust(top=0.78)
-        for i in range(2):
+        for i in range(3):
             wave = str(Hsph['lambda'][i]) +"μm"
             axs[i].plot(Hsph['meas_VBS'][:,i],altd, marker =">",color = "#3B270C", label ="Meas")
             axs[i].plot(Hsph['fit_VBS'][:,i],altd,color = "#025043", marker = "$O$",label ="Sphd")
@@ -1018,7 +1121,7 @@ for i in range(1):
     TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
     nwl = 5 # first  nwl wavelengths
     ang1 = 20
-    ang2 = 100 # :ang angles  #Remove
+    ang2 = 120 # :ang angles  #Remove
 
     f1_MAP = h5py.File(file_path+file_name,'r+')   
     Data = f1_MAP['Data']
@@ -1039,10 +1142,9 @@ for i in range(1):
     # rslts_Tamu = RSP_Run("TAMU",RSP_PixNo,ang1,ang2,TelNo,nwl)
     # RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
   
-    
-    
+
     HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True)
-    # plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
+    plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
 
     HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True)
     plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
@@ -1069,14 +1171,14 @@ for i in range(1):
 # #     print('Cost Value Sph, tamu: ',  HSRL_sphrod_strict[0][0]['costVal'],HSRL_Tamu_strict[0][0]['costVal'])
     
      #Lidar+pol combined retrieval
-    # LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
+    LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
     LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
    
     print('Cost Value Sph, tamu: ',  LidarPolSph[0]['costVal'],LidarPolTAMU[0]['costVal'])
     # print('SPH',"tam" )
 
 
-    %matplotlib inline
+    # %matplotlib inline
     plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
     plot_HSRL(HSRL_sphro_5[0][0],HSRL_Tamu_5[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/5%_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
     plot_HSRL(HSRL_sphrod_strict[0][0],HSRL_Tamu_strict[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/STR_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
