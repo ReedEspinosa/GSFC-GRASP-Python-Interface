@@ -124,7 +124,7 @@ def Gaspar_MAP(RSP_wl,Airhgt,GasAbsFn,SpecResFnPath):
     ColumnTau = np.sum(Tau,axis=0 )  #total column optical depth below the aircraaft altitiude. 
 
     
-    GasAbsTau = np.ones((len(RSP_wl))) #this array will store the total tau value
+    GasAbsTau = np.ones((len(RSP_wlf))) #this array will store the total tau value
 
     for n in range(len(RSP_wlf)):
         #Reading the spectral response value for RSP
@@ -242,7 +242,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     # Relative_Azi = Solar_Azimuth - Viewing_Azimuth
     # for i in range (len(Relative_Azi)): 
     #     if Relative_Azi[i]<0 : Relative_Azi[i] =  Relative_Azi[i]+360
-    RSP_wlf = [410, 470, 555, 670, 865, 960, 1590, 1880, 2250] #wl as in the file name of response functions
+    RSP_wlf = [410, 470, 555, 670, 865] #wl as in the file name of response functions
     
     # CorFac1 = np.ones((np.sum(Angfilter),nwl))
     # CorFac2 = np.ones((np.sum(Angfilter),nwl))
@@ -319,7 +319,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
         print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
     
     rslt['gaspar'] =Gaspar_MAP(wl,rslt['OBS_hght']/1000,GasAbsFn,SpecResFnPath)
-    
+    print(rslt['gaspar'])
     f1_MAP.close()
     return rslt
 
