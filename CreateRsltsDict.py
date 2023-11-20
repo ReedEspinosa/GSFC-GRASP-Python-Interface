@@ -101,6 +101,57 @@ def VertP(Data, hgtInterv):
 #     AProf =  df.to_dict()
     
     return df
+#TODO make this more general
+SpecResFnPath = '/home/gregmi/ORACLES/RSP_Spectral_Response/'
+
+def Gaspar_MAP(RSP_wl,Airhgt,GasAbsFn,SpecResFnPath):
+    """This function will caculate the total gas optical depth when the spectral Response function and Gas Optical Depth for different gases are 
+    provided
+    For this case, SRF is from RSP instruemnt and Gas tau is from UNL_VRTM """
+    
+    #Gas Absorption correction using UNL_VRTM (provided by Richard,UMBC)
+    RSP_wlf = [410, 470, 555, 670, 865]
+    #Reading the NetCDF file for gas absorption from radiative tranfer code (UNLVRTM)
+    ds = nc.Dataset(GasAbsFn)
+    Wl = ds.variables['Lamdas'][:] # wavelength values corresponding to the gas absorption
+    Tau = ds.variables['tauGas'][:] #Optical depth of gases at different altitude upto 120 km
+    Gashgt = ds.variables['Z'][:-1]
+
+
+    Tau_hgt = Tau[np.where(Gashgt<Airhgt)]  #gas optical depth in the profile 
+    Gashgtp= Gashgt[np.where(Gashgt<Airhgt)]
+
+    ColumnTau = np.sum(Tau,axis=0 )  #total column optical depth below the aircraaft altitiude. 
+
+    
+    GasAbsTau = np.ones((len(RSP_wl))) #this array will store the total tau value
+
+    for n in range(len(RSP_wlf)):
+        #Reading the spectral response value for RSP
+        SRFFile = SpecResFnPath + str(RSP_wlf[n]) +'.txt'
+        SpecResFn = np.loadtxt(SRFFile)
+
+  
+        #Spectral response values for given RSP wl
+        SpecResFn = SpecResFn[SpecResFn[:,0]>= min(Wl)]
+        #1D interpolation across wavelength
+        f = interp1d(Wl,ColumnTau,kind = 'linear')
+        # Evaluate the function at a new point
+        wl_RSP = SpecResFn[:,0]
+        tau_solar = f(wl_RSP) #Tau at given RSP response function wl
+        NormSRF = SpecResFn[:,1]/np.max(SpecResFn[:,1])  #normalizing the response function
+
+        tau = tau_solar*NormSRF
+        tautotal = np.trapz(tau,wl_RSP)
+        
+        GasAbsTau[n]= tautotal
+
+        plt.plot(wl_RSP,tau)
+    
+    return GasAbsTau
+
+
+
 def Interpolate_Tau(Wlname,GasAbsFn,altIndex,SpecResFn):
     #Gas Absorption correction using UNL_VRTM (provided by Richard,UMBC)
     #Reading the NetCDF file for gas absorption from radiative tranfer code (UNLVRTM)
@@ -259,13 +310,16 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     rslt['land_prct'] =0 #0% land Percentage
     # solar_distance = (f1_MAP['Platform']['Solar_Distance'][PixNo])**2 
     # const = solar_distance/(np.cos(np.radians(rslt['sza'])))
- 
+    
     #height key should not be used for altitude,
     rslt['OBS_hght']= f1_MAP['Platform']['Platform_Altitude'][PixNo] # height of pixel in m
     # print(rslt['OBS_hght'])
     if  rslt['OBS_hght'] < 0:  #if colocated attitude is less than 0 then that is set to 0
         rslt['OBS_hght'] = 0
         print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
+    
+    rslt['gaspar'] =Gaspar_MAP(wl,rslt['OBS_hght']/1000,GasAbsFn,SpecResFnPath)
+    
     f1_MAP.close()
     return rslt
 
@@ -508,10 +562,10 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     #TODO make this part more general
     #No of height grids in each ses in meters
     BLiIntv = 50
-    MidInv = 200
+    MidInv = 150
     # UpInv = 300
 
-    BLIntv = 150
+    BLIntv = 110
 
     
     # BLIntv =  110
