@@ -139,12 +139,14 @@ def Gaspar_MAP(RSP_wl,Airhgt,GasAbsFn,SpecResFnPath):
         # Evaluate the function at a new point
         wl_RSP = SpecResFn[:,0]
         tau_solar = f(wl_RSP) #Tau at given RSP response function wl
-        NormSRF = SpecResFn[:,1]/np.max(SpecResFn[:,1])  #normalizing the response function
+        NormSRF = SpecResFn[:,1]  #normalizing the response function
 
         tau = tau_solar*NormSRF
+
         tautotal = np.trapz(tau,wl_RSP)
+        swl= np.trapz(NormSRF,wl_RSP)
         
-        GasAbsTau[n]= tautotal
+        GasAbsTau[n]= tautotal/swl
 
         plt.plot(wl_RSP,tau)
     
