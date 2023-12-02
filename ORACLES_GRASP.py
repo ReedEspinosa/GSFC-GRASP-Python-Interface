@@ -155,18 +155,18 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,Co
             #     if ConsType == 'strict': #This will set the retrieved parameteter to false. 
             #         data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
             
-            # if YamlChar[i] == 'real_part_of_refractive_index_spectral_dependent':
-            #     initCond['index_of_wavelength_involved'] = [1,2,3]
-            #     #Adding off sets because the HSRL abd RSP wavelengths dont match, this should be improved
-            #     if noMd==0: offs = 0
-            #     if noMd==1: offs = 0
+            if YamlChar[i] == 'real_part_of_refractive_index_spectral_dependent':
+                initCond['index_of_wavelength_involved'] = [1,2,3]
+                #Adding off sets because the HSRL abd RSP wavelengths dont match, this should be improved
+                if noMd==0: offs = 0
+                if noMd==1: offs = 0
 
-            #     initCond['value'] =float(RSP_rslt['n'][noMd][1]+offs),float(RSP_rslt['n'][noMd][2]),float(RSP_rslt['n'][noMd][4])
-            #     initCond['max'] =float((RSP_rslt['n'][noMd][1]+offs)*maxr),float(RSP_rslt['n'][noMd][2]*maxr),float(RSP_rslt['n'][noMd][4]*maxr)
-            #     initCond['min'] =float((RSP_rslt['n'][noMd][1]+offs)*minr),float(RSP_rslt['n'][noMd][2]*minr),float(RSP_rslt['n'][noMd][4]*minr)
-            #     # print("Updating",YamlChar[i])
-            #     if ConsType == 'strict':  # tot set retrival in setting files to False
-            #         data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
+                initCond['value'] =float(RSP_rslt['n'][noMd][1]+offs),float(RSP_rslt['n'][noMd][2]),float(RSP_rslt['n'][noMd][4])
+                initCond['max'] =float((RSP_rslt['n'][noMd][1]+offs)*maxr),float(RSP_rslt['n'][noMd][2]*maxr),float(RSP_rslt['n'][noMd][4]*maxr)
+                initCond['min'] =float((RSP_rslt['n'][noMd][1]+offs)*minr),float(RSP_rslt['n'][noMd][2]*minr),float(RSP_rslt['n'][noMd][4]*minr)
+                # print("Updating",YamlChar[i])
+                if ConsType == 'strict':  # tot set retrival in setting files to False
+                    data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
             
             if YamlChar[i] == 'imaginary_part_of_refractive_index_spectral_dependent':
                 initCond['index_of_wavelength_involved'] = [1,2,3]
@@ -355,88 +355,182 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
 
         #This section is for the normalization paramteter in the yaml settings file
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
-        DictHsrl = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,PixNo)
         
-        
-        rslt = DictHsrl[0]
-        #Boundary layer height 
-        # BLH= DictHsrl[1]
+        DictHsrl = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo)
 
-        
-        Vext1 = rslt['meas_VExt'][:,0]
+
+        rslt = DictHsrl[0]
+        Vext1 = rslt['meas_VExt'][:,1]
         hgt =  rslt['RangeLidar'][:,0][:]
         DP1064= rslt['meas_DP'][:,2][:]
 
         #Boundary layer height
         BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
         BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
-        
-        
-        DMR = DictHsrl[2]
-        # DMR[DMR>1] = 1
-        VextDst = DMR*Vext1
 
-        VextDst[VextDst<=0] = 0.1e-7 
-        DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+        DMR = DictHsrl[2]
+        Vext1[np.where(Vext1<=0)] = 1e-7
+
+        Vextoth = abs(1-0.9*DMR)*Vext1
         
-        # DMR[DMR>1] = 1
-        # VextDst2 = DMR*Vext1
-        Vextoth = abs(Vext1-VextDst)
+        VextDst = Vext1 - Vextoth 
+        
+
+        # DMR[DMR>1] = 1  # ratios must be 1
+        # VextDst = 0.99999*DMR*Vext1
+        
+        VBack = 0.002*Vextoth
+        Voth = 0.998*Vextoth
+
+        VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
+        Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
+
+        # DMR[DMR>1] = 1  # ratios must be 1
+        # Vext1[np.where(Vext1<=0)] = 1e-7
+
+
+        
+        # VextDst = 0.99999*DMR*Vext1
+        # Vextoth = (1-0.99999*DMR)*Vext1
+        # VBack = 0.002*Vextoth
+        # Voth = 0.999*Vextoth
+
+        # VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
+        # Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
+
+
+        
 
         # VextSea = Vextoth
-
-        VextSea = 0.1e-7*np.ones(len(Vext1))
-        VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
-
-        Vextfine = Vextoth - VextSea
-
-        Vextfine[Vextfine<=0] =0.1e-7
-        VextDst[VextDst<=0] = 0.1e-7 
-        VextSea[VextSea<=0] =0.1e-7
+        # VextSea[: BLH_indx[0]] = 1e-9*np.ones(len(VextSea[: BLH_indx[0]]))
+        # VextSea[BLH_indx[0]:]  = VextSea[BLH_indx[0]:]-1e-10
+        # Vextfine = Vextoth - 
+        # Vextfine[: BLH_indx[0]]= Vextoth[: BLH_indx[0]]
 
 
-        # Vextfine = 0.9e-11*np.ones(len(Vext1))
-        # Vextfine[:][:BLH_indx[0]] = Vextoth[:BLH_indx[0]]
-        # VextSea = 0.1e-11*np.ones(len(Vext1))
-        # VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+
 
         
+
+        # VextSea = 0.1e-9*np.ones(len(Vext1))
+        # VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+        # Vextfine = Vextoth - VextSea
+
+        # VextDst[VextDst<=0] = 0.1e-7 
+        # VextSea[VextSea<=0] =0.1e-7
+        # Vextfine[Vextfine<=0] =0.1e-4
+
+        #Normalizing the profile
+        # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+        # FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+        # SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+        
+        #Normalizing the profile
+        # DstProf =VextDst/ np.trapz(Vext1[::-1],hgt[::-1])
+        # FineProf = Vextfine/np.trapz(Vext1[::-1],hgt[::-1])
+        # SeaProf = VextSea/ np.trapz(Vext1[::-1],hgt[::-1])
+        
+        
+        DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+        FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+        SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+        
+
+
+
 
         fig = plt.figure()
         plt.plot(VextDst,hgt, color = '#067084',label='Dust')
-        plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+        plt.plot(Vextoth,hgt,color ='#6e526b',label='Salt')
         plt.plot(Vextfine,hgt,color ='y',label='fine')
         plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
         plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
         plt.legend()
-        plt.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/DMRHSRL2Retrieval.png', dpi = 400)
+
+        fig = plt.figure()
+        plt.plot(FineProf,hgt,color ='y',label='fine')
+        plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
+        plt.plot(DstProf,hgt, color = '#067084',label='Dust')
+        plt.legend()
+        # rslt = DictHsrl[0]
+        
+        
+        
+        # #Boundary layer height 
+        # # BLH= DictHsrl[1]
+        # Vext1 = rslt['meas_VExt'][:,0]
+        # hgt =  rslt['RangeLidar'][:,0][:]
+        # DP1064= rslt['meas_DP'][:,2][:]
+        # #Boundary layer height
+        # BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+        # BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+        
+        # DMR = DictHsrl[2]
+        # DMR[DMR>1] = 1  # ratios must be 1
+        # VextDst = DMR*Vext1
+        # Vextoth = abs(Vext1-VextDst)
+
+        # VextDst[VextDst<=0] = 0.1e-7 
+        
+        # # # DMR[DMR>1] = 1
+        # # # VextDst2 = DMR*Vext1
+        # # Vextoth = abs(Vext1-VextDst)
+
+        # # # VextSea = Vextoth
+
+        # VextSea = 0.1e-7*np.ones(len(Vext1))
+        # VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+
+        # # # Vextfine = Vextoth - VextSea
+
+        # Vextfine[Vextfine<=0] =0.1e-6
+        # VextDst[VextDst<=0] = 0.1e-6 
+        # VextSea[VextSea<=0] =0.1e-7
+
+
+        # # # Vextfine = 0.9e-11*np.ones(len(Vext1))
+        # # # Vextfine[:][:BLH_indx[0]] = Vextoth[:BLH_indx[0]]
+        # # # VextSea = 0.1e-11*np.ones(len(Vext1))
+        # # # VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+
+        
+
+        # # fig = plt.figure()
+        # # plt.plot(VextDst,hgt, color = '#067084',label='Dust')
+        # # plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+        # # plt.plot(Vextfine,hgt,color ='y',label='fine')
+        # # plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+        # # plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
+        # # plt.legend()
+        # # plt.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/DMRHSRL2Retrieval.png', dpi = 400)
         
 
         
-        #BLH after averaging
+        # #BLH after averaging
         
-        #Dust layer above the boundary layer height
-        # Vext2 = np.abs(Vext1 - 1e-8)
-        # DstVExt = Vext2[np.where(hgt>=BLH)]
-        # SeaVExt = Vext2[np.where(hgt<BLH)] 
-        # DstProf1 = np.concatenate((DstVExt-1e-10,1e-5*np.ones(len(SeaVExt)-1),1e-10*np.ones(1)))
-        # SeaProf1 = np.concatenate((1e-10*np.ones(len(DstVExt)),SeaVExt[:-1]-1e-5,SeaVExt[-1]*np.ones(1)))
-        # VextDst[VextDst<=0] = 1e-15
-        # VextSea[VextSea<=0] = 1e-15
+        # # Dust layer above the boundary layer height
+        # # Vext2 = np.abs(Vext1 - 1e-8)
+        # # DstVExt = Vext2[np.where(hgt>=BLH)]
+        # # SeaVExt = Vext2[np.where(hgt<BLH)] 
+        # # DstProf1 = np.concatenate((DstVExt-1e-10,1e-5*np.ones(len(SeaVExt)-1),1e-10*np.ones(1)))
+        # # SeaProf1 = np.concatenate((1e-10*np.ones(len(DstVExt)),SeaVExt[:-1]-1e-5,SeaVExt[-1]*np.ones(1)))
+        # # VextDst[VextDst<=0] = 1e-15
+        # # VextSea[VextSea<=0] = 1e-15
+        
+        # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+        # # FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+        # # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+        # SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
 
-        FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-        DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-        SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+        # #For validation purposes
+        # # print(np.trapz(SeaProf[::-1],hgt[::-1]),np.trapz(DstProf[::-1],hgt[::-1]))
 
-        #For validation purposes
-        print(np.trapz(SeaProf[::-1],hgt[::-1]),np.trapz(DstProf[::-1],hgt[::-1]))
+        # plt.plot(VextDst,hgt)
+        # plt.plot(VextSea,hgt)
 
-        plt.plot(VextDst,hgt)
-        plt.plot(VextSea,hgt)
-
-        plt.plot(FineProf,hgt)
-        plt.plot(SeaProf,hgt)
-        plt.plot(DstProf,hgt)
+        # # plt.plot(FineProf,hgt)
+        # # plt.plot(SeaProf,hgt)
+        # # plt.plot(DstProf,hgt)
 
 
         #Updating the normalization values in the settings file. 
@@ -445,9 +539,9 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
 
         for noMd in range(4): #loop over the aerosol modes (i.e 2 for fine and coarse)
             
-                #State Varibles from yaml file: 
-            if noMd ==1:
-                data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  FineProf.tolist()
+                # State Varibles from yaml file: 
+            # if noMd ==1:
+            #     data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  FineProf.tolist()
             if noMd ==2:
                 data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  DstProf.tolist()
             if noMd ==3:
@@ -575,56 +669,126 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     rslt['OBS_hght'] = rslt_RSP['OBS_hght'] #adding the aircraft altitude 
     rslt['lambda'] = rslt['lambda'][sort]
 
-
+    #TODO improve this code to work when only mol deopl or gasabs are provided and not both
     if 'gaspar' in  rslt_HSRL:
         gasparHSRL = np.zeros(len(rslt['lambda']))
         gasparHSRL[sort_Lidar] = rslt_HSRL['gaspar']
         
-        rslt['lambda'] = gasparHSRL
-        print(rslt['lambda'])
+        rslt['gaspar'] = gasparHSRL
+        print(rslt['gaspar'])
 
     if 'gaspar' in  rslt_RSP:
         gasparRSP = np.zeros(len(rslt['lambda']))
         gasparRSP[sort_MAP] = rslt_RSP['gaspar']
 
-        rslt['lambda'] = gasparHSRL
-        print(rslt['lambda'])
+        rslt['gaspar'] = gasparRSP
+        print(rslt['gaspar'])
 
     if 'gaspar' in  rslt_RSP and rslt_HSRL :
         gasparB = np.zeros(len(rslt['lambda']))
         gasparB[sort_MAP] = rslt_RSP['gaspar']
         gasparB[sort_Lidar] = rslt_HSRL['gaspar']
-        rslt['lambda'] = gasparB
-        print(rslt['lambda'])
-
-    
-    
-    
+        rslt['gaspar'] = gasparB
+        print(rslt['gaspar'])
 
 
-
-    
-    #apriori estimate for the vertical profile
-    Vext1 = rslt['meas_VExt'][:,0]
-    hgt =  rslt['RangeLidar'][:,0][:]
-    DP1064= rslt['meas_DP'][:,-1][:]
+    # rslt2 = rslt_HSRL_1[0]
+    Vext1 = rslt_HSRL['meas_VExt'][:,1]
+    hgt =  rslt_HSRL['RangeLidar'][:,0][:]
+    DP1064= rslt_HSRL['meas_DP'][:,2][:]
 
     #Boundary layer height
     BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
     BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
-    
-    
+
     DMR = rslt_HSRL_1[2]
-    DMR[DMR>1] = 1
-    VextDst = DMR*Vext1
-    Vextoth = abs(Vext1-VextDst)
-    VextSea = 0.1e-7*np.ones(len(Vext1))
-    VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+    Vext1[np.where(Vext1<=0)] = 1e-7
 
-    Vextfine = Vextoth - VextSea
+    Vextoth = abs(1-0.9*DMR)*Vext1
+    
+    VextDst = Vext1 - Vextoth 
+    
 
-    Vextfine[Vextfine<=0] =0.1e-7
-    VextDst[VextDst<=0] = 0.1e-7 
+    # DMR[DMR>1] = 1  # ratios must be 1
+    # VextDst = 0.99999*DMR*Vext1
+    
+    VBack = 0.002*Vextoth
+    Voth = 0.999*Vextoth
+
+    VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
+    Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
+
+    
+
+    # VextSea = Vextoth
+    # VextSea[: BLH_indx[0]] = 1e-9*np.ones(len(VextSea[: BLH_indx[0]]))
+    # VextSea[BLH_indx[0]:]  = VextSea[BLH_indx[0]:]-1e-10
+    # Vextfine = Vextoth - 
+    # Vextfine[: BLH_indx[0]]= Vextoth[: BLH_indx[0]]
+
+
+
+
+    
+
+    # VextSea = 0.1e-9*np.ones(len(Vext1))
+    # VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+    # Vextfine = Vextoth - VextSea
+
+    # VextDst[VextDst<=0] = 0.1e-7 
+    # VextSea[VextSea<=0] =0.1e-7
+    # Vextfine[Vextfine<=0] =0.1e-4
+
+    #Normalizing the profile
+    # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+    # FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+    # SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+    
+    #Normalizing the profile
+    # DstProf =VextDst/ np.trapz(Vext1[::-1],hgt[::-1])
+    # FineProf = Vextfine/np.trapz(Vext1[::-1],hgt[::-1])
+    # SeaProf = VextSea/ np.trapz(Vext1[::-1],hgt[::-1])
+    
+    
+    DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+    FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+    SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+    
+    # #apriori estimate for the vertical profile
+    # Vext1 = rslt['meas_VExt'][:,0]
+    # hgt =  rslt['RangeLidar'][:,0][:]
+    # DP1064= rslt['meas_DP'][:,-1][:]
+
+    # #Boundary layer height
+    # BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+    # BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+    
+    
+    # DMR = rslt_HSRL_1[2]
+    # VextDst = DMR*Vext1
+    # Vextoth = abs(Vext1-VextDst)
+
+    
+
+    # VextSea = 0.1e-9*np.ones(len(Vext1))
+    # VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+    # Vextfine = Vextoth - VextSea
+
+    # VextDst[VextDst<=0] = 0.1e-7 
+    # VextSea[VextSea<=0] =0.1e-7
+    # Vextfine[Vextfine<=0] =0.1e-4
+
+    # #Normalizing the profile
+
+    # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+    # FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+    # SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+    
+    # # totProf =  np.trapz(Vext1[::-1],hgt[::-1])
+    # # DstProf =VextDst/ totProf
+    # # FineProf = Vextfine/totProf
+    # # SeaProf = VextSea/ totProf
+
 
     fig = plt.figure()
     plt.plot(VextDst,hgt, color = '#067084',label='Dust')
@@ -633,34 +797,59 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
     plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
     plt.legend()
-    plt.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/DMRHSRL2Retrieval.png', dpi = 400)
+
+    fig = plt.figure()
+    plt.plot(FineProf,hgt,color ='y',label='fine')
+    plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
+    plt.plot(DstProf,hgt, color = '#067084',label='Dust')
+    plt.legend()
+
+    # # DMR[DMR>1] = 1
+    # VextDst = DMR*Vext1
+    # Vextoth = abs(Vext1-VextDst)
+    # VextSea = 0.1e-7*np.ones(len(Vext1))
+    # VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+
+    # Vextfine = Vextoth - VextSea
+
+    # Vextfine[Vextfine<=0] =0.1e-7
+    # VextDst[VextDst<=0] = 0.1e-7 
+
+    # fig = plt.figure()
+    # plt.plot(VextDst,hgt, color = '#067084',label='Dust')
+    # plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+    # plt.plot(Vextfine,hgt,color ='y',label='fine')
+    # plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+    # plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
+    # plt.legend()
+    # plt.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/DMRHSRL2Retrieval.png', dpi = 400)
     
 
     
-    #BLH after averaging
+    # #BLH after averaging
     
-    #Dust layer above the boundary layer height
-    # Vext2 = np.abs(Vext1 - 1e-8)
-    # DstVExt = Vext2[np.where(hgt>=BLH)]
-    # SeaVExt = Vext2[np.where(hgt<BLH)] 
-    # DstProf1 = np.concatenate((DstVExt-1e-10,1e-5*np.ones(len(SeaVExt)-1),1e-10*np.ones(1)))
-    # SeaProf1 = np.concatenate((1e-10*np.ones(len(DstVExt)),SeaVExt[:-1]-1e-5,SeaVExt[-1]*np.ones(1)))
-    # VextDst[VextDst<=0] = 1e-15
-    # VextSea[VextSea<=0] = 1e-15
+    # #Dust layer above the boundary layer height
+    # # Vext2 = np.abs(Vext1 - 1e-8)
+    # # DstVExt = Vext2[np.where(hgt>=BLH)]
+    # # SeaVExt = Vext2[np.where(hgt<BLH)] 
+    # # DstProf1 = np.concatenate((DstVExt-1e-10,1e-5*np.ones(len(SeaVExt)-1),1e-10*np.ones(1)))
+    # # SeaProf1 = np.concatenate((1e-10*np.ones(len(DstVExt)),SeaVExt[:-1]-1e-5,SeaVExt[-1]*np.ones(1)))
+    # # VextDst[VextDst<=0] = 1e-15
+    # # VextSea[VextSea<=0] = 1e-15
 
-    FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-    DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-    SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+    # FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+    # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+    # SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
 
-    #For validation purposes
-    print(np.trapz(SeaProf[::-1],hgt[::-1]),np.trapz(DstProf[::-1],hgt[::-1]))
+    # #For validation purposes
+    # print(np.trapz(SeaProf[::-1],hgt[::-1]),np.trapz(DstProf[::-1],hgt[::-1]))
 
-    plt.plot(VextDst,hgt)
-    plt.plot(VextSea,hgt)
+    # plt.plot(VextDst,hgt)
+    # plt.plot(VextSea,hgt)
 
-    plt.plot(FineProf,hgt)
-    plt.plot(SeaProf,hgt)
-    plt.plot(DstProf,hgt)
+    # plt.plot(FineProf,hgt)
+    # plt.plot(SeaProf,hgt)
+    # plt.plot(DstProf,hgt)
 
 
     #Updating the normalization values in the settings file. 
@@ -709,6 +898,243 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     #rslts contain all the results form the GRASP inverse run
     rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
     return rslts
+
+
+
+# def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn, ModeNo=None, updateYaml= None):
+
+#     krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
+
+#     if Kernel_type == "sphro":  #If spheriod model
+#         #Path to the yaml file for sphriod model
+#         if ModeNo == None or ModeNo == 2:
+#             fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_V.1.2.yml'
+#         if ModeNo == 3:
+#             fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_3modes_V.1.2.yml'
+#         if updateYaml == True:  # True if init conditions for Yaml file for HSRL is updated from the GRASP output from RSP
+#             update_HSRLyaml(fwdModelYAMLpath, rslts_Sph[0], noMod, maxr, minr, a,Kernel_type)
+            
+#             fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/Settings_Sphd_RSP_HSRL.yaml'
+#         # binPathGRASP = path toGRASP Executable for spheriod model
+#         # binPathGRASP ='/home/shared/GRASP_GSFC/build_SphrdV112_Noise/bin/grasp_app'
+#         binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'  #This will work for both the kernels as it has more parameter wettings
+       
+#         # binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP_v112/bin/grasp_app' 
+#         savePath=f"/home/gregmi/ORACLES/HSRL1_P3_20180922_R03_{Kernel_type}"
+    
+#     if Kernel_type == "TAMU":
+#         if ModeNo == None or ModeNo == 2:
+#             fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_V.1.2_TAMU.yml'
+#         if ModeNo == 3:
+#             fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_3modes_V.1.2_TAMU.yml'
+#         if updateYaml == True:# True if init conditions for Yaml file for HSRL is updated from the GRASP output from RSP
+#             update_HSRLyaml(fwdModelYAMLpath, rslts_Tamu[0], noMod, maxr, minr, a,Kernel_type)
+#             fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/Settings_TAMU_RSP_HSRL.yaml'
+
+#         #Path to the GRASP Executable for TAMU
+#         # binPathGRASP ='/home/shared/GRASP_GSFC/build_HexV112_Noise/bin/grasp_app' #Recompiled to account for more noise parameter
+#         binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
+#         # binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
+#         #Path to save output plot
+#         savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
+
+# # /tmp/tmpn596k7u8$
+#     rslt_HSRL_1 = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo)
+#     rslt_HSRL =  rslt_HSRL_1[0]
+#     rslt_RSP = Read_Data_RSP_Oracles(file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn)
+    
+#     rslt= {}  # Teh order of the data is  First lidar(number of wl ) and then Polarimter data 
+#     rslt['lambda'] = np.concatenate((rslt_HSRL['lambda'],rslt_RSP['lambda']))
+
+#     #Sort the index of the wavelength if arranged in ascending order, this is required by GRASP
+#     sort = np.argsort(rslt['lambda']) 
+#     IndHSRL = rslt_HSRL['lambda'].shape[0]
+#     sort_Lidar, sort_MAP  = np.array([0,3,7]),np.array([1,2,4,5,6])
+    
+
+# # The shape of the variables in RSPkeys and HSRLkeys should be equal to no of wavelength
+# #  Setting np.nan in place of the measurements for wavelengths for which there is no data
+#     RSPkeys = ['meas_I', 'meas_P','sza', 'vis', 'sca_ang', 'fis']
+#     HSRLkeys = ['RangeLidar','meas_VExt','meas_VBS','meas_DP']
+#     GenKeys= ['datetime','longitude', 'latitude', 'land_prct'] # Shape of these variables is not N wavelength
+    
+#     #MAP measurement variables 
+
+#     RSP_var = np.ones((rslt_RSP['meas_I'].shape[0],rslt['lambda'].shape[0])) * np.nan
+#     for keys in RSPkeys:
+#         #adding values to sort_MAP index positions
+#         for a in range(rslt_RSP[keys][:,0].shape[0]):
+#             RSP_var[a][sort_MAP] = rslt_RSP[keys][a]
+#         rslt[keys] = RSP_var
+#         RSP_var = np.ones((rslt_RSP['meas_I'].shape[0],rslt['lambda'].shape[0])) * np.nan
+
+
+#     #Lidar Measurements
+#     HSRL_var = np.ones((rslt_HSRL['meas_VExt'].shape[0],rslt['lambda'].shape[0]))* np.nan
+#     for keys1 in HSRLkeys:  
+#         for a in range(rslt_HSRL[keys1][:,0].shape[0]):
+            
+#             HSRL_var[a][sort_Lidar] = rslt_HSRL[keys1][a]
+
+#             # 'sza', 'vis','fis'
+#         rslt[keys1] = HSRL_var
+#         # Refresh the array by Creating numpy nan array with shape of height x wl, Basically deleting all values
+#         HSRL_var = np.ones((rslt_HSRL['meas_VExt'].shape[0],rslt['lambda'].shape[0]))* np.nan
+
+    
+#     for keys in GenKeys:
+#         rslt[keys] = rslt_RSP[keys]  #Adding the information about lat, lon, datetime and so on from RSP
+    
+#     rslt['OBS_hght'] = rslt_RSP['OBS_hght'] #adding the aircraft altitude 
+#     rslt['lambda'] = rslt['lambda'][sort]
+
+#     #TODO improve this code to work when only mol deopl or gasabs are provided and not both
+#     # if 'gaspar' in  rslt_HSRL:
+#     #     gasparHSRL = np.zeros(len(rslt['lambda']))
+#     #     gasparHSRL[sort_Lidar] = rslt_HSRL['gaspar']
+        
+#     #     rslt['lambda'] = gasparHSRL
+#     #     print(rslt['lambda'])
+
+#     # if 'gaspar' in  rslt_RSP:
+#     #     gasparRSP = np.zeros(len(rslt['lambda']))
+#     #     gasparRSP[sort_MAP] = rslt_RSP['gaspar']
+
+#     #     rslt['lambda'] = gasparHSRL
+#     #     print(rslt['lambda'])
+
+#     if 'gaspar' in  rslt_RSP and rslt_HSRL :
+#         gasparB = np.zeros(len(rslt['lambda']))
+#         gasparB[sort_MAP] = rslt_RSP['gaspar']
+#         gasparB[sort_Lidar] = rslt_HSRL['gaspar']
+#         rslt['gaspar'] = gasparB
+#         print(rslt['gaspar'])
+
+    
+
+    
+    
+    
+
+
+
+    
+# #apriori estimate for the vertical profile
+#     rslt = rslt_HSRL_1[0]
+#     Vext1 = rslt['meas_VExt'][:,0]
+#     hgt =  rslt['RangeLidar'][:,0][:]
+#     DP1064= rslt['meas_DP'][:,2][:]
+
+#     #Boundary layer height
+#     BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+#     BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+
+#     DMR = rslt_HSRL_1[2]
+#     # DMR[DMR>1] = 1  # ratios must be 1
+#     VextDst = DMR*Vext1
+#     Vextoth = abs(Vext1-VextDst)
+
+#     VextSea = 0.1e-9*np.ones(len(Vext1))
+#     VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
+#     Vextfine = Vextoth - VextSea
+
+#     VextDst[VextDst<=0] = 0.1e-7 
+#     VextSea[VextSea<=0] =0.1e-7
+#     Vextfine[Vextfine<=0] =0.1e-4
+
+#     #Normalizing the profile
+#     DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+#     FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+#     SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+
+
+#     fig = plt.figure()
+#     plt.plot(VextDst,hgt, color = '#067084',label='Dust')
+#     plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+#     plt.plot(Vextfine,hgt,color ='y',label='fine')
+#     plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+#     plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
+#     plt.legend()
+
+#     fig = plt.figure()
+#     plt.plot(FineProf,hgt,color ='y',label='fine')
+#     plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
+#     plt.plot(DstProf,hgt, color = '#067084',label='Dust')
+#     plt.legend()
+
+    
+#     #BLH after averaging
+    
+#     #Dust layer above the boundary layer height
+#     # Vext2 = np.abs(Vext1 - 1e-8)
+#     # DstVExt = Vext2[np.where(hgt>=BLH)]
+#     # SeaVExt = Vext2[np.where(hgt<BLH)] 
+#     # DstProf1 = np.concatenate((DstVExt-1e-10,1e-5*np.ones(len(SeaVExt)-1),1e-10*np.ones(1)))
+#     # SeaProf1 = np.concatenate((1e-10*np.ones(len(DstVExt)),SeaVExt[:-1]-1e-5,SeaVExt[-1]*np.ones(1)))
+#     # VextDst[VextDst<=0] = 1e-15
+#     # VextSea[VextSea<=0] = 1e-15
+
+#     # FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+#     # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+#     # SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+
+#     # #For validation purposes
+#     # print(np.trapz(SeaProf[::-1],hgt[::-1]),np.trapz(DstProf[::-1],hgt[::-1]))
+
+#     # plt.plot(VextDst,hgt)
+#     # plt.plot(VextSea,hgt)
+
+#     # plt.plot(FineProf,hgt)
+#     # plt.plot(SeaProf,hgt)
+#     # plt.plot(DstProf,hgt)
+
+
+#     #Updating the normalization values in the settings file. 
+#     with open(fwdModelYAMLpath, 'r') as f:  
+#         data = yaml.safe_load(f)
+
+#     for noMd in range(4): #loop over the aerosol modes (i.e 2 for fine and coarse)
+        
+#             #State Varibles from yaml file: 
+#         if noMd ==1:
+#             data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  FineProf.tolist()
+#         if noMd ==2:
+#             data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  DstProf.tolist()
+#         if noMd ==3:
+#             data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  SeaProf.tolist()
+    
+#     if Kernel_type == "sphro":
+#         UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml' #for spheroidal kernel
+#     if Kernel_type == "TAMU":
+#         UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_HEX_Update.yml'#for hexahedral kernel
+
+#     ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+    
+
+#     with open(ymlPath+UpKerFile, 'w') as f2: #write the chnages to new yaml file
+#         yaml.safe_dump(data, f2)
+#         #     # print("Updating",YamlChar[i])
+
+#     max_alt = rslt['OBS_hght'] #altitude of the aircraft
+#     print(rslt['OBS_hght'])
+
+#     Vext = rslt['meas_VExt']
+#     Updatedyaml = ymlPath+UpKerFile
+
+#     maxCPU = 3 #maximum CPU allocated to run GRASP on server
+#     gRuns = []
+#     yamlObj = graspYAML(baseYAMLpath=Updatedyaml)
+
+
+#     #eventually have to adjust code for height, this works only for one pixel (single height value)
+#     gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML= True )) # This should copy to new YAML object
+#     pix = pixel()
+#     pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage= 'meas', verbose=False)
+#     gRuns[-1].addPix(pix)
+#     gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU)
+#     #rslts contain all the results form the GRASP inverse run
+#     rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
+#     return rslts
 
 def randomInitGuess(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None,ConsType = None,releaseYAML =True, ModeNo=None,NoItr=None):
     Finalrslts =[]
@@ -793,7 +1219,6 @@ def randomInitGuess(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYam
 
         Finalrslts.append(rslts)
     return Finalrslts,gRuns,dblist
-
 
 def VrtGrad(HSRL_sphrod):
 
@@ -1075,7 +1500,6 @@ def CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU): #should be updated to
         fig, axs= plt.subplots(nrows = 1, ncols =2, figsize= (18,6))
         fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_{RSP_PixNo}_Combined_I_P_{i}.png',dpi = 300)
 
-
 def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo, LIDARPOL= None): 
     
     
@@ -1241,16 +1665,16 @@ for i in range(1):
     HSRLPixNo = FindPix(LatH,LonH,LatRSP,LonRSP)[0]  # Or can manually give the index of the pixel that you are intrested in
  
 # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
-    rslts_Sph = RSP_Run("sphro",RSP_PixNo,ang1,ang2,TelNo,nwl)
+    # rslts_Sph = RSP_Run("sphro",RSP_PixNo,ang1,ang2,TelNo,nwl)
     # rslts_Tamu = RSP_Run("TAMU",RSP_PixNo,ang1,ang2,TelNo,nwl)
     # RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
   
 
-    # HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True)
-    # # plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
+    HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True)
+    plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
 
-    # HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True)
-    # plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
+    HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True)
+    plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
 
     # # print('Cost Value Sph, tamu: ',  rslts_Sph[0]['costVal'], rslts_Tamu[0]['costVal'])
     # RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
