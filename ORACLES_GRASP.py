@@ -14,6 +14,7 @@ This code reads Polarimetric data from the Campaigns and runs GRASP. This code w
 
 
 import sys
+import warnings
 from CreateRsltsDict import Read_Data_RSP_Oracles
 from CreateRsltsDict import Read_Data_HSRL_Oracles,Read_Data_HSRL_Oracles_Height,Read_Data_HSRL_Oracles_Height_V2_1,Read_Data_HSRL_constHgt
 import netCDF4 as nc
@@ -368,10 +369,17 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
         BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
         BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
 
-        DMR = DictHsrl[2]
-        Vext1[np.where(Vext1<=0)] = 1e-7
+        
+        DMR1 = DictHsrl[2]
+        if np.any(DMR1 > 1):
+            warnings.warn('DMR > 1, renormalizing', UserWarning)
+            DMR = DMR1/np.nanmax(DMR1)
+        else:
+            DMR = DMR1
+            #Renormalize.
+        Vext1[np.where(Vext1<=0)] = 1e-10
 
-        Vextoth = abs(1-0.9*DMR)*Vext1
+        Vextoth = abs(1-0.99999*DMR)*Vext1
         
         VextDst = Vext1 - Vextoth 
         
@@ -379,8 +387,8 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
         # DMR[DMR>1] = 1  # ratios must be 1
         # VextDst = 0.99999*DMR*Vext1
         
-        VBack = 0.002*Vextoth
-        Voth = 0.998*Vextoth
+        VBack = 0.00002*Vextoth
+        Voth = 0.99998*Vextoth
 
         VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
         Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
@@ -582,7 +590,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
     # height = 200 
 
 
-def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn, ModeNo=None, updateYaml= None):
+def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn, ModeNo=None, updateYaml= None, RandinitGuess =None , NoItr=None):
 
     krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
 
@@ -693,7 +701,7 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
 
 
     # rslt2 = rslt_HSRL_1[0]
-    Vext1 = rslt_HSRL['meas_VExt'][:,1]
+    Vext1 = rslt_HSRL['meas_VExt'][:,0]
     hgt =  rslt_HSRL['RangeLidar'][:,0][:]
     DP1064= rslt_HSRL['meas_DP'][:,2][:]
 
@@ -701,95 +709,34 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
     BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
 
-    DMR = rslt_HSRL_1[2]
-    Vext1[np.where(Vext1<=0)] = 1e-7
-
-    Vextoth = abs(1-0.9*DMR)*Vext1
     
+    DMR1 = rslt_HSRL_1[2]
+    if np.any(DMR1 > 1):
+        warnings.warn('DMR > 1, renormalizing', UserWarning)
+        DMR = DMR1/np.nanmax(DMR1)
+    else:
+        DMR = DMR1
+        #Renormalize.
+    
+    Vext1[np.where(Vext1<=0)] = 1e-10
+    Vextoth = abs(1-0.9999*DMR)*Vext1
     VextDst = Vext1 - Vextoth 
     
 
     # DMR[DMR>1] = 1  # ratios must be 1
     # VextDst = 0.99999*DMR*Vext1
     
-    VBack = 0.002*Vextoth
-    Voth = 0.999*Vextoth
+    VBack = 0.00002*Vextoth
+    Voth = 0.99998*Vextoth
 
     VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
     Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
-
-    
-
-    # VextSea = Vextoth
-    # VextSea[: BLH_indx[0]] = 1e-9*np.ones(len(VextSea[: BLH_indx[0]]))
-    # VextSea[BLH_indx[0]:]  = VextSea[BLH_indx[0]:]-1e-10
-    # Vextfine = Vextoth - 
-    # Vextfine[: BLH_indx[0]]= Vextoth[: BLH_indx[0]]
-
-
-
-
-    
-
-    # VextSea = 0.1e-9*np.ones(len(Vext1))
-    # VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
-    # Vextfine = Vextoth - VextSea
-
-    # VextDst[VextDst<=0] = 0.1e-7 
-    # VextSea[VextSea<=0] =0.1e-7
-    # Vextfine[Vextfine<=0] =0.1e-4
-
-    #Normalizing the profile
-    # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-    # FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-    # SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
-    
-    #Normalizing the profile
-    # DstProf =VextDst/ np.trapz(Vext1[::-1],hgt[::-1])
-    # FineProf = Vextfine/np.trapz(Vext1[::-1],hgt[::-1])
-    # SeaProf = VextSea/ np.trapz(Vext1[::-1],hgt[::-1])
-    
     
     DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
     FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
     SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
     
     # #apriori estimate for the vertical profile
-    # Vext1 = rslt['meas_VExt'][:,0]
-    # hgt =  rslt['RangeLidar'][:,0][:]
-    # DP1064= rslt['meas_DP'][:,-1][:]
-
-    # #Boundary layer height
-    # BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
-    # BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
-    
-    
-    # DMR = rslt_HSRL_1[2]
-    # VextDst = DMR*Vext1
-    # Vextoth = abs(Vext1-VextDst)
-
-    
-
-    # VextSea = 0.1e-9*np.ones(len(Vext1))
-    # VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
-    # Vextfine = Vextoth - VextSea
-
-    # VextDst[VextDst<=0] = 0.1e-7 
-    # VextSea[VextSea<=0] =0.1e-7
-    # Vextfine[Vextfine<=0] =0.1e-4
-
-    # #Normalizing the profile
-
-    # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-    # FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-    # SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
-    
-    # # totProf =  np.trapz(Vext1[::-1],hgt[::-1])
-    # # DstProf =VextDst/ totProf
-    # # FineProf = Vextfine/totProf
-    # # SeaProf = VextSea/ totProf
-
-
     fig = plt.figure()
     plt.plot(VextDst,hgt, color = '#067084',label='Dust')
     plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
@@ -804,54 +751,9 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     plt.plot(DstProf,hgt, color = '#067084',label='Dust')
     plt.legend()
 
-    # # DMR[DMR>1] = 1
-    # VextDst = DMR*Vext1
-    # Vextoth = abs(Vext1-VextDst)
-    # VextSea = 0.1e-7*np.ones(len(Vext1))
-    # VextSea[BLH_indx[0]:] = Vextoth[BLH_indx[0]:]
 
-    # Vextfine = Vextoth - VextSea
-
-    # Vextfine[Vextfine<=0] =0.1e-7
-    # VextDst[VextDst<=0] = 0.1e-7 
-
-    # fig = plt.figure()
-    # plt.plot(VextDst,hgt, color = '#067084',label='Dust')
-    # plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
-    # plt.plot(Vextfine,hgt,color ='y',label='fine')
-    # plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
-    # plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
-    # plt.legend()
     # plt.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/DMRHSRL2Retrieval.png', dpi = 400)
     
-
-    
-    # #BLH after averaging
-    
-    # #Dust layer above the boundary layer height
-    # # Vext2 = np.abs(Vext1 - 1e-8)
-    # # DstVExt = Vext2[np.where(hgt>=BLH)]
-    # # SeaVExt = Vext2[np.where(hgt<BLH)] 
-    # # DstProf1 = np.concatenate((DstVExt-1e-10,1e-5*np.ones(len(SeaVExt)-1),1e-10*np.ones(1)))
-    # # SeaProf1 = np.concatenate((1e-10*np.ones(len(DstVExt)),SeaVExt[:-1]-1e-5,SeaVExt[-1]*np.ones(1)))
-    # # VextDst[VextDst<=0] = 1e-15
-    # # VextSea[VextSea<=0] = 1e-15
-
-    # FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-    # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-    # SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
-
-    # #For validation purposes
-    # print(np.trapz(SeaProf[::-1],hgt[::-1]),np.trapz(DstProf[::-1],hgt[::-1]))
-
-    # plt.plot(VextDst,hgt)
-    # plt.plot(VextSea,hgt)
-
-    # plt.plot(FineProf,hgt)
-    # plt.plot(SeaProf,hgt)
-    # plt.plot(DstProf,hgt)
-
-
     #Updating the normalization values in the settings file. 
     with open(fwdModelYAMLpath, 'r') as f:  
         data = yaml.safe_load(f)
@@ -884,20 +786,103 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     Vext = rslt['meas_VExt']
     Updatedyaml = ymlPath+UpKerFile
 
-    maxCPU = 3 #maximum CPU allocated to run GRASP on server
-    gRuns = []
-    yamlObj = graspYAML(baseYAMLpath=Updatedyaml)
+    if RandinitGuess == True:
+        Finalrslts =[]
+        maxCPU =20
+        if NoItr==None: NoItr=1
+        gRuns = [[]]*NoItr
+        pix = pixel()
+        pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage= 'meas', verbose=False)
+        dblist = []
+        
+        for i in range(NoItr):
+            try:
+                gyaml = graspYAML(baseYAMLpath=fwdModelYAMLpath)
+                yamlObjscramble = gyaml.scrambleInitialGuess(fracOfSpace=1, skipTypes=['vertical_profile_normalized','aerosol_concentration'])
+                yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
+                gRuns = []
+                gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML= True )) # This should copy to new YAML object
+                gRuns[-1].addPix(pix)
+                gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU,maxT =1)
+                dblist.append(gDB)#rslts contain all the results form the GRASP inverse run
+                rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
+
+                Finalrslts.append(rslts)
+
+                data = rslts[1][0][0]
+                nc_file = nc.Dataset('/home/gregmi/git/GSFC-GRASP-Python-Interface/IntialGuessHSRLRSP.nc', 'w', format='NETCDF4')
+                nc_file.close()
+                with nc.Dataset('/home/gregmi/git/GSFC-GRASP-Python-Interface/IntialGuessHSRLRSP.nc', 'w') as rootgrp:
+                    print(rslts[1][0][0]['n'])
+                    # Create dimensions
+                    rootgrp.createDimension('r_dim', data['r'].shape[0])
+                    rootgrp.createDimension('range_dim', data['r'].shape[1])
+                    rootgrp.createDimension('d_range', data['range'].shape[0])
+                    rootgrp.createDimension('d_wl', data['range'].shape[1])
+                    rootgrp.createDimension('wlRSP', data['meas_I'].shape[0])
+                    rootgrp.createDimension('angle', data['meas_I'].shape[1])
+                    rootgrp.createDimension('allLambda', data['lambda'].shape[0])
+                    rootgrp.createDimension('iter_d', NoItr)
+                    # Create variables and assign values
+                    rootgrp.createVariable('datetime', 'S19')[:] = np.array(str(data['datetime']), dtype='S19')
+                    rootgrp.createVariable('longitude', 'f4')[:] = data['longitude']
+                    rootgrp.createVariable('latitude', 'f4')[:] = data['latitude']
+                    rootgrp.createVariable('land_prct', 'f4')[:] = data['land_prct']
+                    rootgrp.createVariable('r', 'f4', ('r_dim', 'range_dim','iter_d'))[:,:,i] = data['r']
+                    rootgrp.createVariable('dVdlnr', 'f4', ('r_dim', 'range_dim','iter_d'))[:,:,i] = data['dVdlnr']
+                    rootgrp.createVariable('rv', 'f4', ('r_dim','iter_d'))[:,:,i] = data['rv']
+                    rootgrp.createVariable('sigma', 'f4', ('r_dim','iter_d'))[:,:,i] = data['sigma']
+                    rootgrp.createVariable('vol', 'f4', ('r_dim','iter_d'))[:,:,i] = data['vol']
+                    rootgrp.createVariable('sph', 'f4', ('r_dim','iter_d'))[:,:,i] = data['sph']
+                    rootgrp.createVariable('range', 'f4', ('d_range','d_wl','iter_d'))[:,:,i] = data['range']
+                    rootgrp.createVariable('beta_ext', 'f4', ('d_range','d_wl','iter_d'))[:,:,i] = data['βext']
+                    rootgrp.createVariable('lambda', 'f4', 'allLambda')[:,:,i] = data['lambda']
+                    rootgrp.createVariable('aod', 'f4',  ('allLambda','iter_d'))[:,:,i] = data['aod']
+                    rootgrp.createVariable('aod_mode', 'f4', ('r_dim', 'allLambda','iter_d'))[:,:,i] = data['aodMode']
+                    rootgrp.createVariable('ssa', 'f4',  ('allLambda','iter_d','iter_d'))[:,:,i] = data['ssa']
+                    rootgrp.createVariable('ssa_mode', 'f4', ('r_dim', 'allLambda','iter_d'))[:,:,i] = data['ssaMode']
+                    rootgrp.createVariable('n', 'f4', ('r_dim','allLambda','iter_d'))[:,:,i] = data['n']
+                    rootgrp.createVariable('k', 'f4', ('r_dim','allLambda','iter_d'))[:,:,i] = data['k']
+                    rootgrp.createVariable('lidar_ratio', 'f4', 'allLambda','iter_d')[:,:,i] = data['LidarRatio']
+                    # rootgrp.createVariable('height', 'f4', ('d_range','d_wl'))[:] = data['height']
+                    # rootgrp.createVariable('r_eff', 'f4', ('r_dim', 'range_dim'))[:] = data['rEff']
+                    # rootgrp.createVariable('wtr_surf', 'f4', ('r_dim', 'range_dim'))[:] = data['wtrSurf']
+                    rootgrp.createVariable('cost_val', 'f4', ('r_dim','iter_d'))[:] = data['costVal']
+                    # rootgrp.createVariable('range_lidar', 'f4', ('d_range','d_wl'))[:] = data['RangeLidar']
+                    rootgrp.createVariable('meas_dp', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_DP'][0]
+                    rootgrp.createVariable('fit_dp', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_DP'][0]
+                    rootgrp.createVariable('meas_vext', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_VExt'][0]
+                    rootgrp.createVariable('fit_vext', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_VExt'][0]
+                    rootgrp.createVariable('meas_vbs', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_VBS'][0]
+                    rootgrp.createVariable('fit_vbs', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_VBS'][0]
+                    rootgrp.createVariable('sza', 'f4', ('angle','allLambda','iter_d'))[:,:,i] = data['sza'][0]
+                    rootgrp.createVariable('vis', 'f4', ('angle','allLambda','iter_d'))[:,:,i] = data['vis'][0]
+                    rootgrp.createVariable('fis', 'f4', ('angle','allLambda','iter_d'))[:,:,i] = data['fis'][0]
+                    rootgrp.createVariable('sca_ang', 'f4', ('angle','allLambda','iter_d'))[:,:,i] = data['sca_ang'][0]
+                    rootgrp.createVariable('meas_i', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['meas_I'][0]
+                    rootgrp.createVariable('fit_i', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['fit_I'][0]
+                    rootgrp.createVariable('meas_p_rel', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['meas_P_rel'][0]
+                    rootgrp.createVariable('fit_p_rel', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['fit_P_rel'][0]
+            except:
+                pass
+
+    else:
+        maxCPU = 3 #maximum CPU allocated to run GRASP on server
+        gRuns = []
+        yamlObj = graspYAML(baseYAMLpath=Updatedyaml)
 
 
-    #eventually have to adjust code for height, this works only for one pixel (single height value)
-    gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML= True )) # This should copy to new YAML object
-    pix = pixel()
-    pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage= 'meas', verbose=False)
-    gRuns[-1].addPix(pix)
-    gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU)
-    #rslts contain all the results form the GRASP inverse run
-    rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
-    return rslts
+        #eventually have to adjust code for height, this works only for one pixel (single height value)
+        gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML= True )) # This should copy to new YAML object
+        pix = pixel()
+        pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage= 'meas', verbose=False)
+        gRuns[-1].addPix(pix)
+        gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU)
+        #rslts contain all the results form the GRASP inverse run
+        rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
+    
+    
+    return rslts,Finalrslts,gRuns,dblist
 
 
 
@@ -1664,17 +1649,17 @@ for i in range(1):
     # HSRLPixNo is the index of HSRL pixel taht corresponds to the RSP Lat Lon
     HSRLPixNo = FindPix(LatH,LonH,LatRSP,LonRSP)[0]  # Or can manually give the index of the pixel that you are intrested in
  
-# #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
-    # rslts_Sph = RSP_Run("sphro",RSP_PixNo,ang1,ang2,TelNo,nwl)
-    # rslts_Tamu = RSP_Run("TAMU",RSP_PixNo,ang1,ang2,TelNo,nwl)
-    # RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
+# # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
+#     rslts_Sph = RSP_Run("sphro",RSP_PixNo,ang1,ang2,TelNo,nwl)
+#     rslts_Tamu = RSP_Run("TAMU",RSP_PixNo,ang1,ang2,TelNo,nwl)
+#     RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
   
 
-    HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True)
-    plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
+    # HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True)
+#     plot_HSRL(HSRL_sphrod[0][0],HSRL_sphrod[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2]) 
 
-    HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True)
-    plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
+#     HSRL_Tamu = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True)
+#     plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
 
     # # print('Cost Value Sph, tamu: ',  rslts_Sph[0]['costVal'], rslts_Tamu[0]['costVal'])
     # RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
@@ -1701,7 +1686,7 @@ for i in range(1):
     
     # RIG = randomInitGuess('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,releaseYAML =True, ModeNo=3)
      #Lidar+pol combined retrieval
-    LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
+    # LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
     LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
    
     print('Cost Value Sph, tamu: ',  LidarPolSph[0]['costVal'],LidarPolTAMU[0]['costVal'])
@@ -1709,10 +1694,10 @@ for i in range(1):
 
 
     # %matplotlib inline
-    plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
-    plot_HSRL(HSRL_sphro_5[0][0],HSRL_Tamu_5[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/5%_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
-    plot_HSRL(HSRL_sphrod_strict[0][0],HSRL_Tamu_strict[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/STR_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
-    plot_HSRL(LidarPolSph[0],LidarPolTAMU[0], forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
+    # plot_HSRL(HSRL_sphrod[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
+    # plot_HSRL(HSRL_sphro_5[0][0],HSRL_Tamu_5[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/5%_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
+    # plot_HSRL(HSRL_sphrod_strict[0][0],HSRL_Tamu_strict[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/STR_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
+    # plot_HSRL(LidarPolSph[0],LidarPolTAMU[0], forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
     plot_HSRL(LidarPolSph[0],LidarPolTAMU[0], forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
     CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU)
 
