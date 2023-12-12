@@ -591,7 +591,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,PixNo, nwl,updateYaml= None
 
 
 def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn, ModeNo=None, updateYaml= None, RandinitGuess =None , NoItr=None):
-
+    failedmeas = 0 #Count of number of meas that failed
     krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
 
     if Kernel_type == "sphro":  #If spheriod model
@@ -809,61 +809,12 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
 
                 Finalrslts.append(rslts)
 
-                data = rslts[1][0][0]
-                nc_file = nc.Dataset('/home/gregmi/git/GSFC-GRASP-Python-Interface/IntialGuessHSRLRSP.nc', 'w', format='NETCDF4')
-                nc_file.close()
-                with nc.Dataset('/home/gregmi/git/GSFC-GRASP-Python-Interface/IntialGuessHSRLRSP.nc', 'w') as rootgrp:
-                    print(rslts[1][0][0]['n'])
-                    # Create dimensions
-                    rootgrp.createDimension('r_dim', data['r'].shape[0])
-                    rootgrp.createDimension('range_dim', data['r'].shape[1])
-                    rootgrp.createDimension('d_range', data['range'].shape[0])
-                    rootgrp.createDimension('d_wl', data['range'].shape[1])
-                    rootgrp.createDimension('wlRSP', data['meas_I'].shape[0])
-                    rootgrp.createDimension('angle', data['meas_I'].shape[1])
-                    rootgrp.createDimension('allLambda', data['lambda'].shape[0])
-                    rootgrp.createDimension('iter_d', NoItr)
-                    # Create variables and assign values
-                    rootgrp.createVariable('datetime', 'S19')[:] = np.array(str(data['datetime']), dtype='S19')
-                    rootgrp.createVariable('longitude', 'f4')[:] = data['longitude']
-                    rootgrp.createVariable('latitude', 'f4')[:] = data['latitude']
-                    rootgrp.createVariable('land_prct', 'f4')[:] = data['land_prct']
-                    rootgrp.createVariable('r', 'f4', ('r_dim', 'range_dim','iter_d'))[:,:,i] = data['r']
-                    rootgrp.createVariable('dVdlnr', 'f4', ('r_dim', 'range_dim','iter_d'))[:,:,i] = data['dVdlnr']
-                    rootgrp.createVariable('rv', 'f4', ('r_dim','iter_d'))[:,:,i] = data['rv']
-                    rootgrp.createVariable('sigma', 'f4', ('r_dim','iter_d'))[:,:,i] = data['sigma']
-                    rootgrp.createVariable('vol', 'f4', ('r_dim','iter_d'))[:,:,i] = data['vol']
-                    rootgrp.createVariable('sph', 'f4', ('r_dim','iter_d'))[:,:,i] = data['sph']
-                    rootgrp.createVariable('range', 'f4', ('d_range','d_wl','iter_d'))[:,:,i] = data['range']
-                    rootgrp.createVariable('beta_ext', 'f4', ('d_range','d_wl','iter_d'))[:,:,i] = data['βext']
-                    rootgrp.createVariable('lambda', 'f4', 'allLambda')[:,:,i] = data['lambda']
-                    rootgrp.createVariable('aod', 'f4',  ('allLambda','iter_d'))[:,:,i] = data['aod']
-                    rootgrp.createVariable('aod_mode', 'f4', ('r_dim', 'allLambda','iter_d'))[:,:,i] = data['aodMode']
-                    rootgrp.createVariable('ssa', 'f4',  ('allLambda','iter_d','iter_d'))[:,:,i] = data['ssa']
-                    rootgrp.createVariable('ssa_mode', 'f4', ('r_dim', 'allLambda','iter_d'))[:,:,i] = data['ssaMode']
-                    rootgrp.createVariable('n', 'f4', ('r_dim','allLambda','iter_d'))[:,:,i] = data['n']
-                    rootgrp.createVariable('k', 'f4', ('r_dim','allLambda','iter_d'))[:,:,i] = data['k']
-                    rootgrp.createVariable('lidar_ratio', 'f4', 'allLambda','iter_d')[:,:,i] = data['LidarRatio']
-                    # rootgrp.createVariable('height', 'f4', ('d_range','d_wl'))[:] = data['height']
-                    # rootgrp.createVariable('r_eff', 'f4', ('r_dim', 'range_dim'))[:] = data['rEff']
-                    # rootgrp.createVariable('wtr_surf', 'f4', ('r_dim', 'range_dim'))[:] = data['wtrSurf']
-                    rootgrp.createVariable('cost_val', 'f4', ('r_dim','iter_d'))[:] = data['costVal']
-                    # rootgrp.createVariable('range_lidar', 'f4', ('d_range','d_wl'))[:] = data['RangeLidar']
-                    rootgrp.createVariable('meas_dp', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_DP'][0]
-                    rootgrp.createVariable('fit_dp', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_DP'][0]
-                    rootgrp.createVariable('meas_vext', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_VExt'][0]
-                    rootgrp.createVariable('fit_vext', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_VExt'][0]
-                    rootgrp.createVariable('meas_vbs', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_VBS'][0]
-                    rootgrp.createVariable('fit_vbs', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_VBS'][0]
-                    rootgrp.createVariable('sza', 'f4', ('angle','allLambda','iter_d'))[:,:,i] = data['sza'][0]
-                    rootgrp.createVariable('vis', 'f4', ('angle','allLambda','iter_d'))[:,:,i] = data['vis'][0]
-                    rootgrp.createVariable('fis', 'f4', ('angle','allLambda','iter_d'))[:,:,i] = data['fis'][0]
-                    rootgrp.createVariable('sca_ang', 'f4', ('angle','allLambda','iter_d'))[:,:,i] = data['sca_ang'][0]
-                    rootgrp.createVariable('meas_i', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['meas_I'][0]
-                    rootgrp.createVariable('fit_i', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['fit_I'][0]
-                    rootgrp.createVariable('meas_p_rel', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['meas_P_rel'][0]
-                    rootgrp.createVariable('fit_p_rel', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['fit_P_rel'][0]
+                
+                # nc_file = nc.Dataset('/home/gregmi/git/GSFC-GRASP-Python-Interface/IntialGuessHSRLRSP.nc', 'w', format='NETCDF4')
+                # nc_file.close()
+                
             except:
+                failedmeas +=1
                 pass
 
     else:
@@ -880,9 +831,193 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
         gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU)
         #rslts contain all the results form the GRASP inverse run
         rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
+        np.save('RandomGuessBoth.npy', Finalrslts)
+    return rslts,Finalrslts,failedmeas,gRuns,dblist
+
+
+def PlotRandomGuess(filename_npy, NoItr,failedItr):
+    fig, ax = plt.subplots(nrows= 3, ncols=2, figsize=(30, 10))
+# #     
+    loaded_data = np.load(filename_npy, allow_pickle=True)
+    costVal = []
+    successItr = NoItr-failedItr
+    for i in range(successItr):
+        costVal.append(loaded_data[i][0]['costVal'])
+    
+    ax[0,0].hist(costVal)
+
+
+    for i in range(successItr):
+        for j in range(noMod):
+
+            ax[0,1].plot(loaded_data[i][0]['n'][i])
+            ax[1,1].plot(loaded_data[i][0]['k'][i])
+            ax[1,0].plot(loaded_data[i][0]['aodMode'][i])
+            ax[2,0].plot(loaded_data[i][0]['ssaMode'][i])
+            
+            
+
+
+
+
+#     with nc.Dataset('/home/gregmi/git/GSFC-GRASP-Python-Interface/IntialGuessHSRLRSP.nc', 'w') as rootgrp:
+#         for i in range(NoItr):
+#             data = Finalrslts[1][i][0]
+#             # Create dimensions
+#             rootgrp.createDimension('r_dim', data['r'].shape[0])
+#             rootgrp.createDimension('range_dim', data['r'].shape[1])
+#             rootgrp.createDimension('d_range', data['meas_DP'].shape[0])
+#             rootgrp.createDimension('d_wl', data['range'].shape[1])
+#             rootgrp.createDimension('wlRSP', data['meas_I'].shape[1])
+#             rootgrp.createDimension('angle', data['meas_I'].shape[0])
+#             rootgrp.createDimension('allLambda', data['lambda'].shape[0])
+#             rootgrp.createDimension('iter_d', NoItr)
+#             # Create variables and assign values
+#             rootgrp.createVariable('datetime', 'S19')[:] = np.array(str(data['datetime']), dtype='S19')
+#             rootgrp.createVariable('longitude', 'f4')[:] = data['longitude']
+#             rootgrp.createVariable('latitude', 'f4')[:] = data['latitude']
+#             rootgrp.createVariable('land_prct', 'f4')[:] = data['land_prct']
+#             rootgrp.createVariable('r', 'f4', ('r_dim', 'range_dim','iter_d'))[:,:,i] = data['r']
+#             rootgrp.createVariable('dVdlnr', 'f4', ('r_dim', 'range_dim','iter_d'))[:,:,i] = data['dVdlnr']
+#             rootgrp.createVariable('rv', 'f4', ('r_dim','iter_d'))[:,i] = data['rv']
+#             rootgrp.createVariable('sigma', 'f4', ('r_dim','iter_d'))[:,i] = data['sigma']
+#             rootgrp.createVariable('vol', 'f4', ('r_dim','iter_d'))[:,i] = data['vol']
+#             rootgrp.createVariable('sph', 'f4', ('r_dim','iter_d'))[:,i] = data['sph']
+#             rootgrp.createVariable('range', 'f4', ('d_range','iter_d'))[:,i] = data['range'][0]
+#             rootgrp.createVariable('beta_ext', 'f4', ('r_dim','d_range','iter_d'))[:,:,i] = data['βext']
+#             rootgrp.createVariable('lambda', 'f4', 'allLambda')[:] = data['lambda']
+#             rootgrp.createVariable('aod', 'f4',  ('allLambda','iter_d'))[:,i] = data['aod']
+#             rootgrp.createVariable('aod_mode', 'f4', ('r_dim', 'allLambda','iter_d'))[:,:,i] = data['aodMode']
+#             rootgrp.createVariable('ssa', 'f4',  ('allLambda','iter_d'))[:,i] = data['ssa']
+#             rootgrp.createVariable('ssa_mode', 'f4', ('r_dim', 'allLambda','iter_d'))[:,:,i] = data['ssaMode']
+#             rootgrp.createVariable('n', 'f4', ('r_dim','allLambda','iter_d'))[:,:,i] = data['n']
+#             rootgrp.createVariable('k', 'f4', ('r_dim','allLambda','iter_d'))[:,:,i] = data['k']
+#             rootgrp.createVariable('lidar_ratio', 'f4', ('allLambda','iter_d'))[:,i] = data['LidarRatio']
+#             # rootgrp.createVariable('height', 'f4', ('d_range','d_wl'))[:] = data['height']
+#             # rootgrp.createVariable('r_eff', 'f4', ('r_dim', 'range_dim'))[:] = data['rEff']
+#             # rootgrp.createVariable('wtr_surf', 'f4', ('r_dim', 'range_dim'))[:] = data['wtrSurf']
+#             rootgrp.createVariable('cost_val', 'f4', ('r_dim','iter_d'))[:,i] = data['costVal']
+#             # rootgrp.createVariable('range_lidar', 'f4', ('d_range','d_wl'))[:] = data['RangeLidar']
+#             rootgrp.createVariable('meas_dp', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_DP']
+#             rootgrp.createVariable('fit_dp', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_DP']
+#             rootgrp.createVariable('meas_vext', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_VExt']
+#             rootgrp.createVariable('fit_vext', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_VExt']
+#             rootgrp.createVariable('meas_vbs', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_VBS']
+#             rootgrp.createVariable('fit_vbs', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_VBS']
+#             rootgrp.createVariable('sza', 'f4', ('angle','wlRSP','iter_d'))[:,:,i] = data['sza']
+#             rootgrp.createVariable('vis', 'f4', ('angle','wlRSP','iter_d'))[:,:,i] = data['vis']
+#             rootgrp.createVariable('fis', 'f4', ('angle','wlRSP','iter_d'))[:,:,i] = data['fis']
+#             rootgrp.createVariable('sca_ang', 'f4', ('angle','wlRSP','iter_d'))[:,:,i] = data['sca_ang']
+#             rootgrp.createVariable('meas_i', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['meas_I']
+#             rootgrp.createVariable('fit_i', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['fit_I']
+#             rootgrp.createVariable('meas_p_rel', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['meas_P_rel']
+#             rootgrp.createVariable('fit_p_rel', 'f4', ('angle', 'allLambda','iter_d'))[:,:,i] = data['fit_P_rel']
+        
+#     return
+
+def Netcdf(Finalrslts,NoItr):
+    with nc.Dataset('/home/gregmi/git/GSFC-GRASP-Python-Interface/IntialGuessHSRLRSP.nc', 'a') as rootgrp:
+        
+        data = Finalrslts[1][0][0]
+        # Create dimensions
+        rootgrp.createDimension('r_dim', data['r'].shape[0])
+        rootgrp.createDimension('range_dim', data['r'].shape[1])
+        rootgrp.createDimension('d_range', data['meas_DP'].shape[0])
+        rootgrp.createDimension('d_wl', data['range'].shape[1])
+        rootgrp.createDimension('wlRSP', data['meas_I'].shape[0])
+        rootgrp.createDimension('angle', data['meas_I'].shape[1])
+        rootgrp.createDimension('allLambda', data['lambda'].shape[0])
+        rootgrp.createDimension('iter_d', NoItr)
+
+        rootgrp.createVariable('datetime', 'S19')
+        rootgrp.createVariable('datetime', 'S19')
+        rootgrp.createVariable('latitude', 'f4')
+        rootgrp.createVariable('land_prct', 'f4')
+        rootgrp.createVariable('r', 'f4', ('r_dim', 'range_dim','iter_d'))
+        rootgrp.createVariable('dVdlnr', 'f4', ('r_dim', 'range_dim','iter_d'))
+        rootgrp.createVariable('rv', 'f4', ('r_dim','iter_d'))
+        rootgrp.createVariable('sigma', 'f4', ('r_dim','iter_d'))
+        rootgrp.createVariable('vol', 'f4', ('r_dim','iter_d'))
+        rootgrp.createVariable('sph', 'f4', ('r_dim','iter_d'))
+        rootgrp.createVariable('range', 'f4', ('d_range','iter_d'))
+        rootgrp.createVariable('beta_ext', 'f4', ('r_dim','d_range','iter_d'))
+        rootgrp.createVariable('lambda', 'f4', 'allLambda')[:]
+        rootgrp.createVariable('aod', 'f4',  ('allLambda','iter_d'))
+        rootgrp.createVariable('aod_mode', 'f4', ('r_dim', 'allLambda','iter_d'))
+        rootgrp.createVariable('ssa', 'f4',  ('allLambda','iter_d'))
+        rootgrp.createVariable('ssa_mode', 'f4', ('r_dim', 'allLambda','iter_d'))
+        rootgrp.createVariable('n', 'f4', ('r_dim','allLambda','iter_d'))
+        rootgrp.createVariable('k', 'f4', ('r_dim','allLambda','iter_d'))
+        rootgrp.createVariable('lidar_ratio', 'f4', ('allLambda','iter_d'))
+        # rootgrp.createVariable('height', 'f4', ('d_range','d_wl'))[:] = data['height']
+        # rootgrp.createVariable('r_eff', 'f4', ('r_dim', 'range_dim'))[:] = data['rEff']
+        # rootgrp.createVariable('wtr_surf', 'f4', ('r_dim', 'range_dim'))[:] = data['wtrSurf']
+        rootgrp.createVariable('cost_val', 'f4', ('r_dim','iter_d'))
+        # rootgrp.createVariable('range_lidar', 'f4', ('d_range','d_wl'))[:] = data['RangeLidar']
+        rootgrp.createVariable('meas_dp', 'f4', ('d_range','allLambda','iter_d'))
+        rootgrp.createVariable('fit_dp', 'f4', ('d_range','allLambda','iter_d'))
+        rootgrp.createVariable('meas_vext', 'f4', ('d_range','allLambda','iter_d'))
+        rootgrp.createVariable('fit_vext', 'f4', ('d_range','allLambda','iter_d'))
+        rootgrp.createVariable('meas_vbs', 'f4', ('d_range','allLambda','iter_d'))
+        rootgrp.createVariable('fit_vbs', 'f4', ('d_range','allLambda','iter_d'))
+        rootgrp.createVariable('sza', 'f4', ('angle','wlRSP','iter_d'))
+        rootgrp.createVariable('vis', 'f4', ('angle','wlRSP','iter_d'))
+        rootgrp.createVariable('fis', 'f4', ('angle','wlRSP','iter_d'))
+        rootgrp.createVariable('sca_ang', 'f4', ('angle','wlRSP','iter_d'))
+        rootgrp.createVariable('meas_i', 'f4', ('angle', 'wlRSP','iter_d'))
+        rootgrp.createVariable('fit_i', 'f4', ('angle', 'wlRSP','iter_d'))
+        rootgrp.createVariable('meas_p_rel', 'f4', ('angle', 'wlRSP','iter_d'))
+        rootgrp.createVariable('fit_p_rel', 'f4', ('angle', 'wlRSP','iter_d'))
+
+
+        for i in range(NoItr):
+            data = Finalrslts[1][i][0]
+        # Create variables and assign values
+            rootgrp['datetime'] = np.array(str(data['datetime']), dtype='S19')
+            rootgrp['longitude'][:] = data['longitude']
+            rootgrp.createVariable('latitude', 'f4')[:] = data['latitude']
+            rootgrp.createVariable('land_prct', 'f4')[:] = data['land_prct']
+            rootgrp.createVariable('r', 'f4', ('r_dim', 'range_dim','iter_d'))[:,:,i] = data['r']
+            rootgrp.createVariable('dVdlnr', 'f4', ('r_dim', 'range_dim','iter_d'))[:,:,i] = data['dVdlnr']
+            rootgrp.createVariable('rv', 'f4', ('r_dim','iter_d'))[:,i] = data['rv']
+            rootgrp.createVariable('sigma', 'f4', ('r_dim','iter_d'))[:,i] = data['sigma']
+            rootgrp.createVariable('vol', 'f4', ('r_dim','iter_d'))[:,i] = data['vol']
+            rootgrp.createVariable('sph', 'f4', ('r_dim','iter_d'))[:,i] = data['sph']
+            rootgrp.createVariable('range', 'f4', ('d_range','iter_d'))[:,i] = data['range'][0]
+            rootgrp.createVariable('beta_ext', 'f4', ('r_dim','d_range','iter_d'))[:,:,i] = data['βext']
+            rootgrp.createVariable('lambda', 'f4', 'allLambda')[:] = data['lambda']
+            rootgrp.createVariable('aod', 'f4',  ('allLambda','iter_d'))[:,i] = data['aod']
+            rootgrp.createVariable('aod_mode', 'f4', ('r_dim', 'allLambda','iter_d'))[:,:,i] = data['aodMode']
+            rootgrp.createVariable('ssa', 'f4',  ('allLambda','iter_d'))[:,i] = data['ssa']
+            rootgrp.createVariable('ssa_mode', 'f4', ('r_dim', 'allLambda','iter_d'))[:,:,i] = data['ssaMode']
+            rootgrp.createVariable('n', 'f4', ('r_dim','allLambda','iter_d'))[:,:,i] = data['n']
+            rootgrp.createVariable('k', 'f4', ('r_dim','allLambda','iter_d'))[:,:,i] = data['k']
+            rootgrp.createVariable('lidar_ratio', 'f4', ('allLambda','iter_d'))[:,i] = data['LidarRatio']
+            # rootgrp.createVariable('height', 'f4', ('d_range','d_wl'))[:] = data['height']
+            # rootgrp.createVariable('r_eff', 'f4', ('r_dim', 'range_dim'))[:] = data['rEff']
+            # rootgrp.createVariable('wtr_surf', 'f4', ('r_dim', 'range_dim'))[:] = data['wtrSurf']
+            rootgrp.createVariable('cost_val', 'f4', ('r_dim','iter_d'))[:,i] = data['costVal']
+            # rootgrp.createVariable('range_lidar', 'f4', ('d_range','d_wl'))[:] = data['RangeLidar']
+            rootgrp.createVariable('meas_dp', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_DP']
+            rootgrp.createVariable('fit_dp', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_DP']
+            rootgrp.createVariable('meas_vext', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_VExt']
+            rootgrp.createVariable('fit_vext', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_VExt']
+            rootgrp.createVariable('meas_vbs', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['meas_VBS']
+            rootgrp.createVariable('fit_vbs', 'f4', ('d_range','allLambda','iter_d'))[:,:,i] = data['fit_VBS']
+            rootgrp.createVariable('sza', 'f4', ('angle','wlRSP','iter_d'))[:,:,i] = data['sza']
+            rootgrp.createVariable('vis', 'f4', ('angle','wlRSP','iter_d'))[:,:,i] = data['vis']
+            rootgrp.createVariable('fis', 'f4', ('angle','wlRSP','iter_d'))[:,:,i] = data['fis']
+            rootgrp.createVariable('sca_ang', 'f4', ('angle','wlRSP','iter_d'))[:,:,i] = data['sca_ang']
+            rootgrp.createVariable('meas_i', 'f4', ('angle', 'wlRSP','iter_d'))[:,:,i] = data['meas_I']
+            rootgrp.createVariable('fit_i', 'f4', ('angle', 'wlRSP','iter_d'))[:,:,i] = data['fit_I']
+            rootgrp.createVariable('meas_p_rel', 'f4', ('angle', 'wlRSP','iter_d'))[:,:,i] = data['meas_P_rel']
+            rootgrp.createVariable('fit_p_rel', 'f4', ('angle', 'wlRSP','iter_d'))[:,:,i] = data['fit_P_rel']
+    
+    # netcdf_file.close()    
     
     
-    return rslts,Finalrslts,gRuns,dblist
+    return
+
 
 
 
@@ -1649,10 +1784,10 @@ for i in range(1):
     # HSRLPixNo is the index of HSRL pixel taht corresponds to the RSP Lat Lon
     HSRLPixNo = FindPix(LatH,LonH,LatRSP,LonRSP)[0]  # Or can manually give the index of the pixel that you are intrested in
  
-# # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
-#     rslts_Sph = RSP_Run("sphro",RSP_PixNo,ang1,ang2,TelNo,nwl)
+# #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
+    # rslts_Sph = RSP_Run("sphro",RSP_PixNo,ang1,ang2,TelNo,nwl)
 #     rslts_Tamu = RSP_Run("TAMU",RSP_PixNo,ang1,ang2,TelNo,nwl)
-#     RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
+# #     RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo)
   
 
     # HSRL_sphrod = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True)
@@ -1686,8 +1821,8 @@ for i in range(1):
     
     # RIG = randomInitGuess('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,releaseYAML =True, ModeNo=3)
      #Lidar+pol combined retrieval
-    # LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
-    LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
+    LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None,RandinitGuess=True, NoItr =2 )
+    # LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None,RandinitGuess=True, NoItr =2 )
    
     print('Cost Value Sph, tamu: ',  LidarPolSph[0]['costVal'],LidarPolTAMU[0]['costVal'])
     # print('SPH',"tam" )
@@ -1698,8 +1833,8 @@ for i in range(1):
     # plot_HSRL(HSRL_sphro_5[0][0],HSRL_Tamu_5[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/5%_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
     # plot_HSRL(HSRL_sphrod_strict[0][0],HSRL_Tamu_strict[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/STR_HSRL_Plots_444.pdf", combinedVal =HSRL_sphrod[2])
     # plot_HSRL(LidarPolSph[0],LidarPolTAMU[0], forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
-    plot_HSRL(LidarPolSph[0],LidarPolTAMU[0], forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
-    CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU)
+    plot_HSRL(LidarPolSph[0][0],LidarPolTAMU[0][0], forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
+    CombinedLidarPolPlot(LidarPolSph[0],LidarPolTAMU[0])
 
 
 

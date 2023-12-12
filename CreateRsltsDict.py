@@ -4,6 +4,7 @@
 
 This code reads Polarimetric data from the Campaigns and runs GRASP. This code was created to Validate the Aerosol retrivals performed using Non Spherical Kernels (Hexahedral from TAMU DUST 2020)
 """
+
 import os
 import numpy as np
 from matplotlib import pyplot as plt
@@ -46,7 +47,7 @@ def VertP(Data, hgtInterv):
     avgProf = pd.DataFrame()
     hgt = Data['Altitude']
 
-    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude','Dust_Mixing_Ratio']
+    inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep', 'Altitude','Dust_Mixing_Ratio']
 
     altitude_diff = np.gradient(Data['Altitude'])
     numInterv = int(hgtInterv / np.mean(altitude_diff))  # Calculate numInterv based on mean altitude difference
@@ -111,44 +112,110 @@ def Gaspar_MAP(RSP_wl,Airhgt,GasAbsFn,SpecResFnPath):
     
     #Gas Absorption correction using UNL_VRTM (provided by Richard,UMBC)
     RSP_wlf = [410, 470, 555, 670, 865]
-    #Reading the NetCDF file for gas absorption from radiative tranfer code (UNLVRTM)
+
+
     ds = nc.Dataset(GasAbsFn)
     Wl = ds.variables['Lamdas'][:] # wavelength values corresponding to the gas absorption
     Tau = ds.variables['tauGas'][:] #Optical depth of gases at different altitude upto 120 km
     Gashgt = ds.variables['Z'][:-1]
 
+    GasAbsTau =np.zeros(len(RSP_wlf))
 
-    Tau_hgt = Tau[np.where(Gashgt<Airhgt)]  #gas optical depth in the profile 
-    Gashgtp= Gashgt[np.where(Gashgt<Airhgt)]
+    # GasTau = np.ones((len(Wl)))
+    # for i in range(len(Wl)):
+    #     GasTau[i] = np.trapz(Tau[:,i],Gashgt)
 
-    ColumnTau = np.sum(Tau,axis=0 )  #total column optical depth below the aircraaft altitiude. 
+    GasTau = np.sum(Tau,axis=0)
 
-    
-    GasAbsTau = np.ones((len(RSP_wlf))) #this array will store the total tau value
 
     for n in range(len(RSP_wlf)):
-        #Reading the spectral response value for RSP
+
+    #     #Reading the spectral response value for RSP
         SRFFile = SpecResFnPath + str(RSP_wlf[n]) +'.txt'
         SpecResFn = np.loadtxt(SRFFile)
 
-  
-        #Spectral response values for given RSP wl
+    #     #Spectral response values for given RSP wl
         SpecResFn = SpecResFn[SpecResFn[:,0]>= min(Wl)]
-        #1D interpolation across wavelength
-        f = interp1d(Wl,ColumnTau,kind = 'linear')
-        # Evaluate the function at a new point
+        #     #1D interpolation across wavelength
+        f = interp1d(Wl,GasTau,kind = 'linear')
+        #     # Evaluate the function at a new point
         wl_RSP = SpecResFn[:,0]
         tau_solar = f(wl_RSP) #Tau at given RSP response function wl
         NormSRF = SpecResFn[:,1]  #normalizing the response function
 
-        tau = tau_solar*NormSRF
-
-        tautotal = np.trapz(tau,wl_RSP)
+        tau = np.trapz(tau_solar*NormSRF,wl_RSP )
         swl= np.trapz(NormSRF,wl_RSP)
-        
-        GasAbsTau[n]= tautotal/swl
 
-        plt.plot(wl_RSP,tau)
+        GasAbsTau[n]= tau/swl
+    plt.plot(RSP_wlf,GasAbsTau)
+
+
+
+            #Reading the NetCDF file for gas absorption from radiative tranfer code (UNLVRTM)
+        
+
+
+        # Tau_hgt = Tau  #gas optical depth in the profile 
+        # Gashgtp= Gashgt
+
+        # #this array will store the total tau value
+        # ColumnTau = np.sum(Tau,axis=0 )  #total column optical depth below the aircraaft altitiude. 
+        # GasAbsTau = np.zeros((len(RSP_wlf))) #this array will store the total tau value
+
+        # for n in range(len(RSP_wl)):
+        #     #Reading the spectral response value for RSP
+        #     SpecResFn = np.loadtxt(f'/Users/greema/Desktop/UMBC/ORACLES/RSP_Spectral_Response/{RSP_wl[n]}.txt')
+        #     SpecResFn = SpecResFn[SpecResFn[:,0]>= min(Wl)]
+        # #     #1D interpolation across wavelength
+        #     f = interp1d(Wl,GasTau,kind = 'linear')
+        #     #     # Evaluate the function at a new point
+        #     wl_RSP = SpecResFn[:,0]
+        #     tau_solar = f(wl_RSP) #Tau at given RSP response function wl
+        #     NormSRF = SpecResFn[:,1]  #normalizing the response function
+
+        #     tau = np.trapz(tau_solar*NormSRF,wl_RSP )
+        #     swl= np.trapz(NormSRF,wl_RSP)
+
+        #     GasAbsTau[n]= tau/swl
+
+        # plt.plot(RSP_wl,GasAbsTau)
+    # #Reading the NetCDF file for gas absorption from radiative tranfer code (UNLVRTM)
+    # ds = nc.Dataset(GasAbsFn)
+    # Wl = ds.variables['Lamdas'][:] # wavelength values corresponding to the gas absorption
+    # Tau = ds.variables['tauGas'][:] #Optical depth of gases at different altitude upto 120 km
+    # Gashgt = ds.variables['Z'][:-1]
+
+    # # Tau_hgt = Tau[np.where(Gashgt<Airhgt)]  #gas optical depth in the profile 
+    # # Gashgtp= Gashgt[np.where(Gashgt<Airhgt)]
+
+    # Tau_hgt = Tau  #gas optical depth in the profile 
+    # Gashgtp= Gashgt
+
+
+    # ColumnTau = np.sum(Tau,axis=0 )  #total column optical depth below the aircraaft altitiude. 
+    # GasAbsTau = np.ones((len(RSP_wlf))) #this array will store the total tau value
+
+    # for n in range(len(RSP_wlf)):
+    #     #Reading the spectral response value for RSP
+    #     SRFFile = SpecResFnPath + str(RSP_wlf[n]) +'.txt'
+    #     SpecResFn = np.loadtxt(SRFFile)
+
+    #     #Spectral response values for given RSP wl
+    #     SpecResFn = SpecResFn[SpecResFn[:,0]>= min(Wl)]
+    #     #1D interpolation across wavelength
+    #     f = interp1d(Wl,ColumnTau,kind = 'linear')
+    #     # Evaluate the function at a new point
+    #     wl_RSP = SpecResFn[:,0]
+    #     tau_solar = f(wl_RSP) #Tau at given RSP response function wl
+    #     NormSRF = SpecResFn[:,1]  #normalizing the response function
+
+
+    #     tautotal = np.trapz(tau_solar*NormSRF,wl_RSP)
+    #     swl= np.trapz(NormSRF,wl_RSP)
+        
+    #     GasAbsTau[n]= tautotal/swl
+
+    #     plt.plot(RSP_wlf,GasAbsTau)
     
     return GasAbsTau
 
@@ -517,8 +584,8 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
 
     Data_dic ={} #This dictionary stores all the HSRL variables used for GRASP forward simulation
-    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep','Dust_Mixing_Ratio']
-    inp2 = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude','Dust_Mixing_Ratio']
+    inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep','Dust_Mixing_Ratio']
+    inp2 = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep', 'Altitude','Dust_Mixing_Ratio']
 
     #Setting negative values to zero, The negative values are due to low signal so we can replace with 0 without loss of info.
     for i in range (len(inp)):
@@ -556,7 +623,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     # print(df_new['Altitude'][:])
     print(BLh)
     UpH = 5000 
-    # BLh =700
+    # BLh =10
     belowBL ={}
     MidAtm={}
     # UpAtm={}
@@ -567,7 +634,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     MidInv = 150
     # UpInv = 300
 
-    BLIntv = 110
+    BLIntv = 130
 
     
     # BLIntv =  110
@@ -586,7 +653,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     BLProf= VertP(belowBL, BLIntv)
     MidProf= VertP(MidAtm, MidInv)
     # UpProf= VertP(UpAtm, UpInv)
-    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Dust_Mixing_Ratio']
+    inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep', 'Dust_Mixing_Ratio']
 
     FullAvgProf = {}
 
@@ -612,7 +679,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     fig, axs = plt.subplots(nrows= 1, ncols=10, figsize=(20, 6), sharey = True)
     for i in range (0,len(inp)):
         axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
-        axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
+        # axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
         axs[i].plot(MidAtm[f'{inp[i]}'],MidAtm['Altitude'], marker= '.' , label = "bl")
         # axs[i].plot(UpAtm[f'{inp[i]}'],UpAtm['Altitude'], marker= '.' , label = "bl")
         
@@ -638,28 +705,15 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     
 
     Bext = np.zeros((height_shape,3))
-    
-    # Bext[:,0] = df['355_ext'][:]
     Bext[:,0] = df['355_ext'][:]
-
-    
-    # Bext[:,1] = df['532_ext'][height_shape-2:]
     Bext[:,1] = df['532_ext'][:]
-    
-    # Bext[-2:,2] = df['1064_ext'][height_shape-2:]
     Bext[:,2] = df['1064_ext'] [:]
-    # Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
+    Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
 
     Bsca = np.zeros((height_shape,3))
-    
-    # Bsca[:,0] = df['355_bsc_Sa'][height_shape-2:]
-    Bsca[:,0] = df['355_bsc_Sa'][:]
-    
-    # Bsca[-2:,1] = df['532_bsc_Sa'][height_shape-2:]
-    Bsca[:,1] = df['532_bsc_Sa'] [:]
-    
-    # Bsca[-2:,2] = df['1064_bsc_Sa'][height_shape-2:]
-    Bsca[:,2] = df['1064_bsc_Sa'][:]
+    Bsca[:,0] = df['355_bsc'][:]
+    Bsca[:,1] = df['532_bsc'] [:]
+    Bsca[:,2] = df['1064_bsc'][:]
   
     # Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
@@ -685,7 +739,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     rslt['OBS_hght']= AirAlt # aircraft altitude in m
     rslt['land_prct'] = 0 #Ocean Surface
     
-    rslt['gaspar'] = np.array([0.0037,0.0037,0.0037])  
+    rslt['gaspar'] = np.array([0.0037,0.0037,0.0037]) # TODO check the units for molecular depol correction.   
     #TODO make this general
 
     f1.close()
@@ -706,7 +760,7 @@ def Read_Data_HSRL_Oracles_Height_V2_1(file_path,file_name,PixNo):
     print(AirAlt)
 
     del_dict ={} #This dictionary stores 
-    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
+    inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep']
     #Setting negative values to zero, The negative values are due to low signal so we can replace with 0 without loss of info.
     for i in range (len(inp)):
         del_dict[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo]
@@ -755,7 +809,7 @@ def Read_Data_HSRL_Oracles_Height_V2_1(file_path,file_name,PixNo):
     # Create dictionaries to hold filtered and interpolated data
     del_dictt = {}
     # Delete removed pixels and set negative values to zero for each data type
-    inp2 = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude']
+    inp2 = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep', 'Altitude']
     for i in range (len(inp2)): #
         del_dictt[f'{inp2[i]}'] = np.delete(np.array(df_new[f'{inp2[i]}']), rm_pix)
 
@@ -787,7 +841,7 @@ def Read_Data_HSRL_Oracles_Height_V2_1(file_path,file_name,PixNo):
     BLProf= VertP(belowBL, BLIntv)
     MidProf= VertP(MidAtm, MidInv)
     UpProf= VertP(UpAtm, UpInv)
-    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
+    inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep']
 
     FullAvgProf = {}
 
@@ -839,9 +893,9 @@ def Read_Data_HSRL_Oracles_Height_V2_1(file_path,file_name,PixNo):
     Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
 
     Bsca = np.zeros((height_shape,3))
-    Bsca[:,0] = df['355_bsc_Sa'][:]
-    Bsca[:,1] = df['532_bsc_Sa'] [:]
-    Bsca[:,2] = df['1064_bsc_Sa'][:]
+    Bsca[:,0] = df['355_bsc'][:]
+    Bsca[:,1] = df['532_bsc'] [:]
+    Bsca[:,2] = df['1064_bsc'][:]
 
     Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
@@ -877,7 +931,7 @@ def Read_Data_HSRL_constHgt(file_path,file_name,PixNo):
     AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
 
     Data_dic ={} #This dictionary stores all the HSRL variables used for GRASP forward simulation
-    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
+    inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep']
 
     #Setting negative values to zero, The negative values are due to low signal so we can replace with 0 without loss of info.
     for i in range (len(inp)):
@@ -963,9 +1017,9 @@ def Read_Data_HSRL_constHgt(file_path,file_name,PixNo):
     Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
 
     Bsca = np.zeros((height_shape,3))
-    Bsca[:,0] = df['355_bsc_Sa'][:]
-    Bsca[:,1] = df['532_bsc_Sa'] [:]
-    Bsca[:,2] = df['1064_bsc_Sa'][:]
+    Bsca[:,0] = df['355_bsc'][:]
+    Bsca[:,1] = df['532_bsc'] [:]
+    Bsca[:,2] = df['1064_bsc'][:]
 
     Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
