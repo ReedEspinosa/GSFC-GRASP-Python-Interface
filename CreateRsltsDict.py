@@ -582,7 +582,11 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
 
     HSRL = f1['DataProducts']
     AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
+    AerID = HSRL['Aerosol_ID'][PixNo][:]
 
+    # print(AerID)
+    # HSRL['Dust_Mixing_Ratio'][PixNo][:][np.where(AerID > 8)] = np.nanmax(HSRL['Dust_Mixing_Ratio'][PixNo][:])
+    # print(HSRL['Dust_Mixing_Ratio'][PixNo][:][np.where(AerID > 8)])
     Data_dic ={} #This dictionary stores all the HSRL variables used for GRASP forward simulation
     inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep','Dust_Mixing_Ratio']
     inp2 = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep', 'Altitude','Dust_Mixing_Ratio']
@@ -672,8 +676,6 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
 
     axs[0].legend()
     axs[0].set_ylabel('Height m ') 
-
-
 
 
     fig, axs = plt.subplots(nrows= 1, ncols=10, figsize=(20, 6), sharey = True)
