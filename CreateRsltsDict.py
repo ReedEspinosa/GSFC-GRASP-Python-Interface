@@ -88,6 +88,7 @@ def VertP(Data, hgtInterv):
         
     ## GRASP requires the vertical profiles to be in decendong order, so reversing the entire profile
     df = avgProf[::-1]
+    
     # if Plot_avg_prof ==True:
     #     fig, axs = plt.subplots(nrows= 1, ncols=9, figsize=(20, 6), sharey = True)
     #     for i in range (0,len(inp)-1):
@@ -566,15 +567,15 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
     rslt['land_prct'] = 0 #Ocean Surface
 
     #Substitude the actual value
-    rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
+    # rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
     f1.close() 
-    return rslt,BLh
+    return rslt, BLh
 
 #Read_Data_HSRL_Oracles Version .2 
 # Using different averaging method for vertical profile averaging 
 
 
-def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
+def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleCase =None):
 
     #Specify the Path and the name of the HSRL file
     #Reading the HSRL data
@@ -716,9 +717,9 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     Bsca[:,0] = df['355_bsc'][:]
     Bsca[:,1] = df['532_bsc'] [:]
     Bsca[:,2] = df['1064_bsc'][:]
+    # Bsca[0,2] = np.nan
   
-    # Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
-
+    
     Dep = np.zeros((height_shape,3))
     # Dep[-2:,0] = df['355_dep'][height_shape-2:] #Total depolarization ratio
     # Dep[-2:,1] = df['532_dep'][height_shape-2:]
@@ -740,9 +741,18 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo):
     rslt['longitude']= f1['Nav_Data']['gps_lon'][PixNo]
     rslt['OBS_hght']= AirAlt # aircraft altitude in m
     rslt['land_prct'] = 0 #Ocean Surface
+
+    # if gaspar ==True: # Molecular depolarization correction 
+    rslt['gaspar'] = np.array([0.0037,0.0037,0.0037])
+
+    if SimpleCase == True:
+        Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
+        Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
+
+        
     
-    rslt['gaspar'] = np.array([0.0037,0.0037,0.0037]) # TODO check the units for molecular depol correction.   
-    #TODO make this general
+     # TODO check the units for molecular depol correction.   
+    # TODO make this general
 
     f1.close()
     return rslt,BLh,DstMR
@@ -898,7 +908,6 @@ def Read_Data_HSRL_Oracles_Height_V2_1(file_path,file_name,PixNo):
     Bsca[:,0] = df['355_bsc'][:]
     Bsca[:,1] = df['532_bsc'] [:]
     Bsca[:,2] = df['1064_bsc'][:]
-
     Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
     Dep = np.zeros((height_shape,3))
@@ -1050,24 +1059,41 @@ def Read_Data_HSRL_constHgt(file_path,file_name,PixNo):
 
 
 
+# #The function Checks for Fill values or negative values and replaces them with nan. To check for negative values, set negative_check = True 
+# def checkFillVals(param , negative_check = None):
+#     param[:] = np.where(param[:] == -999, np.nan, param[:])
+#     if negative_check == True:
+#         param[:] = np.where(param[:] < 0 , np.nan, param[:])
+#     return param
+
+# #This sets the nan values to 0 
+# def HSRL2_checkFillVals(param):
+#     param[:] = np.where(param < 0, 0, param)
+#     param[:] = np.where(np.isnan(param), 0, param)
+#     return param
+
+# #Checks for negative values and replaces them by nan
+# def HSRL_checkFillVals(param):
+#     param[:] = np.where(param[:] < 0 , np.nan, param[:])     
+#     return param
 
 
 
 
-
-## Reading the Multiangle Polarimeter data ()
+# ## Reading the Multiangle Polarimeter data ()
 
 # def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
 
 #     f1= h5py.File(file_path + file_name,'r+')  #reading Lidar measurements 
 #     HSRL = f1['DataProducts']
+#     #Latitude and longitude values 
 #     latitude,longitude = f1['Nav_Data']['gps_lat'][:],f1['Nav_Data']['gps_lon'][:]
 #     AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
 #     print(AirAlt)
 
 #     Data_dic ={} #This dictionary stores 
 #     inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep']
-#     #Setting negative values to zero, Teh negative values are due to low signal so we can replace with 0 without loss of info.
+#     #Setting negative values to zero, The negative values are due to low signal so we can replace with 0 without loss of info.
 #     for i in range (len(inp)):
 #         Data_dic[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo]
 #         HSRL_checkFillVals(Data_dic[f'{inp[i]}']) # set all negative values to zero
@@ -1075,11 +1101,12 @@ def Read_Data_HSRL_constHgt(file_path,file_name,PixNo):
 #             Data_dic[f'{inp[i]}'] = np.where(HSRL[f'{inp[i]}'][PixNo][:]>= 0.6 , np.nan, HSRL[f'{inp[i]}'][PixNo])  #CH: This should be changed, 0.7 has been set arbitarily
 
 #     #Caculating range, Range is defined as distance from the instrument to the aersosol layer, i.e. range at instrument heright = 0. We have to make sure that The range is in decending order
-#     Data_dic['Altitude'] = AirAlt - HSRL['Altitude'][0] 
+#     Data_dic['Altitude'] = HSRL['Altitude'][0]  # altitude above sea level
+#     # Data_dic['Altitude'] = HSRL['Altitude'][0]  
 #     df_new = pd.DataFrame(Data_dic)
 #     df_new.interpolate(inplace=True, limit_area= 'inside')
 
-#     # Filtering and removing the pixels with bad data: 
+#     #Filtering and removing the pixels with bad data: 
 #     Removed_index = []  # Removed_index holds indices of pixels to be removed
 #     # Filter values greater than flight altitude
 #     Removed_index.append(np.nonzero(np.array(df_new['Altitude'][:]) > AirAlt)[0][:])
@@ -1114,21 +1141,23 @@ def Read_Data_HSRL_constHgt(file_path,file_name,PixNo):
 #     del_dict = {}
 #     # Delete removed pixels and set negative values to zero for each data type
 #     inp2 = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude']
-#     for i in range (10):
+#     for i in range (len(inp2)): #
 #         del_dict[f'{inp2[i]}'] = np.delete(np.array(df_new[f'{inp2[i]}']), rm_pix)
 
 #     df_mean = pd.DataFrame()
 #     npoints = 10 #no of height pixels averaged 
 #     Mod_value = np.array(del_dict['Altitude']).shape[0] % npoints  #Skip these values for reshaping the array
-#     for i in range (10): #taking mean 
+#     for i in range (len(inp2)): #taking mean 
 #         df_mean[f'{inp2[i]}'] = nanmean(np.array(del_dict[f'{inp2[i]}'][Mod_value:]).reshape( int(np.array(del_dict[f'{inp2[i]}']).shape[0]/npoints),npoints),axis=1)
 
 #     for k in df_mean.keys():
 #         print(df_mean[k].shape)
 
-#     df = df_mean[:]
-#     rslt = {} # 
-#     height_shape = np.array(df['Altitude'][:]).shape[0] #to avoint the height of the sea salt, this should be removed 
+#     df = df_mean[::-1] # GRASP requires the vertical profiles to be arranged in descending order, hence reversing the data.
+    
+    
+#     rslt = {} # This dictionary will store the values arranged in GRASP's format. 
+#     height_shape = np.array(df['Altitude'][:]).shape[0] #to avoid the height of the sea salt, this should be removed 
 
 #     Range = np.ones((height_shape,3))
 #     Range[:,0] = df['Altitude'][:]
@@ -1137,43 +1166,38 @@ def Read_Data_HSRL_constHgt(file_path,file_name,PixNo):
 #     rslt['RangeLidar'] = Range
 
 #     Bext = np.ones((height_shape,3))
-#     Bext[:,0] = (df['355_ext'][:]/1000)/(np.trapz(df['355_ext'][::-1]/1000, df['Altitude'][::-1]))
-#     Bext[:,1] = (df['532_ext'][:]/1000)/(np.trapz(df['532_ext'][::-1]/1000, df['Altitude'][::-1]))
-#     Bext[:,2] = (df['1064_ext'] [:]/1000)/(np.trapz(df['1064_ext'][::-1]/1000, df['Altitude'][::-1]))
-#     # Bext[0,2] = np.nan 
+#     Bext[:,0] = df['355_ext'][:]
+#     Bext[:,1] = df['532_ext'][:]
+#     Bext[:,2] = df['1064_ext'] [:]
+#     Bext[0,2] = np.nan 
 
 #     Bsca = np.ones((height_shape,3))
-#     Bsca[:,0] =(df['355_bsc_Sa'][:]/1000)/(np.trapz(df['355_bsc_Sa'][::-1]/ 1000, df['Altitude'][::-1]))
-#     Bsca[:,1] = (df['532_bsc_Sa'] [:]/1000)/(np.trapz(df['532_bsc_Sa'][::-1]/ 1000, df['Altitude'][::-1]))
-#     Bsca[:,2] = (df['1064_bsc_Sa'][:]/1000)/(np.trapz(df['1064_bsc_Sa'][::-1]/ 1000, df['Altitude'][::-1]))
+#     Bsca[:,0] = df['355_bsc_Sa'][:]
+#     Bsca[:,1] = df['532_bsc_Sa'] [:]
+#     Bsca[:,2] = df['1064_bsc_Sa'][:]
 
-#     # Nor_Bca = 
-#     # Bsca[0,2] = np.nan 
+#     Bsca[0,2] = np.nan 
 
 #     Dep = np.ones((height_shape,3))
 #     Dep[:,0] = df['355_dep'][:]
 #     Dep[:,1] = df['532_dep'][:]
 #     Dep[:,2] = df['1064_dep'] [:]
 
-#     rslt['meas_VExt'] = Bext
-#     rslt['meas_VBS'] = Bsca # converting units from km-1 tp m-1
-#     rslt['meas_DP'] = Dep*100  #_aer
+#     #Unit conversion 
+#     rslt['meas_VExt'] = Bext / 1000
+#     rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 to m-1
+#     rslt['meas_DP'] = Dep *100  # in percentage
 #     # print(rslt['meas_DP'])
 
 #     rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
 #     rslt['wl'] = np.array([355,532,1064])/1000
-#     rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+#     rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ np.str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
 #     rslt['latitude'] = latitude[PixNo]
 #     rslt['longitude']= longitude[PixNo]
-#     rslt['OBS_hght']=  AirAlt# aircraft altitude. 
+#     rslt['OBS_hght']=  AirAlt# aircraft altitude in m
 #     rslt['land_prct'] = 0 #Ocean Surface
 
 #     #Substitude the actual value
-#     rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
+#     # rslt['gaspar'] = np.ones((3))*0.0037 #MOlecular depolarization 
 #     f1.close() 
 #     return rslt
-
-
-
-
-
