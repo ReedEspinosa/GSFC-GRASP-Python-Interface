@@ -949,6 +949,7 @@ class graspRun():
         numericLn = re.compile('^[ ]*[0-9]+')
         ptrnHeader = re.compile('^[ ]*#[ ]*(sza[ ]*vis|Range_\[m\][ ]*meas_)')
         ptrnResid = re.compile('[ ]*noise[ ]*abs[ ]*rel[ ]*')
+        ptrnIter = re.compile(r'iteration #\s*(\d+)')
         i = 0
         skipFlds = 1 # the 1st field is just the measurement number
         FITfnd = False
@@ -957,6 +958,12 @@ class graspRun():
                 pixInd = 0
                 while numericLn.match(contents[i+1]):
                     results[pixInd]['costVal'] = float(re.search('^[ ]*[0-9\.]+', contents[i+1]).group())
+                    if not ptrnIter.findall(contents[i+1]) is None:
+                        results[pixInd]['nIter'] = int(ptrnIter.findall(contents[i+1])[0])
+                        if results[pixInd]['nIter'] != 0: # not printing this if it is fwd model only
+                            if self.verbose: print('nIter = %d, for pixel %d' % (results[pixInd]['nIter'], pixInd+1))  
+                    else:
+                        print('nIter not found!, len(contents)=%d, i=%d \n content=%s for pixel %d' % (len(contents), i, contents[i+1], pixInd+1))
                     i += 1
                     pixInd += 1
             if not ptrnFIT.match(contents[i]) is None: # We found fitting data
@@ -1366,6 +1373,11 @@ class graspYAML():
                         else:
                             # needs to modify this to change the r_min and r_max limits
                             self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lstModeRadius)
+                    # Change the maximum iteration before stopping the retrieval, and LM fit
+                    # HACK: this is a hack to change the maximum iteration for the retrieval
+                    # FIXME: this needs to be generalized, by having an input in the casestr or ina canonical casemap file
+                    self.dl['retrieval']['inversion']['convergence']['maximum_iterations_for_stopping'] = 50
+                    self.dl['retrieval']['inversion']['convergence']['maximum_iterations_of_Levenberg-Marquardt'] = 50
         if newVal and write2disk: self.writeYAML() # if no change was made no need to re-write the file
         return prsntVal
 
