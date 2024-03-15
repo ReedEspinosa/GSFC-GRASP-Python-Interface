@@ -16,7 +16,7 @@ This code reads Polarimetric data from the Campaigns and runs GRASP. This code w
 import sys
 import warnings
 from CreateRsltsDict import Read_Data_RSP_Oracles, Read_Data_HSRL_constHgt
-from CreateRsltsDict import Read_Data_HSRL_Oracles,Read_Data_HSRL_Oracles_Height,Read_Data_HSRL_Oracles_Height_V2_1,Read_Data_HSRL_constHgt
+from CreateRsltsDict import Read_Data_HSRL_Oracles,Read_Data_HSRL_Oracles_Height,Read_Data_HSRL_constHgt
 import netCDF4 as nc
 from runGRASP import graspDB, graspRun, pixel, graspYAML
 from matplotlib import pyplot as plt
@@ -288,9 +288,11 @@ def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,M
 
             if ModeNo == None or ModeNo == 2:
                 fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_2modes_SphrodShape_ORACLE.yml'
+            
             if ModeNo == 3:
-                fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_3modes_SphrodShape_ORACLE.yml'
-           
+                # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_3modes_SphrodShape_ORACLE.yml'
+                #Case2 
+                fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_3modes_SphrodShape_ORACLE_case2.yml'
             
              # binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP_v112/bin/grasp_app' 
             binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
@@ -302,7 +304,7 @@ def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,M
                 fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_2modes_HexShape_ORACLE.yml'
             if ModeNo == 3:
                 fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_3modes_HexShape_ORACLE.yml'
-            
+                fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_3modes_HexShape_ORACLE_case2.yml'
             binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
             # binPathGRASP ='/home/shared/GRASP_GSFC/build_HexV112_4Modes/bin/grasp_app'
             savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
@@ -325,7 +327,7 @@ def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,M
         return rslts
 
 #Running the GRASP for spherical or hexahedral shape model for HSRL data
-def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= None,ConsType = None,releaseYAML =True, ModeNo=None,VertProfConstrain =None,Simplestcase =None):
+def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= None,ConsType = None,releaseYAML =True, ModeNo=None,VertProfConstrain =None,Simplestcase =None,rslts_Sph=None):
         #Path to the kernel files
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
         if Kernel_type == "sphro":  #If spheroid model
@@ -336,6 +338,9 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
                 fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLARandLIDAR_10Vbins_2modes_ORACLES.yml'
             if ModeNo == 3:
                 fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_ORACLE.yml'
+                fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_ORACLE_Case2.yml'
+
+            
             if ModeNo ==4:
                 fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_4modes_Shape_ORACLE1.yml'
             
@@ -363,11 +368,19 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
                 fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLARandLIDAR_10Vbins_2modes_Hex.yml'
             if ModeNo == 3:
                 fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_Hex.yml'
+                fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_Hex_Case2.yml'
+            
+            
             if ModeNo ==4:
                 fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_4modes_Shape_HEX.yml'
             # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_Hex.yml'
             # fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_ORACLE.yml'
             if updateYaml == True:# True if init conditions for Yaml file for HSRL is updated from the GRASP output from RSP
+                maxr=1.05  #set max and min value : here max = 5% incease, min 5% decrease : this is a very narrow distribution
+                minr =0.95
+                a=1
+                
+                
                 update_HSRLyaml(fwdModelYAMLpath, rslts_Tamu[0], ModeNo, maxr, minr, a,Kernel_type,ConsType)
                 fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/Settings_TAMU_RSP_HSRL.yaml'
             #Path to the GRASP Executable for TAMU
@@ -390,11 +403,8 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
         rslt = DictHsrl[0]
         max_alt = rslt['OBS_hght']
         Vext1 = rslt['meas_VExt'][:,0]
-
         Vext1[np.where(Vext1<=0)] = 1e-6
-        
-        # rslt = DictHsrl[0]
-
+      
         #Updating the normalization values in the settings file. 
         with open(fwdModelYAMLpath, 'r') as f:  
             data = yaml.safe_load(f)
@@ -412,10 +422,14 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
             # print(rslt['OBS_hght'])
             
             DMR1 = DictHsrl[2]
+            # print(DMR1)
+            # DMR1[0][np.where(np.isnan(DMR1[0]))] = 0
             if np.any(DMR1 > 1):
                 warnings.warn('DMR > 1, renormalizing', UserWarning)
                 DMR = DMR1/np.nanmax(DMR1)
-                
+            else: 
+                DMR= DMR1 
+
             # else:
             #     DMR = DMR1
                 #Renormalize.
@@ -428,12 +442,20 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
 
             # DMR[DMR>1] = 1  # ratios must be 1
             # VextDst = 0.99999*DMR*Vext1
-            
-            VBack = 0.00002*Vextoth
-            Voth = 0.999998*Vextoth
 
-            VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
-            Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
+            aboveBL = Vextoth[:BLH_indx[0]]
+            mean = np.nanmean(aboveBL[:50])
+            belowBL = Vextoth[BLH_indx[0]:]
+
+
+
+            Vextfine = np.concatenate((0.99999*aboveBL, np.ones(len(belowBL))*10**-6))
+            VextSea = Vextoth -Vextfine
+
+            # VBack = 0.00002*Vextoth
+            # Voth = 0.999998*Vextoth
+            # VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
+            # Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
 
             DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
             FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
@@ -441,7 +463,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
 
             fig = plt.figure()
             plt.plot(VextDst,hgt, color = '#067084',label='Dust')
-            plt.plot(Vextoth,hgt,color ='#6e526b',label='Salt')
+            plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
             plt.plot(Vextfine,hgt,color ='y',label='fine')
             plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
             plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
@@ -457,9 +479,9 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
 
                 # MinVal = np.repeat(np.minimum(np.minimum(FineProf[FineProf>1.175494e-38],DstProf),SeaProf),10).tolist() # the size of the list will be adjusted later in the code
              # Updating the vertical profile norm values in yaml file: 
-                # if noMd ==1:  #Mode 1
+                if noMd ==1:  #Mode 1
                     # data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['min'] =   MinVal  #Int his version of GRASP min and val value should be same for each modes
-                    # data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  FineProf.tolist()
+                    data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  FineProf.tolist()
                 if noMd ==2: #Mode 2 
                     # data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['min'] =   MinVal
                     data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  DstProf.tolist()
@@ -1045,7 +1067,9 @@ def VrtGrad(HSRL_sphrod):
         ax[2,i].set_xlabel("DP")
 
 #Plotting the fits and the retrievals
-def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, Createpdf = None,PdfName =None, combinedVal = None, key1= None, key2 = None ):
+def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, Createpdf = None,PdfName =None, combinedVal = None, key1= None, key2 = None ,RSP_plot =None):
+
+
     
 
     """ HSRL_sphrod = GRASP output array for spheroid 
@@ -1079,7 +1103,39 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         
         
         pdf_pages.savefig()
+
+        Index1 = [0,1,2]
+        Index2 = [0,1,2]
+        IndexH = [0,3,7]
+        IndexRSP = [1,2,4,5,6]
+
+        cm_sp = ['k','#8B4000', '#87C1FF']
+        cm_t = ["#BC106F",'#E35335', 'b']
+        # color_sph = "#025043"
+        color_sph = '#0c7683'
+        color_tamu = "#d24787"
+
+
+
+
+        
+        if len(Hsph['lambda']) > 3: 
+            Index1 = IndexH #Input is Lidar+polarimter
+
+        if len(HTam['lambda']) > 3: 
+            Index2 = IndexH 
+        
+        if RSP_plot !=None:
+            Index3 = IndexRSP
             
+        if len(HTam['lambda']) !=len(Hsph['lambda']) :
+            cm_sp = ['#AA98A9','#CB9129', 'c']
+            cm_t = ['#900C3F','#8663bd', '#053F5C']
+            color_tamu = '#DE970B'
+            color_sph = '#1175A8'
+
+
+
     if forward == True:
         #Converting range to altitude
         altd = (Hsph['RangeLidar'][:,0])/1000 #altitude for spheriod
@@ -1090,9 +1146,10 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
             wave = str(Hsph['lambda'][i]) +"μm"
             axs[i].errorbar(Hsph['meas_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#695E93", capsize=3,capthick =1,alpha =0.4, label =f"{UNCERT['VBS']}")
             
-            axs[i].plot(Hsph['meas_VBS'][:,i],altd, marker =">",color = "#281C2D", label ="Meas")
-            axs[i].plot(Hsph['fit_VBS'][:,i],altd,color ="#025043", marker = "$O$",label ="Sphd",alpha =0.8)
-            axs[i].plot(HTam['fit_VBS'][:,i],altd,color =  "#d24787",ls = "--", label="Hex", marker = "h")
+            axs[i].plot(Hsph['meas_VBS'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
+            axs[i].plot(Hsph['fit_VBS'][:,Index1[i]],altd,color =color_sph, marker = "$O$",label =f"{key1}",alpha =0.8)
+            axs[i].plot(HTam['fit_VBS'][:,Index2[i]],altd,color =  color_tamu,ls = "--", label=f"{key2}", marker = "h")
+
             axs[i].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 
             # print(UNCERT)
@@ -1114,11 +1171,11 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         for i in range(3):
             wave = str(Hsph['lambda'][i]) +"μm"
 
-            axs[i].errorbar(Hsph['meas_DP'][:,i],altd,xerr= UNCERT['DP'],color = '#695E93', capsize=4,capthick =1,alpha =0.6, label =f"{UNCERT['DP']}%")
+            axs[i].errorbar(Hsph['meas_DP'][:,Index1[i]],altd,xerr= UNCERT['DP'],color = '#695E93', capsize=4,capthick =1,alpha =0.6, label =f"{UNCERT['DP']}%")
             
-            axs[i].plot(Hsph['meas_DP'][:,i],altd, marker =">",color = "#281C2D", label ="Meas")
-            axs[i].plot(Hsph['fit_DP'][:,i],altd,color = "#025043", marker = "$O$",label ="Sphd")
-            axs[i].plot(HTam['fit_DP'][:,i],altd,color = "#d24787", ls = "--",marker = "h",label="Hex")
+            axs[i].plot(Hsph['meas_DP'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
+            axs[i].plot(Hsph['fit_DP'][:,Index1[i]],altd,color = color_sph, marker = "$O$",label =f"{key1}")
+            axs[i].plot(HTam['fit_DP'][:,Index2[i]],altd,color = color_tamu, ls = "--",marker = "h",label=f"{key2}")
             
             # axs[i].errorbar(Hsph['fit_DP'][:,i],altd,xerr= UNCERT['DP'],fmt='-o',color = "#025043", marker = "$O$",label ="Sphd")
             # axs[i].errorbar(HTam['fit_DP'][:,i],altd,xerr= UNCERT['DP'],fmt='-o',color = "#d24787",ls = "--", label="Hex", marker = "h")
@@ -1137,11 +1194,11 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         for i in range(2):
             wave = str(Hsph['lambda'][i]) +"μm"
 
-            axs[i].errorbar(Hsph['meas_VExt'][:,i],altd,xerr= UNCERT['VEXT']*Hsph['meas_VExt'][:,i],color = '#695E93',capsize=4,capthick =1,alpha =0.7, label =f"{UNCERT['VEXT']*100}%")
+            axs[i].errorbar(Hsph['meas_VExt'][:,Index1[i]],altd,xerr= UNCERT['VEXT']*Hsph['meas_VExt'][:,i],color = '#695E93',capsize=4,capthick =1,alpha =0.7, label =f"{UNCERT['VEXT']*100}%")
             
-            axs[i].plot(Hsph['meas_VExt'][:,i],altd, marker =">",color = "#281C2D", label ="Meas")
-            axs[i].plot(Hsph['fit_VExt'][:,i],altd,color = "#025043", marker = "$O$",label ="Sphd")
-            axs[i].plot(HTam['fit_VExt'][:,i],altd,color = "#d24787",ls = "--", marker = "h",label="Hex")
+            axs[i].plot(Hsph['meas_VExt'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
+            axs[i].plot(Hsph['fit_VExt'][:,Index1[i]],altd,color = color_sph, marker = "$O$",label =f"{key1}")
+            axs[i].plot(HTam['fit_VExt'][:,Index2[i]],altd,color = color_tamu,ls = "--", marker = "h",label=f"{key2}")
             axs[i].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
             # axs[i].errorbar(Hsph['fit_VExt'][:,i],altd,xerr= UNCERT['VEXT'],color = "#025043", marker = "$O$",label ="Sphd")
             # axs[i].errorbar(HTam['fit_VExt'][:,i],altd,xerr= UNCERT['VEXT'],color = "#d24787",ls = "--", label="Hex", marker = "h")
@@ -1186,10 +1243,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         linestyle =[':', '-','-.','-']
         mode_v = ["fine", "dust","marine", 'NonSphMarine']
 
-        cm_sp = ['k','#8B4000', '#87C1FF']
-        cm_t = ["#BC106F",'#E35335', 'b']
-        color_sph = '#0c7683'
-        color_tamu = "#BC106F"
+        
 
 
         if key1== None:
@@ -1202,8 +1256,11 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         for i in range(len(Retrival)):
             a,b = i%3,i%2
 
-            lambda_ticks = np.round(Spheriod['lambda'], decimals=2)
-            lambda_ticks_str = [str(x) for x in lambda_ticks]
+            lambda_ticks1 = np.round(Spheriod['lambda'], decimals=2)
+            lambda_ticks2 = np.round(Hex['lambda'], decimals=2)
+
+            lambda_ticks_str1 = [str(x) for x in lambda_ticks1]
+            lambda_ticks_str2 = [str(x) for x in lambda_ticks2]
             
             for mode in range(Spheriod['r'].shape[0]): #for each modes
                 if i ==0:
@@ -1211,15 +1268,18 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
                     # axs2[a,b].errorbar(Spheriod['r'][mode], Spheriod[Retrival[i]][mode],xerr=UNCERT['rv'],capsize=5,capthick =2, marker = "$O$",color = cm_sp[mode],lw = 3,ls = linestyle[mode], label=f"Sphrod_{mode_v[mode]}")
                     # axs2[a,b].errorbar(Hex['r'][mode],Hex[Retrival[i]][mode], marker = "H",xerr=UNCERT['rv'],capsize=5,capthick =2, color = cm_t[mode] ,lw = 3, ls = linestyle[mode],label=f"Hex_{mode_v[mode]}")
                         
-                    axs2[a,b].plot(Spheriod['r'][mode], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_sp[mode],lw = 2,ls = linestyle[mode], label=f"{key1}_{mode_v[mode]}")
-                    axs2[a,b].plot(Hex['r'][mode],Hex[Retrival[i]][mode], marker = "H", color = cm_t[mode] ,lw = 2, ls = linestyle[mode],label=f"{key2}_{mode_v[mode]}")
+                    axs2[a,b].plot(Spheriod['r'][mode], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_sp[mode],lw = 5.5,ls = linestyle[mode], label=f"{key1}_{mode_v[mode]}")
+                    axs2[a,b].plot(Hex['r'][mode],Hex[Retrival[i]][mode], marker = "H", color = cm_t[mode] ,lw = 5.5, ls = linestyle[mode],label=f"{key2}_{mode_v[mode]}")
+                    # if RSP_plot != None:
+                    #     axs2[a,b].plot(RSP_plot['r'][mode],RSP_plot[Retrival[i]][mode], marker = "H", color = cm_t[mode] ,lw = 5.5, ls = linestyle[mode],label=f"{key2}_{mode_v[mode]}")
                     
+
                     axs2[0,0].set_xlabel(r'rv $ \mu m$')
                     axs2[0,0].set_xscale("log")
                 else:
 
-                    axs2[a,b].errorbar(lambda_ticks_str, Spheriod[Retrival[i]][mode],yerr=UNCERT[Retrival[i]], marker = "$O$",markeredgecolor='k',capsize=7,capthick =2,markersize=25, color = cm_sp[mode],lw = 4,ls = linestyle[mode], label=f"{key1}_{mode_v[mode]}")
-                    axs2[a,b].errorbar(lambda_ticks_str,Hex[Retrival[i]][mode],yerr=UNCERT[Retrival[i]],capsize=7,capthick =2,  marker = "H",markeredgecolor='k',markersize=25, color = cm_t[mode] ,lw = 4, ls = linestyle[mode],label=f"{key2}_{mode_v[mode]}")
+                    axs2[a,b].errorbar(lambda_ticks1, Spheriod[Retrival[i]][mode],yerr=UNCERT[Retrival[i]], marker = "$O$",markeredgecolor='k',capsize=7,capthick =2,markersize=25, color = cm_sp[mode],lw = 6,ls = linestyle[mode], label=f"{key1}_{mode_v[mode]}")
+                    axs2[a,b].errorbar(lambda_ticks2,Hex[Retrival[i]][mode],yerr=UNCERT[Retrival[i]],capsize=7,capthick =2,  marker = "H",markeredgecolor='k',markersize=25, color = cm_t[mode] ,lw = 6, ls = linestyle[mode],label=f"{key2}_{mode_v[mode]}")
                     
                     # axs[a,b].plot(Spheriod['lambda'], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_sp[mode],lw = 2,ls = linestyle[mode],markersize=15, label=f"Sphrod_{mode_v[mode]}")
                     # axs[a,b].plot(Hex['lambda'],Hex[Retrival[i]][mode], marker = "H",color = cm_t[mode] ,lw = 2,  ls = linestyle[mode],markersize=15, label=f"Hex_{mode_v[mode]}")
@@ -1227,7 +1287,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
 
                     
                     # lambda_ticks = np.round(Spheriod['lambda'], decimals=2)
-                    axs2[a,b].set_xticks(lambda_ticks_str)
+                    # axs2[a,b].set_xticks(lambda_ticks_str2)
                     
                     # axs2[a,b].set_xticks(Spheriod['lambda'])
                     # axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
@@ -1240,20 +1300,20 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         # axs[2,1].plot(Spheriod['lambda'], Spheriod['aod'], marker = "$O$",color = color_sph,markersize=15,lw = 2, label=f"Sphroid")
         # axs[2,1].plot(Hex['lambda'], Hex['aod'], marker = "H", color = color_tamu ,markersize=15,lw = 2, label=f"Hexahedral")
         
-        axs2[2,1].errorbar(lambda_ticks_str, Spheriod['aod'],yerr=0.03+UNCERT['aod']*Spheriod['aod'], marker = "$O$",color = color_sph,markeredgecolor='k',capsize=7,capthick =2,markersize=25,lw = 4, label=f"{key1}")
-        axs2[2,1].errorbar(lambda_ticks_str, Hex['aod'],yerr=0.03+UNCERT['aod']* Hex['aod'], marker = "H", color = color_tamu ,lw = 4,markeredgecolor='k',capsize=7,capthick =2,markersize=25, label=f"{key2}")
-        axs2[2,1].set_xticks(lambda_ticks_str)  
+        axs2[2,1].errorbar(lambda_ticks1, Spheriod['aod'],yerr=0.03+UNCERT['aod']*Spheriod['aod'], marker = "$O$",color = color_sph,markeredgecolor='k',capsize=7,capthick =2,markersize=25,lw = 4, label=f"{key1}")
+        axs2[2,1].errorbar(lambda_ticks2, Hex['aod'],yerr=0.03+UNCERT['aod']* Hex['aod'], marker = "H", color = color_tamu ,lw = 4,markeredgecolor='k',capsize=7,capthick =2,markersize=25, label=f"{key2}")
+        # axs2[2,1].set_xticks(lambda_ticks_str)  
         # axs[2,1].set_xticklabels(Spheriod['lambda'],rotation=45)
         # axs[2,1].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
-        meas_aod = []
-        for i in range (NoMode):
-            meas_aod.append(np.trapz(Hsph['meas_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] ))
-        meas_aodsph = []
-        for i in range (NoMode):
-            meas_aodsph.append(np.trapz(Hsph['fit_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] ))
-        meas_aodhex = []
-        for i in range (NoMode):
-            meas_aodhex.append(np.trapz(HTam['fit_VExt'][:,i][::-1],HTam['range'][i,:][::-1] ))
+        # meas_aod = []
+        # for i in range (NoMode):
+        #     meas_aod.append(np.trapz(Hsph['meas_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] ))
+        # meas_aodsph = []
+        # for i in range (NoMode):
+        #     meas_aodsph.append(np.trapz(Hsph['fit_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] ))
+        # meas_aodhex = []
+        # for i in range (NoMode):
+        #     meas_aodhex.append(np.trapz(HTam['fit_VExt'][:,i][::-1],HTam['range'][i,:][::-1] ))
         
         # axs[2,1].plot( Spheriod['lambda'],meas_aod,color = "k", ls = "--", marker = '*' ,markersize=20, label = " cal meas")    
         # axs[2,1].plot( Spheriod['lambda'],meas_aodsph,color = "r", ls = "-.", marker = '*' ,markersize=20, label = "cal sph")    
@@ -1269,9 +1329,9 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         dt_t = Hex['datetime']
         chisph,chihex = Spheriod['costVal'] ,Hex['costVal']
 
-        if len(lambda_ticks_str) <4:
+        if len(lambda_ticks_str2) <4:
             plt.suptitle(f" HSRL-2 Aerosol Retrieval \n  {lat_t}N,{lon_t}E  {dt_t}\n")
-        if len(lambda_ticks_str) >3:
+        if len(lambda_ticks_str2) >3:
             plt.suptitle(f" HSRL-2+ RSP Aerosol Retrieval \n  {lat_t}N,{lon_t}E  {dt_t}\n")
         
                           
@@ -1298,6 +1358,10 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         plt.tight_layout()
 
     return
+
+
+
+
 def CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU,RSP_PixNo, UNCERT): #should be updated to 
     plt.rcParams['font.size'] = '14'
     fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (15,6))
@@ -1320,14 +1384,14 @@ def CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU,RSP_PixNo, UNCERT): #should be
         if i ==0:
             axs[0].legend()
         plt.suptitle(f"Vertical Backscatter profile Fits(HSRL2+RSP)  \n {LidarPolTAMU[0]['latitude']}N,{LidarPolTAMU[0]['longitude']}E {HTam['datetime']} ") #Initial condition strictly constrainted by RSP retrievals
-    # fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_{HSRLPixNo}_Combined_DP.png',dpi = 300)
+    fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_Combined_DP.png',dpi = 300)
 
     fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (15,6))
     plt.subplots_adjust(top=0.78)
     for i in range(3):
         wave = str(LidarPolSph[0]['lambda'][IndexH[i]]) +"μm"
 
-        axs[i].errorbar(LidarPolSph[0]['meas_DP'][:,IndexH[i]],(LidarPolSph[0]['RangeLidar'][:,0])/1000, marker =">",xerr= UNCERT['DP'],color = "#695E93", capsize=3,capthick =1,alpha =0.4, label =f"{UNCERT['VBS']}")
+        axs[i].errorbar(LidarPolSph[0]['meas_DP'][:,IndexH[i]],(LidarPolSph[0]['RangeLidar'][:,0])/1000, marker =">",xerr= UNCERT['DP'],color = "#695E93", capsize=3,capthick =1,alpha =0.4, label =f"{UNCERT['DP']}%")
         
 
         axs[i].plot(LidarPolSph[0]['meas_DP'][:,IndexH[i]],(LidarPolSph[0]['RangeLidar'][:,0])/1000, marker =">",color = "#3B270C", label ="Meas")
@@ -1338,14 +1402,14 @@ def CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU,RSP_PixNo, UNCERT): #should be
         if i ==0:
             axs[0].legend()
         plt.suptitle(f" Depolarization Ratio Profile Fit(HSR2L+RSP) \n {LidarPolTAMU[0]['latitude']}N,{LidarPolTAMU[0]['longitude']}E {HTam['datetime']}") #Initial condition strictly constrainted by RSP retrievals
-    # fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_{HSRLPixNo}_Combined_VBS.png',dpi = 300)
+    fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_Combined_VBS.png',dpi = 300)
 
     fig, axs= plt.subplots(nrows = 1, ncols =2, figsize= (9,6))
     plt.subplots_adjust(top=0.78)
     for i in range(2):
         wave = str(LidarPolSph[0]['lambda'][IndexH[i]]) +"μm"
 
-        axs[i].errorbar(LidarPolSph[0]['meas_VExt'][:,IndexH[i]],(LidarPolSph[0]['RangeLidar'][:,0])/1000, marker =">",xerr= LidarPolSph[0]['meas_VExt'][:,IndexH[i]]*UNCERT['VEXT'],color = "#695E93", capsize=3,capthick =1,alpha =0.4, label =f"{UNCERT['VEXT']}")
+        axs[i].errorbar(LidarPolSph[0]['meas_VExt'][:,IndexH[i]],(LidarPolSph[0]['RangeLidar'][:,0])/1000, marker =">",xerr= LidarPolSph[0]['meas_VExt'][:,IndexH[i]]*UNCERT['VEXT'],color = "#695E93", capsize=3,capthick =1,alpha =0.4, label =f"{UNCERT['VEXT']*100}%")
         
         axs[i].plot(LidarPolSph[0]['meas_VExt'][:,IndexH[i]],(LidarPolSph[0]['RangeLidar'][:,0])/1000, marker =">",color = "#3B270C", label ="Meas")
         axs[i].plot(LidarPolSph[0]['fit_VExt'][:,IndexH[i]],(LidarPolSph[0]['RangeLidar'][:,0])/1000,color = "#025043", marker = "$O$",label ="Sphd")
@@ -1355,10 +1419,10 @@ def CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU,RSP_PixNo, UNCERT): #should be
         if i ==0:
             axs[0].legend()
         plt.suptitle(f"Vertical Extinction Profile Fit (HSR2L+RSP) \n {LidarPolTAMU[0]['latitude']}N,{LidarPolTAMU[0]['longitude']}E {HTam['datetime']}\n") #Initial condition strictly constrainted by RSP retrievals
-    fig, axs= plt.subplots(nrows = 1, ncols =2, figsize= (10,5))
     
-    # fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_{HSRLPixNo}_Combined_Vertical_EXT_profile.png',dpi = 300)
-
+    
+    fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_Combined_Vertical_EXT_profile.png',dpi = 300)
+    fig, axs= plt.subplots(nrows = 1, ncols =2, figsize= (10,5))
     for i in [1,2,4,5,6]:
 
         
@@ -1436,6 +1500,7 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT,rslts_Sph2=None,rslts_Tamu2=N
         if Spheriod['r'].shape[0] ==3 :
             mode_v = ["fine", "dust","marine"]
         linestyle =[':', '-','-.']
+        
 
         lambda_ticks = np.round(Spheriod['lambda'], decimals=2)
         lambda_ticks_str = [str(x) for x in lambda_ticks]
@@ -1566,7 +1631,97 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT,rslts_Sph2=None,rslts_Tamu2=N
             fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{dt_t}_RSPFits_{fn}.png', dpi = 400)
 
             plt.tight_layout(rect=[0, 0, 1, 1])
-# def ComparisionPlots(LidarOnlyShape2,LidarOnlyShape1, CombShape1, CombShape2): #Comapre the fits and retreivals between independendt and combined retreivals
+
+
+# def ComparisionPlots(LidarOnlyShape1,LidarOnlyShape2, CombShape1, CombShape2,key1 = None,key2= None,UNCERT= None): #Comapre the fits and retreivals between independendt and combined retreivals
+    
+#     IndexH = [0,3,7] #INdex for Lidar values in COmbined retrievals, there are nan values for values in RSP wavelength
+#         #Converting range to altitude
+#     altd = (LidarOnlyShape1['RangeLidar'][:,0])/1000 #altitude for spheriod
+    
+#     fig, axs= plt.subplots(nrows = 2, ncols =3, figsize= (15,12))  #TODO make it more general which adjust the no of rows based in numebr of wl
+#     plt.subplots_adjust(top=0.78)
+#     for i in range(3):
+            
+#         wave = str(LidarOnlyShape1['lambda'][i]) +"μm"
+#         axs[i].errorbar(LidarOnlyShape1['meas_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#695E93", capsize=3,capthick =1,alpha =0.4, label =f"{UNCERT['VBS']}")
+#         axs[i].plot(LidarOnlyShape1['meas_VBS'][:,i],altd, marker =">",color = "#281C2D", label ="Meas")
+#         axs[i].plot(LidarOnlyShape1['fit_VBS'][:,i],altd,color ="#025043", marker = "$O$",label =f"{key1}",alpha =0.8) #HSRL only
+#         axs[i].plot(LidarOnlyShape1['fit_VBS'][:,IndexH[i]],altd,color ="#025043", marker = "$O$",label =f"{key2}",alpha =0.8) #Combined
+        
+
+        
+        
+#         axs[i].plot(HTam['fit_VBS'][:,i],altd,color =  "#d24787",ls = "--", label=f"{key2}", marker = "h")
+#             axs[i].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+
+#             # print(UNCERT)
+#             # axs[i].errorbar(Hsph['fit_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#025043", marker = "$O$",label ="Sphd")
+#             # axs[i].errorbar(HTam['fit_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#d24787",ls = "--", label="Hex", marker = "h")
+
+#             axs[i].set_xlabel(f'$ VBS (m^{-1}Sr^{-1})$',fontproperties=font_name)
+#             axs[0].set_ylabel('Height above ground (km)',fontproperties=font_name)
+
+#             axs[i].set_title(wave)
+#             if i ==0:
+#                 axs[0].legend()
+#             plt.suptitle(f"HSRL Vertical Backscatter profile  \nLat,Lon: {HTam['latitude']}, {HTam['longitude']} Date: {HTam['datetime']}\n ",fontproperties=font_name) #Initial condition strictly constrainted by RSP retrievals
+#         pdf_pages.savefig()
+#         fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_HSRL Vertical Backscatter profile{NoMode} .png',dpi = 300)
+#             # plt.tight_layout()
+#         fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (15,6))
+#         plt.subplots_adjust(top=0.78)
+#         for i in range(3):
+#             wave = str(Hsph['lambda'][i]) +"μm"
+
+#             axs[i].errorbar(Hsph['meas_DP'][:,i],altd,xerr= UNCERT['DP'],color = '#695E93', capsize=4,capthick =1,alpha =0.6, label =f"{UNCERT['DP']}%")
+            
+#             axs[i].plot(Hsph['meas_DP'][:,i],altd, marker =">",color = "#281C2D", label ="Meas")
+#             axs[i].plot(Hsph['fit_DP'][:,i],altd,color = "#025043", marker = "$O$",label =f"{key1}")
+#             axs[i].plot(HTam['fit_DP'][:,i],altd,color = "#d24787", ls = "--",marker = "h",label=f"{key2}")
+            
+#             # axs[i].errorbar(Hsph['fit_DP'][:,i],altd,xerr= UNCERT['DP'],fmt='-o',color = "#025043", marker = "$O$",label ="Sphd")
+#             # axs[i].errorbar(HTam['fit_DP'][:,i],altd,xerr= UNCERT['DP'],fmt='-o',color = "#d24787",ls = "--", label="Hex", marker = "h")
+
+
+#             axs[i].set_xlabel('DP %')
+#             axs[i].set_title(wave)
+#             if i ==0:
+#                 axs[0].legend()
+#             axs[0].set_ylabel('Height above ground (km)',fontproperties=font_name)
+#             plt.suptitle(f"HSRL Depolarization Ratio \n Lat,Lon: {HTam['latitude']}, {HTam['longitude']}  Date: {HTam['datetime']}\n ",fontproperties=font_name) #Initial condition strictly constrainted by RSP retrievals
+#         pdf_pages.savefig()
+#         fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_HSRL Depolarization Ratio{NoMode}.png',dpi = 300)
+#         fig, axs= plt.subplots(nrows = 1, ncols =2, figsize= (11,6))
+#         plt.subplots_adjust(top=0.78)
+#         for i in range(2):
+#             wave = str(Hsph['lambda'][i]) +"μm"
+
+#             axs[i].errorbar(Hsph['meas_VExt'][:,i],altd,xerr= UNCERT['VEXT']*Hsph['meas_VExt'][:,i],color = '#695E93',capsize=4,capthick =1,alpha =0.7, label =f"{UNCERT['VEXT']*100}%")
+            
+#             axs[i].plot(Hsph['meas_VExt'][:,i],altd, marker =">",color = "#281C2D", label ="Meas")
+#             axs[i].plot(Hsph['fit_VExt'][:,i],altd,color = "#025043", marker = "$O$",label =f"{key1}")
+#             axs[i].plot(HTam['fit_VExt'][:,i],altd,color = "#d24787",ls = "--", marker = "h",label=f"{key2}")
+#             axs[i].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+#             # axs[i].errorbar(Hsph['fit_VExt'][:,i],altd,xerr= UNCERT['VEXT'],color = "#025043", marker = "$O$",label ="Sphd")
+#             # axs[i].errorbar(HTam['fit_VExt'][:,i],altd,xerr= UNCERT['VEXT'],color = "#d24787",ls = "--", label="Hex", marker = "h")
+
+            
+            
+#             axs[i].set_xlabel(f'$VExt (m^{-1})$',fontproperties=font_name)
+#             axs[0].set_ylabel('Height above ground (km)',fontproperties=font_name)
+#             axs[i].set_title(wave)
+#             if i ==0:
+#                 axs[0].legend()
+#             plt.suptitle(f"HSRL Vertical Extinction profile\n Lat,Lon: {HTam['latitude']},{HTam['longitude']}  Date: {HTam['datetime']}\n ",fontproperties=font_name) #Initial condition strictly constrainted by RSP retrievals
+#         plt.tight_layout()
+#         pdf_pages.savefig()
+#         fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_HSRL_Vertical_Ext_profile{NoMode}.png',dpi = 300)
+
+
+
+
+
 
 
         
