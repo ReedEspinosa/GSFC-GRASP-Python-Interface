@@ -36,6 +36,8 @@ from matplotlib.ticker import ScalarFormatter
 # from Plot_ORACLES import PltGRASPoutput, PlotRetrievals
 import yaml
 
+import pickle
+
 
 
 
@@ -409,7 +411,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
         with open(fwdModelYAMLpath, 'r') as f:  
             data = yaml.safe_load(f)
         
-        if VertProfConstrain == True:
+        if VertProfConstrain == True: #True of we want to apply vertical profile normalization
 
             # Vext1 = rslt['meas_VExt'][:,0]
             hgt =  rslt['RangeLidar'][:,0][:]
@@ -449,7 +451,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
 
 
 
-            Vextfine = np.concatenate((0.99999*aboveBL, np.ones(len(belowBL))*10**-6))
+            Vextfine = np.concatenate((0.99999*aboveBL, np.ones(len(belowBL))*10**-8))
             VextSea = Vextoth -Vextfine
 
             # VBack = 0.00002*Vextoth
@@ -850,14 +852,12 @@ def PlotRandomGuess(filename_npy, NoItr):
     loaded_data = np.load(filename_npy, allow_pickle=True)
     
     costVal = []
-    
-    
+
     for i in range(NoItr):
         if len(loaded_data[i]) >0:
             costVal.append(loaded_data[i][0]['costVal'])
 
             for j in range(noMod):
-
                 ax[0,1].plot(loaded_data[i][0]['n'][i])
                 ax[1,1].plot(loaded_data[i][0]['k'][i])
                 ax[1,0].plot(loaded_data[i][0]['aodMode'][i])
@@ -1066,7 +1066,32 @@ def VrtGrad(HSRL_sphrod):
         ax[2,i].plot(np.diff(HSRL_sphrod[0][0]['meas_DP'][:,i]),HSRL_sphrod[0][0]['RangeLidar'][:,0][1:]/1000, lw = 3, marker = '.')
         ax[2,i].set_xlabel("DP")
 
+def errPlots(rslts_Sph,rslts_Tamu):
+
+   #This fucntion the error between the measuremtn and the fit from RSP for all wl and all scattering angles.
+    wl = rslts_Sph[0]['lambda']
+    colorwl = ['#70369d','#4682B4','#01452c','#FF7F7F','#d4af37','#4c0000']
+    fig, axs = plt.subplots(nrows= 1, ncols=2, figsize=(16, 9), sharey =True)
+    for i in range(len(wl)):
+        axs[0].plot(rslts_Sph[0]['sca_ang'][:,i], ErrSph[:,i] ,color = colorwl[i],marker = "$O$",markersize= 10, lw = 0.2,label=f"{np.round(wl[i],2)}")
+        axs[1].plot(rslts_Tamu[0]['sca_ang'][:,i], ErrHex[:,i],color = colorwl[i], marker = 'H',markersize= 12, lw = 0.2,label=f"{np.round(wl[i],2)}" )
+    axs[0].set_title('Spheriod')
+    axs[1].set_title('Hexahedral')
+
+    axs[0].plot(rslts_Sph[0]['sca_ang'][:,0], 100*UNCERT['I']*np.ones(len(ErrSph[:,i])) ,color = 'k',ls = '--', lw = 1,label=f"Meas Uncert")
+    axs[1].plot(rslts_Sph[0]['sca_ang'][:,0], 100*UNCERT['I']*np.ones(len(ErrSph[:,i])) ,color = 'k',ls = '--', lw = 1,label=f"Meas Uncert")
+
+
+    axs[0].set_ylabel('Error I %')
+    # axs[1].set_ylabel('Error %')
+    plt.legend( ncol=2)
+
+    axs[0].set_xlabel(r'${\theta_s}$')
+    axs[1].set_xlabel(r'${\theta_s}$')
+    plt.suptitle("RSP-Only Case 1")
+    plt.savefig(f'{file_name[2:]}_{RSP_PixNo}_ErrorI.png', dpi = 300)
 #Plotting the fits and the retrievals
+
 def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, Createpdf = None,PdfName =None, combinedVal = None, key1= None, key2 = None ,RSP_plot =None):
 
 
@@ -1631,6 +1656,78 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT,rslts_Sph2=None,rslts_Tamu2=N
             fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{dt_t}_RSPFits_{fn}.png', dpi = 400)
 
             plt.tight_layout(rect=[0, 0, 1, 1])
+
+
+
+def Ext2Vconc(botLayer,topLayer,Nlayers,wl):
+
+    dict_of_dicts = {}
+
+
+#To simulate the coefficient to convert Vext to vconc
+ 
+    botLayer = 2000
+    topLayer = 4000
+    Nlayers = 3
+
+    VConcandExt = np.zeros((len(Volume),2))*np.nan
+
+
+    krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
+    fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_dust_Vext_conc.yml'
+    binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
+    ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+    UpKerFile =  'settings_dust_Vext_conc_dump.yml'
+
+    singProf = np.linspace(botLayer, topLayer, Nlayers)[::-1]
+    #Inputs for simulation
+    wvls = [0.532] # wavelengths in μm
+    msTyp = [36] # meas type VEXT
+    sza = 0.01 # we assume vertical lidar
+
+    nbvm = Nlayers*np.ones(len(msTyp), int)
+    thtv = np.tile(singProf, len(msTyp))
+    meas = np.r_[np.repeat(2.372179e-05, nbvm[0])]
+    phi = np.repeat(0, len(thtv)) # currently we assume all observations fall within a plane
+# errStr = [y for y in archName.lower().split('+') if 'lidar09' in y][0]
+    nowPix = pixel(dt.datetime.now(), 1, 1, 0, 0, masl=0, land_prct=0)
+    
+    for wvl in wvls: # This will be expanded for wavelength dependent measurement types/geometry
+        # errModel = functools.partial(addError, errStr, concase=concase, orbit=orbit, lidErrDir=lidErrDir) # this must link to an error model in addError() below
+        nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv, phi, meas,)
+
+
+    Volume = np.arange(1e-5,2,10**-1)
+   
+    for i in range(len(Volume)):
+
+
+    #change the value of concentration in the yaml file
+        with open(fwdModelYAMLpath, 'r') as f:  
+            data = yaml.safe_load(f) 
+            data['retrieval']['constraints']['aerosol_concentration']['mode[1]']['value'][0] = Volume[i]
+        f.close()
+        
+        with open(ymlPath+UpKerFile, 'w') as f: #write the chnages to new yaml file
+            yaml.safe_dump(data, f)
+        f.close()
+
+        Newyaml = ymlPath+UpKerFile
+        print('Using settings file at %s' % fwdModelYAMLpath)
+        gr = graspRun(pathYAML= Newyaml, releaseYAML=True, verbose=True) # setup instance of graspRun class, add the above pixel, run grasp and read the output to gr.invRslt[0] (dict)
+        gr.addPix(nowPix) # add the pixel we created above
+        gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath) # run grasp binary (output read to gr.invRslt[0] [dict])
+        print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1],gr.invRslt[0]['aod'][-1])) # 
+
+        VConcandExt[i,0], VConcandExt[i,1] = gr.invRslt[0]['vol'],gr.invRslt[0]['fit_VExt']
+
+        dict_of_dicts[f'itr{i}'] = gr.invRslt[0]
+
+
+
+    # Save to file using pickle
+    with open('Vext2conc.pickle', 'wb') as f:
+        pickle.dump(dict_of_dicts, f)
 
 
 # def ComparisionPlots(LidarOnlyShape1,LidarOnlyShape2, CombShape1, CombShape2,key1 = None,key2= None,UNCERT= None): #Comapre the fits and retreivals between independendt and combined retreivals
