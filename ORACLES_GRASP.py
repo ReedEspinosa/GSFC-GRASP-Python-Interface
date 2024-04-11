@@ -74,7 +74,12 @@ import pickle
 # # #Saving state variables and noises from yaml file
 # # def Normalize_prof():
 
-        
+
+
+class ScalarFormatterClass(ScalarFormatter):
+   def _set_format(self):
+      self.format = "%1.2f"
+
 def VariableNoise(YamlFileName,nwl=3): #This will store the inforamtion of the characteristics and noises from the yaml file to a string for reference. 
     
     noMod =2  #number of aerosol mode, here 2 for fine+coarse mode configuration
@@ -153,12 +158,10 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,Co
     #     initCond = data['inversion']['constraints'][characteristic[]][f'mode[{noMd+a}]']['initial_guess']
     #     initCond = initCond['value'] = float(RSP_rslt['vol'][noMd]) 
 
-    
     #change the yaml intitial conditions using the RSP GRASP output
     for i in range(len(YamlChar)): #loop over the character types in the list
         for noMd in range(noMod): #loop over the aerosol modes (i.e 2 for fine and coarse)
             #State Varibles from yaml file: 
-            
             # data['retrieval']['constraints'][f'characteristic[0]'][f'mode[{noMd+a}]']['value'][0] =  1e-8
             # data['retrieval']['constraints'][f'characteristic[0]'][f'mode[{noMd+a}]']['max'][0] =1e-7
             # data['retrieval']['constraints'][f'characteristic[0]'][f'mode[{noMd+a}]']['min'][0] =1e-9
@@ -168,6 +171,7 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,Co
             # #     # initCond['max'] = float(np.max(RSP_rslt['vol'][noMd])*maxr) #value from the GRASP result for RSP
             # #     # initCond['min'] = float(RSP_rslt['vol'][noMd]*minr)
             #     initCond['value'] = float(RSP_rslt['vol'][noMd]) #value from the GRASP result for RSP
+            
             if YamlChar[i] == 'size_distribution_lognormal':
                 initCond['value'] = float(RSP_rslt['rv'][noMd]),float(RSP_rslt['sigma'][noMd])
                 initCond['max'] =float(RSP_rslt['rv'][noMd]*maxr),float(RSP_rslt['sigma'][noMd]*maxr)
@@ -179,7 +183,7 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,Co
             if YamlChar[i] == 'real_part_of_refractive_index_spectral_dependent':
                 initCond['index_of_wavelength_involved'] = [1,2,3]
                 #Adding off sets because the HSRL abd RSP wavelengths dont match, this should be improved
-                if noMd==0: offs = 0
+                if noMd==0: offs = 0  
                 if noMd==1: offs = 0
 
                 initCond['value'] =float(RSP_rslt['n'][noMd][0]+offs),float(RSP_rslt['n'][noMd][2]),float(RSP_rslt['n'][noMd][4])
@@ -223,7 +227,7 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,Co
 
 #Find the pixel index for nearest lat and lon for given LatH and LonH
 def FindPix(LatH,LonH,Lat,Lon):
-    
+
     # Assuming Lat, latH, Lon, and LonM are all NumPy arrays
     diffLat = np.abs(LatH - Lat) # Find the absolute difference between `Lat` and each element in `latH`
     indexLat = np.argwhere(diffLat == diffLat.min())[0] # Find the indices of all elements that minimize the difference
@@ -232,6 +236,64 @@ def FindPix(LatH,LonH,Lat,Lon):
     indexLon = np.argwhere(diffLon == diffLon.min())[0] # Find the indices of all elements that minimize the difference
     return indexLat[0], indexLat[1]
 
+def FMF(AEa): 
+    
+    '''caculating the fine mode AE from Supplement of 
+    A global land aerosol fine-mode fraction dataset (2001–2020) 
+    retrievedfrom MODIS using hybrid physical and deep learning approaches
+    Xing Yan et al.
+    '''
+    AEwl = 0.532
+    
+    AEc =  -0.2  #-0.15  #coarse mode AE
+    dAEc = 0     #spectral derivative of coarse mode AE, which is set to 0 under the assumption that coarse mode AOD is constant in visible
+
+    aLow = -0.22 
+    aUpp = -0.3
+    a = (aLow - aUpp)/2
+
+
+    bLow = 0.8
+    bUpp = 10**-0.2388 * (AEwl)*1.0275
+    b = (bLow +bUpp)/2
+    bs = b+2*AEc*a
+
+
+    cUpp = 10**-0.2633 * (AEwl)*-0.4683
+    cLow = 0.63
+    c = (cLow +cUpp)/2
+    cs = c+(b+a*AEc)*AEc - dAEc
+    
+    dwl = 0.532-0.355
+
+    dAE = np.diff(AEa,prepend=0)[:]
+    
+    dAEa =dAE/dwl
+    
+
+    t = AEa - AEc - ((dAEa- dAEc)/(AEa- AEc)) +bs
+    
+    AEf = 1/(2*(1-a)) * (t + np.sqrt(t**2-4 * cs*(1-a))) +AEc
+    
+    FMF = (AEa -AEc)/(AEf -AEc)
+    
+    
+    #Bias and Correction:
+    
+    dAEerr = 0.65 *np.exp(-(FMF-0.78)**2 / (2*0.18**2))
+    dAEa_corr = dAEa+dAEerr
+    
+    tCorr = AEa - AEc- ((dAEa_corr-dAEc)/(AEa-AEc))
+    Dcorr = np.sqrt((tCorr+bs)**2 +4*(1-a)*cs)
+    
+    AEfCorr = 1/(2*(1-a)) *(tCorr+bs+Dcorr) +AEc
+    
+    FMFCorr = (AEa - AEc)/(AEfCorr-AEc)
+    
+    #More correction 
+
+    
+    return AEf, FMF, AEfCorr,FMFCorr
 
 def find_dust(HSRLfile_path, HSRLfile_name, plot=None):
     # Open the HDF5 file in read mode
@@ -282,6 +344,293 @@ def find_dust(HSRLfile_path, HSRLfile_name, plot=None):
     # Return the filtered dust pixel values and the dust pixel value(s) with the highest frequency count
     return dust_pix, max_dust
 
+def AeroProfNorm_FMF(DictHsrl):
+    '''Scheme 1: Modifided scheme April 2024: This function divides the total lidar extinction to contribution from dust, sea salt and fine mode
+     This scheme is based on using Dust mixing ratio(from DP 532 nm) and FIne mode fraction from AE(355_532)  '''
+# if VertProfConstrain == True: #True of we want to apply vertical profile normalization
+    InstruNoise = 1e-6 #instrument's uncertainity
+    
+    rslt = DictHsrl[0]
+    Vext1 = rslt['meas_VExt'][:,1]  #m-1
+    Vext1[np.where(Vext1<=0)] = InstruNoise  #Filter out any negative or zero values (This is just for vert normalization parameter)
+    hgt =  rslt['RangeLidar'][:,0][:] #Height
+    
+    #Dust mixing ratio  using the Sugimoto and Lee, Appl Opt 2006"
+    
+    DP1064= rslt['meas_DP'][:,2][:]  #Depol at 1064 nm
+    aDP= DictHsrl[3] #Particle depol ratio at 532
+    maxDP =  np.nanmax(aDP)
+    DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
+    
+    if np.any(DMR1 > 1):
+        warnings.warn('DMR > 1, renormalizing', UserWarning)
+        DMR = DMR1/np.nanmax(DMR1)
+    else: 
+        DMR= DMR1 
+
+    # AEt= DictHsrl[5] #total angstrom exponent
+    # AEsph= DictHsrl[3] #spherical angstrom exp
+    
+    #Boundary layer height
+    BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+    BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+
+    #Caculating the fine mode fraction
+    # FMF = AEt/AEsph #assumption: angstrom exponent for evry large particle is very small
+    # FMF = FMF(AEt)[3]
+    # FMFv[np.where(np.isnan(FMFv))[0]]= 0
+
+    FMF = DictHsrl[4]
+    
+    #Filtering
+    FMF[np.where(FMF<0)[0] ]= 0
+    FMF[np.where(FMF>=1)[0]]= 0
+    # print(FMF)
+    
+
+    #Separating the contribution of dust to total extinction
+    VextDst = DMR1 * Vext1
+    VextDst [np.where(VextDst <=0)[0]]= 1e-18 
+
+
+    #Separating the contribution of non-dust
+    Vextoth = (1-DMR1)* Vext1
+
+    #Spearating the contribution from fine mode 
+    Vextfine = FMF*Vextoth
+    Vextfine[np.where(Vextfine <=0)[0]]= 1e-18 
+
+    # Vextfine[np.where(hgt>=BLH)[0]] = Vextoth[np.where(hgt>=BLH)[0]]
+    
+    # Vextfine[np.where(hgt<BLH)[0]]= Vextfine[np.where(hgt<BLH)[0]] 
+    if BLH>1000:
+        FMFBelowBL = np.nanmean(FMF[np.where(hgt<BLH)[0]])
+        Vextfine[np.where(hgt<BLH)[0]]= FMFBelowBL*Vextoth[np.where(hgt<BLH)[0]]  
+
+
+    #Contribution from sea salt = ext from non dust - fine
+    VextSea = Vextoth - Vextfine
+    # VextSea[np.where(hgt<BLH)[0]] = Vextoth[np.where(hgt<BLH)[0]]
+    VextSea[np.where(hgt>=BLH)[0]] = 1e-18
+    VextSea[np.where(VextSea <=0)[0]]= 1e-18 
+
+    #assuming that sea salt is limited within the boundary layer
+    
+    # VextSea[np.where(hgt<BLH)[0]]= 0.9999998*Vextoth[np.where(hgt<BLH)[0]] 
+    # VextSea[np.where(hgt<BLH)[0]]= 0.9999998*Vextoth[np.where(hgt<BLH)[0]] 
+
+    #assuming that sea salt is limited within the boundary layer
+    
+    
+
+    # Vextfine[np.where(hgt<BLH)[0]]= 0.0000002*Vextoth[np.where(hgt<BLH)[0]] 
+
+
+    #Normalizing such that int(Vext.dh) = 1. This is equivalent of using vol conc
+    
+    DstProfext =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+    FineProfext = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+    SeaProfext = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+    
+    # DstProfext =VextDst/ np.trapz(VextDst[::-1],hgt[::-1]/1000)
+    # FineProfext = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1]/1000)
+    # SeaProfext = VextSea/ np.trapz(VextSea[::-1],hgt[::-1]/1000)
+
+    #Plotting the extinction from each aerosol
+    fig,ax = plt.subplots(1,1, figsize=(6,6))
+    ax.plot(VextDst,hgt, color = '#067084',label='Dust')
+    ax.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+    ax.plot(Vextfine,hgt,color ='y',label='fine')
+    ax.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+    ax.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
+    ax.set_xlabel('VExt m-1')
+    ax.set_ylabel('Altitude m')
+    plt.legend()
+    plt.savefig('Vert.png', dpi = 300)
+    
+
+    # print(Vextoth[BLH_indx])
+    
+    # if BLH<1000: #asuming that if the boundary layer is shallower then thr fine mode is realtively well mixed #TODO confirm
+    #     Vextfine[np.where(hgt<BLH)[0]] =0.0000002*Vextoth[np.where(hgt<BLH)[0]] 
+
+    # VextSea = np.ones(len(hgt)) *1e-10
+    # print(Vextfine, np.where(Vextfine <=0)[0]) 
+    # Vextfine[np.where(hgt<=BLH)[0]]= 1e-6
+
+    # Vextfine = Vextoth - VextSea
+    # Vextfine[np.where(hgt>=BLH)[0]] = Vextoth[np.where(hgt>=BLH)[0]]
+    # Vextfine[np.where(Vextfine <=0)[0]]= 1e-18 
+    # DMR1 = DictHsrl[2]
+    # print(DMR1)
+    # DMR1[0][np.where(np.isnan(DMR1[0]))] = 0
+
+    # hex_dust = {'Hexdm': 24456.650, 'Hexdc': -4.906e-06}
+    # sph_dust = {'Sphdm': 19421.576, 'Sphdc': 6.52e-06}
+    # hex_fine = {'Hexfm':10093.924,'Hexfc': 6.966e-06}
+    # sph_fine = {'Sphfm':10698.098,'Sphfc': 3.603e-06}
+    # hex_sea = {'HexSm': 8749.598,'HexSc': 1.807e-5} #TODO correct this value of HexSc
+    # sph_sea = {'SphSm': 8749.598,'SphSc':1.807e-5}
+
+    #Converting Vext to Conc caculated using the grasp formward model
+
+    # hex_dust = {'Hexdm': 24385.083, 'Hexdc': 2.594e-6}
+    # sph_dust = {'Sphdm': 19291.567, 'Sphdc': 9.810e-7}
+    # hex_fine = {'Hexfm':4837.431,'Hexfc': 4.766e-06}
+    # sph_fine = {'Sphfm':5168.1777,'Sphfc':-7.9823e-07}
+    # hex_sea = {'HexSm': 13521.506,'HexSc': -4.765e-7} #TODO correct this value of HexSc
+    # sph_sea = {'SphSm': 13897.093,'SphSc':-3.858e-7}
+
+
+    # if Kernel_type == "TAMU" :
+    #     Concfine = hex_fine['Hexfm'] * Vextfine + hex_fine['Hexfc']
+    #     Concfine[np.where(Concfine<0)[0]] = 1e-8
+    #     Concdust = hex_dust['Hexdm'] * VextDst + hex_dust['Hexdc']
+    #     Concdust[np.where(Concdust<0)[0]] = 1e-8
+    #     Concsea = hex_sea['HexSm'] * VextSea + hex_sea['HexSc']
+    #     Concsea[np.where(Concsea<0)[0]] = 1e-8
+    
+    # if Kernel_type == "sphro" :
+    #     Concfine = sph_fine['Sphfm'] * Vextfine + sph_fine['Sphfc']
+    #     Concfine[np.where(Concfine<0)[0]] = 1e-8
+    #     Concdust = sph_dust['Sphdm'] * VextDst + sph_dust['Sphdc']
+    #     Concdust[np.where(Concdust<0)[0]] = 1e-8
+    #     Concsea = sph_sea['SphSm'] * VextSea + sph_sea['SphSc']
+    #     Concsea[np.where(Concsea<0)[0]] = 1e-8
+
+    # DstProf =Concdust/ np.trapz(Concdust[::-1],hgt[::-1])
+    # FineProf = Concfine/np.trapz(Concfine[::-1],hgt[::-1])
+    # SeaProf = Concsea/ np.trapz(Concsea[::-1],hgt[::-1])
+
+    
+    # Vext1 = rslt['meas_VExt'][:,0]
+    # hgt =  rslt['RangeLidar'][:,0][:]
+    # DP1064= rslt['meas_DP'][:,2][:]
+
+    # #Boundary layer height
+    # BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+    # BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+    #  #altitude of the aircraft
+    # # print(rslt['OBS_hght'])
+    
+    # DMR1 = DictHsrl[2]
+    # # print(DMR1)
+    # # DMR1[0][np.where(np.isnan(DMR1[0]))] = 0
+    # if np.any(DMR1 > 1):
+    #     warnings.warn('DMR > 1, renormalizing', UserWarning)
+    #     DMR = DMR1/np.nanmax(DMR1)
+    # else: 
+    #     DMR= DMR1 
+
+    # # else:
+    # #     DMR = DMR1
+    #     #Renormalize.
+    # Vext1[np.where(Vext1<=0)] = 1e-6
+    # Vextoth = abs(1-0.99999*DMR)*Vext1
+    
+    # VextDst = Vext1 - Vextoth 
+    # # VextDst[np.where(VextDst<=0)] = 1e-6
+    # # DMR[DMR>1] = 1  # ratios must be 1
+    # # VextDst = 0.99999*DMR*Vext1
+
+    # aboveBL = Vextoth[:BLH_indx[0]]
+    # mean = np.nanmean(aboveBL[:50])
+    # belowBL = Vextoth[BLH_indx[0]:]
+
+    # Vextfine = np.concatenate((0.99999*aboveBL, np.ones(len(belowBL))*10**-8))
+    # VextSea = Vextoth -Vextfine
+
+    # # VBack = 0.00002*Vextoth
+    # # Voth = 0.999998*Vextoth
+    # # VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
+    # # Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
+
+    # ax[1].plot(Concdust,hgt, color = '#067084',label='Dust')
+    # ax[1].plot(Concsea,hgt,color ='#6e526b',label='Salt')
+    # ax[1].plot(Concfine,hgt,color ='y',label='fine')
+    # # ax[1].plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+
+    # plt.plot(FineProf,hgt,color ='y',label='fine')
+    # plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
+    # plt.plot(DstProf,hgt, color = '#067084',label='Dust')
+
+    fig = plt.figure()
+    plt.scatter(FineProfext,hgt,color ='y',label='fine')
+    plt.scatter(SeaProfext,hgt,color ='#6e526b',label='Salt')
+    plt.scatter(DstProfext,hgt, color = '#067084',label='Dust')
+    plt.legend()
+
+    return FineProfext,DstProfext,SeaProfext
+
+def AeroProfNorm_sc2(DictHsrl):
+
+    """This sceme is more simple as just based on DMR from HSRL data products"""
+
+    rslt = DictHsrl[0] #GRASP rslt dictionary
+    Vext1 = rslt['meas_VExt'][:,0] #Vext at 532
+    hgt =  rslt['RangeLidar'][:,0][:]
+    DP1064= rslt['meas_DP'][:,2][:]
+
+    #Boundary layer height
+    BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+    BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+
+    FMF = DictHsrl[4] #Fine mode fraction
+    DMR1 = DictHsrl[2] #dust mixing ratio
+    DP1064= rslt['meas_DP'][:,2][:]  #Depol at 1064 nm
+    aDP= DictHsrl[3] #Particle depol ratio at 532
+    maxDP =  np.nanmax(aDP)
+    DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
+    
+    #Some values of DMR are >1,  in such cases we recaculate the values. Otherwise, use the values reported in the HSRL products
+    # if np.any(DMR1 > 1):
+    #     warnings.warn('DMR > 1, Recaculating', UserWarning)
+    #     DP1064= rslt['meas_DP'][:,2][:]  #Depol at 1064 nm
+    #     aDP= DictHsrl[3] #Particle depol ratio at 532
+    #     maxDP =  np.nanmax(aDP)
+    #     DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
+    
+    # else: 
+    #     DMR1 = DictHsrl[2]
+
+    Vext1[np.where(Vext1<=0)[0]] = 1e-6
+    VextDst = DMR1*Vext1
+    Vextoth = Vext1 - VextDst
+
+    aboveBL = Vextoth[:BLH_indx[0]]
+    belowBL = Vextoth[BLH_indx[0]:]
+    Vextfine = np.concatenate((0.99999*aboveBL, np.ones(len(belowBL))*10**-8))
+    VextSea = Vextoth -Vextfine
+
+    VextDst[np.where(VextDst<=0)[0]] = 1e-6
+    VextDst[0] = 1e-10
+    Vextfine[np.where(Vextfine<=0)[0]] = 1e-6
+    Vextfine[0] = 1e-10
+    VextSea[np.where(VextSea<=0)[0]] = 1e-6
+    VextSea[0] = 1e-10
+
+    DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+    FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+    SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+
+    fig = plt.figure()
+    plt.plot(VextDst,hgt, color = '#067084',label='Dust')
+    plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+    plt.plot(Vextfine,hgt,color ='y',label='fine')
+    plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+    plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
+    plt.legend()
+
+    fig = plt.figure()
+    plt.plot(FineProf,hgt,color ='y',label='fine')
+    plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
+    plt.plot(DstProf,hgt, color = '#067084',label='Dust')
+    plt.legend()
+
+
+    return FineProf,DstProf,SeaProf
+
+
 def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo): 
         
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
@@ -314,7 +663,7 @@ def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,M
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
         rslt = Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsFn)
         print(rslt['OBS_hght'])
-        maxCPU = 3 #maximum CPU allocated to run GRASP on server
+        maxCPU = 10 #maximum CPU allocated to run GRASP on server
         gRuns = []
         yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
         #eventually have to adjust code for height, this works only for one pixel (single height value)
@@ -369,7 +718,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
             if ModeNo == None or ModeNo == 2:
                 fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLARandLIDAR_10Vbins_2modes_Hex.yml'
             if ModeNo == 3:
-                fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_Hex.yml'
+                # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_Hex.yml'
                 fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_Hex_Case2.yml'
             
             
@@ -404,78 +753,227 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
 
         rslt = DictHsrl[0]
         max_alt = rslt['OBS_hght']
-        Vext1 = rslt['meas_VExt'][:,0]
-        Vext1[np.where(Vext1<=0)] = 1e-6
-      
+        
         #Updating the normalization values in the settings file. 
         with open(fwdModelYAMLpath, 'r') as f:  
             data = yaml.safe_load(f)
         
-        if VertProfConstrain == True: #True of we want to apply vertical profile normalization
-
-            # Vext1 = rslt['meas_VExt'][:,0]
-            hgt =  rslt['RangeLidar'][:,0][:]
-            DP1064= rslt['meas_DP'][:,2][:]
-
-            #Boundary layer height
-            BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
-            BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
-             #altitude of the aircraft
-            # print(rslt['OBS_hght'])
+        # if VertProfConstrain == True: #True of we want to apply vertical profile normalization
+        #     InstruNoise = 1e-6 #instrument's uncertainity
             
-            DMR1 = DictHsrl[2]
+        #     Vext1 = rslt['meas_VExt'][:,1]  #m-1
+        #     Vext1[np.where(Vext1<=0)] = InstruNoise  #Filter out any negative or zero values (This is just for vert normalization parameter)
+        #     hgt =  rslt['RangeLidar'][:,0][:] #Height
+            
+
+        #     #Dust mixing ratio  using the Sugimoto and Lee, Appl Opt 2006"
+            
+        #     DP1064= rslt['meas_DP'][:,2][:]  #Depol at 1064 nm
+        #     aDP= DictHsrl[3] #Particle depol ratio at 532
+        #     maxDP =  np.nanmax(aDP)
+        #     DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
+
+            
+        #     if np.any(DMR1 > 1):
+        #         warnings.warn('DMR > 1, renormalizing', UserWarning)
+        #         DMR = DMR1/np.nanmax(DMR1)
+        #     else: 
+        #         DMR= DMR1 
+
+        #     # AEt= DictHsrl[5] #total angstrom exponent
+        #     # AEsph= DictHsrl[3] #spherical angstrom exp
+            
+        #     #Boundary layer height
+        #     BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+        #     BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+
+            #Caculating the fine mode fraction
+            # FMF = AEt/AEsph #assumption: angstrom exponent for evry large particle is very small
+            # FMF = FMF(AEt)[3]
+            # FMFv[np.where(np.isnan(FMFv))[0]]= 0
+
+            # FMF = DictHsrl[4]
+            
+            # #Filtering
+            # FMF[np.where(FMF<0)[0] ]= 0
+            # FMF[np.where(FMF>=1)[0]]= 0
+            # # print(FMF)
+            
+
+            # #Separating the contribution of dust to total extinction
+            # VextDst = DMR1 * Vext1
+            # VextDst [np.where(VextDst <=0)[0]]= 1e-18 
+
+
+            # #Separating the contribution of non-dust
+            # Vextoth = (1-DMR1)* Vext1
+
+            # # #Spearating the contribution from fine mode 
+            # Vextfine = FMF*Vextoth
+            # Vextfine[np.where(Vextfine <=0)[0]]= 1e-18 
+
+            # # Vextfine[np.where(hgt>=BLH)[0]] = Vextoth[np.where(hgt>=BLH)[0]]
+            
+            # # Vextfine[np.where(hgt<BLH)[0]]= Vextfine[np.where(hgt<BLH)[0]] 
+            # if BLH>1000:
+            #     FMFBelowBL = np.nanmean(FMF[np.where(hgt<BLH)[0]])
+            #     Vextfine[np.where(hgt<BLH)[0]]= FMFBelowBL*Vextoth[np.where(hgt<BLH)[0]]  
+
+
+            # #Contribution from sea salt = ext from non dust - fine
+            # VextSea = Vextoth - Vextfine
+            # # VextSea[np.where(hgt<BLH)[0]] = Vextoth[np.where(hgt<BLH)[0]]
+            # VextSea[np.where(hgt>=BLH)[0]] = 1e-18
+            # VextSea[np.where(VextSea <=0)[0]]= 1e-18 
+
+            #assuming that sea salt is limited within the boundary layer
+            
+            # VextSea[np.where(hgt<BLH)[0]]= 0.9999998*Vextoth[np.where(hgt<BLH)[0]] 
+            # VextSea[np.where(hgt<BLH)[0]]= 0.9999998*Vextoth[np.where(hgt<BLH)[0]] 
+
+            #assuming that sea salt is limited within the boundary layer
+            
+            
+
+            # Vextfine[np.where(hgt<BLH)[0]]= 0.0000002*Vextoth[np.where(hgt<BLH)[0]] 
+
+
+            #Normalizing such that int(Vext.dh) = 1. This is equivalent of using vol conc
+            
+            # DstProfext =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+            # FineProfext = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+            # SeaProfext = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+            
+            # # DstProfext =VextDst/ np.trapz(VextDst[::-1],hgt[::-1]/1000)
+            # # FineProfext = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1]/1000)
+            # # SeaProfext = VextSea/ np.trapz(VextSea[::-1],hgt[::-1]/1000)
+
+            # #Plotting the extinction from each aerosol
+            # fig,ax = plt.subplots(1,1, figsize=(6,6))
+            # ax.plot(VextDst,hgt, color = '#067084',label='Dust')
+            # ax.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+            # ax.plot(Vextfine,hgt,color ='y',label='fine')
+            # ax.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+            # ax.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
+            # ax.set_xlabel('VExt m-1')
+            # ax.set_ylabel('Altitude m')
+            # plt.legend()
+            # plt.savefig('Vert.png', dpi = 300)
+            
+
+            # print(Vextoth[BLH_indx])
+            
+            # if BLH<1000: #asuming that if the boundary layer is shallower then thr fine mode is realtively well mixed #TODO confirm
+            #     Vextfine[np.where(hgt<BLH)[0]] =0.0000002*Vextoth[np.where(hgt<BLH)[0]] 
+
+            # VextSea = np.ones(len(hgt)) *1e-10
+            # print(Vextfine, np.where(Vextfine <=0)[0]) 
+            # Vextfine[np.where(hgt<=BLH)[0]]= 1e-6
+
+            # Vextfine = Vextoth - VextSea
+            # Vextfine[np.where(hgt>=BLH)[0]] = Vextoth[np.where(hgt>=BLH)[0]]
+            # Vextfine[np.where(Vextfine <=0)[0]]= 1e-18 
+            # DMR1 = DictHsrl[2]
             # print(DMR1)
             # DMR1[0][np.where(np.isnan(DMR1[0]))] = 0
-            if np.any(DMR1 > 1):
-                warnings.warn('DMR > 1, renormalizing', UserWarning)
-                DMR = DMR1/np.nanmax(DMR1)
-            else: 
-                DMR= DMR1 
 
-            # else:
-            #     DMR = DMR1
-                #Renormalize.
-            Vext1[np.where(Vext1<=0)] = 1e-6
-            Vextoth = abs(1-0.99999*DMR)*Vext1
+            # hex_dust = {'Hexdm': 24456.650, 'Hexdc': -4.906e-06}
+            # sph_dust = {'Sphdm': 19421.576, 'Sphdc': 6.52e-06}
+            # hex_fine = {'Hexfm':10093.924,'Hexfc': 6.966e-06}
+            # sph_fine = {'Sphfm':10698.098,'Sphfc': 3.603e-06}
+            # hex_sea = {'HexSm': 8749.598,'HexSc': 1.807e-5} #TODO correct this value of HexSc
+            # sph_sea = {'SphSm': 8749.598,'SphSc':1.807e-5}
+
+            #Converting Vext to Conc caculated using the grasp formward model
+        
+            # hex_dust = {'Hexdm': 24385.083, 'Hexdc': 2.594e-6}
+            # sph_dust = {'Sphdm': 19291.567, 'Sphdc': 9.810e-7}
+            # hex_fine = {'Hexfm':4837.431,'Hexfc': 4.766e-06}
+            # sph_fine = {'Sphfm':5168.1777,'Sphfc':-7.9823e-07}
+            # hex_sea = {'HexSm': 13521.506,'HexSc': -4.765e-7} #TODO correct this value of HexSc
+            # sph_sea = {'SphSm': 13897.093,'SphSc':-3.858e-7}
+
+
+            # if Kernel_type == "TAMU" :
+            #     Concfine = hex_fine['Hexfm'] * Vextfine + hex_fine['Hexfc']
+            #     Concfine[np.where(Concfine<0)[0]] = 1e-8
+            #     Concdust = hex_dust['Hexdm'] * VextDst + hex_dust['Hexdc']
+            #     Concdust[np.where(Concdust<0)[0]] = 1e-8
+            #     Concsea = hex_sea['HexSm'] * VextSea + hex_sea['HexSc']
+            #     Concsea[np.where(Concsea<0)[0]] = 1e-8
             
-            VextDst = Vext1 - Vextoth 
-            # VextDst[np.where(VextDst<=0)] = 1e-6
+            # if Kernel_type == "sphro" :
+            #     Concfine = sph_fine['Sphfm'] * Vextfine + sph_fine['Sphfc']
+            #     Concfine[np.where(Concfine<0)[0]] = 1e-8
+            #     Concdust = sph_dust['Sphdm'] * VextDst + sph_dust['Sphdc']
+            #     Concdust[np.where(Concdust<0)[0]] = 1e-8
+            #     Concsea = sph_sea['SphSm'] * VextSea + sph_sea['SphSc']
+            #     Concsea[np.where(Concsea<0)[0]] = 1e-8
+
+            # DstProf =Concdust/ np.trapz(Concdust[::-1],hgt[::-1])
+            # FineProf = Concfine/np.trapz(Concfine[::-1],hgt[::-1])
+            # SeaProf = Concsea/ np.trapz(Concsea[::-1],hgt[::-1])
+
             
+            # Vext1 = rslt['meas_VExt'][:,0]
+            # hgt =  rslt['RangeLidar'][:,0][:]
+            # DP1064= rslt['meas_DP'][:,2][:]
 
-            # DMR[DMR>1] = 1  # ratios must be 1
-            # VextDst = 0.99999*DMR*Vext1
+            # #Boundary layer height
+            # BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+            # BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+            #  #altitude of the aircraft
+            # # print(rslt['OBS_hght'])
+            
+            # DMR1 = DictHsrl[2]
+            # # print(DMR1)
+            # # DMR1[0][np.where(np.isnan(DMR1[0]))] = 0
+            # if np.any(DMR1 > 1):
+            #     warnings.warn('DMR > 1, renormalizing', UserWarning)
+            #     DMR = DMR1/np.nanmax(DMR1)
+            # else: 
+            #     DMR= DMR1 
 
-            aboveBL = Vextoth[:BLH_indx[0]]
-            mean = np.nanmean(aboveBL[:50])
-            belowBL = Vextoth[BLH_indx[0]:]
+            # # else:
+            # #     DMR = DMR1
+            #     #Renormalize.
+            # Vext1[np.where(Vext1<=0)] = 1e-6
+            # Vextoth = abs(1-0.99999*DMR)*Vext1
+            
+            # VextDst = Vext1 - Vextoth 
+            # # VextDst[np.where(VextDst<=0)] = 1e-6
+            # # # DMR[DMR>1] = 1  # ratios must be 1
+            # # # VextDst = 0.99999*DMR*Vext1
 
+            # # aboveBL = Vextoth[:BLH_indx[0]]
+            # # mean = np.nanmean(aboveBL[:50])
+            # # belowBL = Vextoth[BLH_indx[0]:]
 
+            # # Vextfine = np.concatenate((0.99999*aboveBL, np.ones(len(belowBL))*10**-8))
+            # # VextSea = Vextoth -Vextfine
 
-            Vextfine = np.concatenate((0.99999*aboveBL, np.ones(len(belowBL))*10**-8))
-            VextSea = Vextoth -Vextfine
+            # # # VBack = 0.00002*Vextoth
+            # # # Voth = 0.999998*Vextoth
+            # # # VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
+            # # # Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
 
-            # VBack = 0.00002*Vextoth
-            # Voth = 0.999998*Vextoth
-            # VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
-            # Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
+            # # ax[1].plot(Concdust,hgt, color = '#067084',label='Dust')
+            # # ax[1].plot(Concsea,hgt,color ='#6e526b',label='Salt')
+            # # ax[1].plot(Concfine,hgt,color ='y',label='fine')
+            # # # ax[1].plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+        
+            # # plt.plot(FineProf,hgt,color ='y',label='fine')
+            # # plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
+            # # plt.plot(DstProf,hgt, color = '#067084',label='Dust')
 
-            DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-            FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-            SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+            # fig = plt.figure()
+            # plt.scatter(FineProfext,hgt,color ='y',label='fine')
+            # plt.scatter(SeaProfext,hgt,color ='#6e526b',label='Salt')
+            # plt.scatter(DstProfext,hgt, color = '#067084',label='Dust')
+            # plt.legend()
+            AeroProf = AeroProfNorm_sc2(DictHsrl)
 
-            fig = plt.figure()
-            plt.plot(VextDst,hgt, color = '#067084',label='Dust')
-            plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
-            plt.plot(Vextfine,hgt,color ='y',label='fine')
-            plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
-            plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
-            plt.legend()
-
-            fig = plt.figure()
-            plt.plot(FineProf,hgt,color ='y',label='fine')
-            plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
-            plt.plot(DstProf,hgt, color = '#067084',label='Dust')
-            plt.legend()
+            FineProfext,DstProfext,SeaProfext = AeroProf[0],AeroProf[1],AeroProf[2]
 
             for noMd in range(ModeNo+1): #loop over the aerosol modes (i.e 2 for fine and coarse)
 
@@ -483,13 +981,13 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
              # Updating the vertical profile norm values in yaml file: 
                 if noMd ==1:  #Mode 1
                     # data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['min'] =   MinVal  #Int his version of GRASP min and val value should be same for each modes
-                    data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  FineProf.tolist()
+                    data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  FineProfext.tolist()
                 if noMd ==2: #Mode 2 
                     # data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['min'] =   MinVal
-                    data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  DstProf.tolist()
+                    data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  DstProfext.tolist()
                 if noMd ==3: 
                     # data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['min'] =   MinVal
-                    data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  SeaProf.tolist()
+                    data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  SeaProfext.tolist()
         
             if Kernel_type == "sphro":
                 UpKerFile = 'settings_BCK_POLAR_3modes_Shape_Sph_Update.yml' #for spheroidal kernel
@@ -506,7 +1004,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
             Vext = rslt['meas_VExt']
         
         #Running GRASP
-        maxCPU = 3 #maximum CPU allocated to run GRASP on server
+        maxCPU = 10 #maximum CPU allocated to run GRASP on server
         gRuns = []
         yamlObj = graspYAML(baseYAMLpath= fwdModelYAMLpath)
         # ymlO = yamlObj._repeatElementsInField(fldName=fwdModelYAMLpath, Nrepeats =10, λonly=False)
@@ -523,7 +1021,8 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
 
 
 
-def PlotRandomGuess(filename_npy, NoItr):
+def PlotRandomGuess(filename_npy, NoItr): 
+    #This function plots the values  from all the  random inital guesses. 
     noMod=3
     
     fig, ax = plt.subplots(nrows= 3, ncols=2, figsize=(20, 15))
@@ -533,9 +1032,7 @@ def PlotRandomGuess(filename_npy, NoItr):
     costVal = []
     colors = cm.rainbow(costVal)
     c = ['#625460','#CB9129','#6495ED']
-    
     ls = ['solid','solid','dashed' ]
-    
     smoke = mpatches.Patch(color=c[0], label='fine')
     dust = mpatches.Patch(color=c[1], label='Non-sph dust')
     salt = mpatches.Patch(color=c[2], label='Sph sea salt')
@@ -697,57 +1194,211 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
         print(rslt['gaspar'])
 
 
+        # if VertProfConstrain == True: #True of we want to apply vertical profile normalization
+    
+    
+    # hgt =  rslt_HSRL['RangeLidar'][:,0][:]
+    # DP1064= rslt_HSRL['meas_DP'][:,2][:]
+    # aDP= rslt_HSRL_1[3] #Particle depol ratio at 532
+    # maxDP =  np.nanmax(aDP)
+    # Vext1 = rslt_HSRL['meas_VExt'][:,1]
+    # #Dust mixing ratio  using the Sugimoto and Lee, Appl Opt 2006"
+    # DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
+    
+
+    
+    # if np.any(DMR1 > 1):
+    #     warnings.warn('DMR > 1, renormalizing', UserWarning)
+    #     DMR = DMR1/np.nanmax(DMR1)
+    # else: 
+    #     DMR= DMR1 
+
+    # # AEt= rslt_HSRL_1[5]
+    # # AEsph= rslt_HSRL_1[3]
+
+    # FMF = rslt_HSRL_1[4]
+    # #Boundary layer height
+    # BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+    # BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+
+    # #Caculating the fine mode fraction
+    # # FMF = AEt/AEsph #assumption: angstrom exponent for evry large particle is very small
+    # #Filtering
+    # FMF[np.where(FMF<0)[0] ]= 0
+    # FMF[np.where(FMF>=1)[0]] = 1
+    # # print(FMF)
+    
+
+    # #Separating the contribution of dust to total extinction
+    # VextDst = DMR1 * Vext1
+    # #Separating the contribution of non-dust
+    # Vextoth = (1-DMR1)* Vext1
+
+    # #Spearating the contribution from fine mode 
+    # Vextfine = FMF*Vextoth
+
+    # # Vextfine[np.where(hgt>=BLH)[0]] = Vextoth[np.where(hgt>=BLH)[0]]
+    
+    # Vextfine[np.where(hgt<BLH)[0]]= Vextfine[np.where(hgt<BLH)[0]] 
+    # Vextfine[np.where(Vextfine <=0)[0]]= 1e-18 
+
+    # #Contribution from sea salt = ext from non dust - fine
+    # VextSea = Vextoth - Vextfine
+    # # VextSea[np.where(hgt<BLH)[0]] = Vextoth[np.where(hgt<BLH)[0]]
+    # VextSea[np.where(hgt>=BLH)[0]] = 1e-18
+    # VextSea[np.where(VextSea <=0)[0]]= 1e-18 
+
+    # #Normalizing such that int(Vext.dh) = 1. This is equivalent of using vol conc
+    # DstProfext =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+    # FineProfext = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+    # SeaProfext = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+
+    # #Plotting the extinction from each aerosol
+    # fig,ax = plt.subplots(1,1, figsize=(6,6))
+    # ax.plot(VextDst,hgt, color = '#067084',label='Dust')
+    # ax.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+    # ax.plot(Vextfine,hgt,color ='y',label='fine')
+    # ax.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+    # ax.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
+    # ax.set_xlabel('VExt m-1')
+    # ax.set_ylabel('Altitude m')
+    # plt.legend()
+    # plt.savefig('Vert.png', dpi = 300)       
+    # #
+    
+
+    
+
+    #Converting Vext to Conc caculated using the grasp formward model
+
+    # hex_dust = {'Hexdm': 24385.083, 'Hexdc': 2.594e-6}
+    # sph_dust = {'Sphdm': 19291.567, 'Sphdc': 9.810e-7}
+    # hex_fine = {'Hexfm':10093.924,'Hexfc': 6.966e-06}
+    # sph_fine = {'Sphfm':10698.098,'Sphfc': 3.603e-06}
+    # hex_sea = {'HexSm': 8351.136,'HexSc': 0} #TODO correct this value of HexSc
+    # sph_sea = {'SphSm': 8749.598,'SphSc':1.807e-5}
+
+
+
+    # hex_dust = {'Hexdm': 24456.650, 'Hexdc': -4.906e-06}
+    # sph_dust = {'Sphdm': 19421.576, 'Sphdc': 6.52e-06}
+    # hex_fine = {'Hexfm':10093.924,'Hexfc': 6.966e-06}
+    # sph_fine = {'Sphfm':10698.098,'Sphfc': 3.603e-06}
+    # hex_sea = {'HexSm': 8351.136,'HexSc': 0} #TODO correct this value of HexSc
+    # sph_sea = {'SphSm': 8749.598,'SphSc':1.807e-5}
+
+
+    # if Kernel_type == "TAMU" :
+    #     Concfine = hex_fine['Hexfm'] * Vextfine + hex_fine['Hexfc']
+    #     Concdust = hex_dust['Hexdm'] * VextDst + hex_dust['Hexdc']
+    #     Concsea = hex_sea['HexSm'] * VextSea + hex_sea['HexSc']
+    
+    # if Kernel_type == "sphro" :
+    #     Concfine = sph_fine['Sphfm'] * Vextfine + sph_fine['Sphfc']
+    #     Concdust = sph_dust['Sphdm'] * VextDst + sph_dust['Sphdc']
+    #     Concsea = sph_sea['SphSm'] * VextSea + sph_sea['SphSc']
+    
+
+    # DstProf =Concdust/ np.trapz(Concdust[::-1],hgt[::-1])
+    # FineProf = Concfine/np.trapz(Concfine[::-1],hgt[::-1])
+    # SeaProf = Concsea/ np.trapz(Concsea[::-1],hgt[::-1])
+
+
     # rslt2 = rslt_HSRL_1[0]
-    Vext1 = rslt_HSRL['meas_VExt'][:,0]
-    hgt =  rslt_HSRL['RangeLidar'][:,0][:]
-    DP1064= rslt_HSRL['meas_DP'][:,2][:]
+    # Vext1 = rslt_HSRL['meas_VExt'][:,0]
+    # hgt =  rslt_HSRL['RangeLidar'][:,0][:]
+    # DP1064= rslt_HSRL['meas_DP'][:,2][:]
+    # aDP= rslt_HSRL_1[4] #Particle depol ratio at 532
+    # maxDP =  np.nanmax(aDP[HSRLPixNo])
+    # #Dust mixing ratio  using the Sugimoto and Lee, Appl Opt 2006"
+    # DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
+    
 
-    #Boundary layer height
-    BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
-    BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+    # AEt= rslt_HSRL_1[5][HSRLPixNo]
+    # AEsph= rslt_HSRL_1[3][HSRLPixNo]
+    
+
+    # #Boundary layer height
+    # BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+    # BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+
+
+    # if np.any(DMR1 > 1):
+    #     warnings.warn('DMR > 1, renormalizing', UserWarning)
+    #     DMR = DMR1/np.nanmax(DMR1)
+    # else:
+    #     DMR = DMR1
+    #     #Renormalize.
+    
+    # # Vext_noise = 1e-6
+    # VextDst = DMR1 * Vext1
+    # Vextoth = (1-DMR)* Vext1
+    # FMF = AEt/AEsph #assumption: angstrom exponent for evry large particle is very small
+   
+    # Vextfine = FMF*Vextoth 
+    # Vextfine[np.where(Vextfine <0)]= 1e-8 
+    # VextSea = Vextoth - Vextfine
+    # VextSea[np.where(hgt>BLH)] = 1e-8
 
     
-    DMR1 = rslt_HSRL_1[2]
-    if np.any(DMR1 > 1):
-        warnings.warn('DMR > 1, renormalizing', UserWarning)
-        DMR = DMR1/np.nanmax(DMR1)
-    else:
-        DMR = DMR1
-        #Renormalize.
+
+    # #Converting Vext to Conc caculated using the grasp formward model
+ 
+    # hex_dust = {'Hexdm': 24385.083, 'Hexdc': 2.594e-6}
+    # sph_dust = {'Sphdm': 19291.567, 'Sphdc': 9.810e-7}
+    # hex_fine = {'Hexfm':10093.924,'Hexfc': 6.966e-06}
+    # sph_fine = {'Sphfm':10698.098,'Sphfc': 3.603e-06}
+    # hex_sea = {'HexSm': 8351.136,'HexSc': -4.560e-08}
+    # sph_sea = {'SphSm': 8749.598,'SphSc':1.807e-5}
+
+
+    # if Kernel_type == "TAMU" :
+    #     Concfine = hex_fine['Hexfm'] * Vextfine + hex_fine['Hexfc']
+    #     Concdust = hex_dust['Hexdm'] * Vextfine + hex_dust['Hexdc']
+    #     Concsea = hex_sea['HexSm'] * Vextfine + hex_sea['HexSc']
     
-    Vext1[np.where(Vext1<=0)] = 1e-6
-    Vextoth = abs(1-0.9999*DMR)*Vext1
-    VextDst = Vext1 - Vextoth 
+    # if Kernel_type == "sphro" :
+    #     Concfine = sph_fine['Sphfm'] * Vextfine + sph_fine['Sphfc']
+    #     Concdust = sph_dust['Sphdm'] * Vextfine + sph_dust['Sphdc']
+    #     Concsea = sph_sea['SphSm'] * Vextfine + sph_sea['SphSc']
     
+
+    # DstProf =Concdust/ np.trapz(Concdust[::-1],hgt[::-1])
+    # FineProf = Concfine/np.trapz(Concfine[::-1],hgt[::-1])
+    # SeaProf = Concsea/ np.trapz(Concsea[::-1],hgt[::-1])
+ 
+
 
     # DMR[DMR>1] = 1  # ratios must be 1
     # VextDst = 0.99999*DMR*Vext1
     
-    VBack = 0.00002*Vextoth
-    Voth = 0.99998*Vextoth
+    # VBack = 0.00002*Vextoth
+    # Voth = 0.99998*Vextoth
 
-    VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
-    Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
+    # VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
+    # Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
     
-    DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-    FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-    SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+    # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+    # FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+    # SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
     
-    # #apriori estimate for the vertical profile
-    fig = plt.figure()
-    plt.plot(VextDst,hgt, color = '#067084',label='Dust')
-    plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
-    plt.plot(Vextfine,hgt,color ='y',label='fine')
-    plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
-    plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
-    plt.legend()
+    # # #apriori estimate for the vertical profile
+    # fig = plt.figure()
+    # plt.plot(VextDst,hgt, color = '#067084',label='Dust')
+    # plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+    # plt.plot(Vextfine,hgt,color ='y',label='fine')
+    # plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+    # plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
+    # plt.legend()
 
-    fig = plt.figure()
-    plt.plot(FineProf,hgt,color ='y',label='fine')
-    plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
-    plt.plot(DstProf,hgt, color = '#067084',label='Dust')
-    plt.legend()
+    # fig = plt.figure()
+    # plt.plot(FineProf,hgt,color ='y',label='fine')
+    # plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
+    # plt.plot(DstProf,hgt, color = '#067084',label='Dust')
+    # plt.legend()
 
+    AeroProf = AeroProfNorm_sc2(rslt_HSRL_1)
+    FineProfext,DstProfext,SeaProfext = AeroProf[0],AeroProf[1],AeroProf[2]
 
     # plt.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/DMRHSRL2Retrieval.png', dpi = 400)
     
@@ -759,11 +1410,11 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
         
             #State Varibles from yaml file: 
         if noMd ==1:
-            data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  FineProf.tolist()
+            data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  FineProfext.tolist()
         if noMd ==2:
-            data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  DstProf.tolist()
+            data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  DstProfext.tolist()
         if noMd ==3:
-            data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  SeaProf.tolist()
+            data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  SeaProfext.tolist()
     
     if Kernel_type == "sphro":
         UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml' #for spheroidal kernel
@@ -1139,10 +1790,6 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         # color_sph = "#025043"
         color_sph = '#0c7683'
         color_tamu = "#d24787"
-
-
-
-
         
         if len(Hsph['lambda']) > 3: 
             Index1 = IndexH #Input is Lidar+polarimter
@@ -1159,8 +1806,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
             color_tamu = '#DE970B'
             color_sph = '#1175A8'
 
-
-
+#Plotting the fits if forward is set to True
     if forward == True:
         #Converting range to altitude
         altd = (Hsph['RangeLidar'][:,0])/1000 #altitude for spheriod
@@ -1193,6 +1839,8 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
             # plt.tight_layout()
         fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (15,6))
         plt.subplots_adjust(top=0.78)
+
+        # AOD = np.trapz(Hsph['meas_VExt'],altd)
         for i in range(3):
             wave = str(Hsph['lambda'][i]) +"μm"
 
@@ -1330,9 +1978,10 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         # axs2[2,1].set_xticks(lambda_ticks_str)  
         # axs[2,1].set_xticklabels(Spheriod['lambda'],rotation=45)
         # axs[2,1].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
-        # meas_aod = []
-        # for i in range (NoMode):
-        #     meas_aod.append(np.trapz(Hsph['meas_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] ))
+        meas_aod = []
+        for i in range (NoMode):
+            meas_aod.append(np.trapz(Hsph['meas_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] ))
+        
         # meas_aodsph = []
         # for i in range (NoMode):
         #     meas_aodsph.append(np.trapz(Hsph['fit_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] ))
@@ -1340,7 +1989,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         # for i in range (NoMode):
         #     meas_aodhex.append(np.trapz(HTam['fit_VExt'][:,i][::-1],HTam['range'][i,:][::-1] ))
         
-        # axs[2,1].plot( Spheriod['lambda'],meas_aod,color = "k", ls = "--", marker = '*' ,markersize=20, label = " cal meas")    
+        axs2[2,1].plot( Spheriod['lambda'],meas_aod,color = "k", ls = "--", marker = '*' ,markersize=20, label = " cal meas")    
         # axs[2,1].plot( Spheriod['lambda'],meas_aodsph,color = "r", ls = "-.", marker = '*' ,markersize=20, label = "cal sph")    
         # axs[2,1].plot( Spheriod['lambda'],meas_aod,color = "b", ls = "-.", marker = '*' ,markersize=20, label = "cal hex")    
        
@@ -1383,8 +2032,6 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         plt.tight_layout()
 
     return
-
-
 
 
 def CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU,RSP_PixNo, UNCERT): #should be updated to 
@@ -1501,9 +2148,6 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT,rslts_Sph2=None,rslts_Tamu2=N
             color_sph = '#adbf4b'
             color_tamu = "#936ecf"
 
-
-        
-        
         plt.rcParams['font.size'] = '26'
         plt.rcParams["figure.autolayout"] = True
         #Stokes Vectors Plot
@@ -1659,26 +2303,46 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT,rslts_Sph2=None,rslts_Tamu2=N
 
 
 
-def Ext2Vconc(botLayer,topLayer,Nlayers,wl):
+def Ext2Vconc(botLayer,topLayer,Nlayers,wl, Shape, AeroType = None, ):
 
     dict_of_dicts = {}
 
 
 #To simulate the coefficient to convert Vext to vconc
  
-    botLayer = 2000
-    topLayer = 4000
-    Nlayers = 3
-
-    VConcandExt = np.zeros((len(Volume),2))*np.nan
-
-
+    # botLayer = 2000
+    # topLayer = 4000
+    # Nlayers = 3
+    
+    
     krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
-    fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_dust_Vext_conc.yml'
     binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
     ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
-    UpKerFile =  'settings_dust_Vext_conc_dump.yml'
+    UpKerFile =  'settings_dust_Vext_conc_dump.yml'  #Yaml file after updating the state vectors
 
+    fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_dust_Vext_conc.yml'
+    
+    #
+    #all values are set for 0.532 nm
+    if 'dust' in AeroType.lower():
+        rv,sigma, n, k, sf = 2, 0.5, 1.55, 0.004, 1e-6
+    if 'seasalt' in AeroType.lower():
+        rv,sigma, n, k, sf = 1.5 , 0.6, 1.33, 0.0001, 0.999          
+    if 'fine' in AeroType.lower():
+        rv,sigma, n, k, sf = 0.13, 0.49, 1.45, 0.003, 0.99
+    
+    #Setting the shape model Sphroids and Hexhedral
+    if 'sph' in Shape.lower():
+        Kernel = 'KERNELS_BASE'
+        print(Kernel)
+    if 'hex' in Shape.lower():
+        Kernel = 'Ver_sph'
+        print(Kernel)
+
+    Volume = np.linspace(1e-5,2,20)
+    VConcandExt = np.zeros((len(Volume),2))*np.nan
+
+#Geometry
     singProf = np.linspace(botLayer, topLayer, Nlayers)[::-1]
     #Inputs for simulation
     wvls = [0.532] # wavelengths in μm
@@ -1697,37 +2361,99 @@ def Ext2Vconc(botLayer,topLayer,Nlayers,wl):
         nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv, phi, meas,)
 
 
-    Volume = np.arange(1e-5,2,10**-1)
-   
     for i in range(len(Volume)):
+        try:
+#change the value of concentration in the yaml file
+            with open(fwdModelYAMLpath, 'r') as f:  
+                data = yaml.safe_load(f) 
+                # print(data)
+                data['retrieval']['constraints']['characteristic[2]']['mode[1]']['initial_guess']['value'][0] = float(Volume[i])
+                data['retrieval']['constraints']['characteristic[3]']['mode[1]']['initial_guess']['value'][0],data['retrieval']['constraints']['characteristic[3]']['mode[1]']['initial_guess']['value'][1] = float(rv),float(sigma)
+                data['retrieval']['constraints']['characteristic[4]']['mode[1]']['initial_guess']['value'][0] = float(n)
+                data['retrieval']['constraints']['characteristic[5]']['mode[1]']['initial_guess']['value'][0] = float(k)
+                data['retrieval']['constraints']['characteristic[6]']['mode[1]']['initial_guess']['value'][0] = float(sf)
+                data['retrieval']['forward_model']['phase_matrix']['kernels_folder'] = Kernel
 
+            f.close()
+            
+            with open(ymlPath+UpKerFile, 'w') as f: #write the chnages to new yaml file
+                yaml.safe_dump(data, f)
+            f.close()
 
-    #change the value of concentration in the yaml file
-        with open(fwdModelYAMLpath, 'r') as f:  
-            data = yaml.safe_load(f) 
-            data['retrieval']['constraints']['aerosol_concentration']['mode[1]']['value'][0] = Volume[i]
-        f.close()
-        
-        with open(ymlPath+UpKerFile, 'w') as f: #write the chnages to new yaml file
-            yaml.safe_dump(data, f)
-        f.close()
+#New yaml file after updating state vectors/variables
+            Newyaml = ymlPath+UpKerFile
+            #Running GRASP
+            print('Using settings file at %s' % Newyaml)
+            gr = graspRun(pathYAML= Newyaml, releaseYAML=True, verbose=True) # setup instance of graspRun class, add the above pixel, run grasp and read the output to gr.invRslt[0] (dict)
+            gr.addPix(nowPix) # add the pixel we created above
+            gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath) # run grasp binary (output read to gr.invRslt[0] [dict])
+            print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1],gr.invRslt[0]['aod'][-1])) # 
 
-        Newyaml = ymlPath+UpKerFile
-        print('Using settings file at %s' % fwdModelYAMLpath)
-        gr = graspRun(pathYAML= Newyaml, releaseYAML=True, verbose=True) # setup instance of graspRun class, add the above pixel, run grasp and read the output to gr.invRslt[0] (dict)
-        gr.addPix(nowPix) # add the pixel we created above
-        gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath) # run grasp binary (output read to gr.invRslt[0] [dict])
-        print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1],gr.invRslt[0]['aod'][-1])) # 
+            #Saving Vext and Volume conc
+            VConcandExt[i,0], VConcandExt[i,1] = gr.invRslt[0]['vol'],gr.invRslt[0]['fit_VExt'][1]
+            
+            #Saving the dictonary as pkl file
+            dict_of_dicts[f'itr{i}'] = gr.invRslt[0]
+            with open(f'/home/gregmi/ORACLES/Case2O/Vext2conc/Vext2conc_{i}_{Shape}.pickle', 'wb') as f:
+                pickle.dump(gr.invRslt[0], f)
+            f.close()
 
-        VConcandExt[i,0], VConcandExt[i,1] = gr.invRslt[0]['vol'],gr.invRslt[0]['fit_VExt']
-
-        dict_of_dicts[f'itr{i}'] = gr.invRslt[0]
-
-
-
+        except Exception as e:
+            print(f"An error occurred for Conc = {Volume[i]}: {e}")
+        continue
+   
     # Save to file using pickle
-    with open('Vext2conc.pickle', 'wb') as f:
+    with open(f'/home/gregmi/ORACLES/Case2O/Vext2conc/Vext2conc_all_{Shape}.pickle', 'wb') as f:
         pickle.dump(dict_of_dicts, f)
+    gr.invRslt[0]
+
+    return dict_of_dicts, VConcandExt
+   
+#     #for Hexahedra
+
+# botLayer = 2000
+# topLayer = 4000
+# Nlayers = 3
+
+# v_sph_dust= Ext2Vconc(botLayer,topLayer,Nlayers,wl=0.532, AeroType ='dust',Shape='sph')
+# v_hex_dust= Ext2Vconc(botLayer,topLayer,Nlayers,wl=0.532, AeroType ='dust',Shape='hex')
+
+# v_sph_sea= Ext2Vconc(botLayer,topLayer,Nlayers,wl=0.532, Shape='sph', AeroType ='seasalt',)
+# v_hex_sea= Ext2Vconc(botLayer,topLayer,Nlayers,wl=0.532, AeroType ='seasalt', Shape='hex')
+
+# v_sph_fine= Ext2Vconc(botLayer,topLayer,Nlayers,wl=0.532, AeroType ='fine',Shape='sph')
+# v_hex_fine= Ext2Vconc(botLayer,topLayer,Nlayers,wl=0.532, AeroType ='fine',Shape='hex')
+
+def PlotE2C(v,name = None):
+
+    m, b = np.polyfit( v[1][:,1],v[1][:,0], 1) #slope and y intercept
+    
+
+    ax = plt.gca()
+    yScalarFormatter = ScalarFormatterClass(useMathText=True)
+    yScalarFormatter.set_powerlimits((0,0))
+    ax.xaxis.set_major_formatter(yScalarFormatter)
+
+    ax.plot(v[1][:,1],v[1][:,0], 'yo', v[1][:,1], m*v[1][:,1]+b, '--k', label ="fir")
+    ax.scatter(v[1][:,1],v[1][:,0], label = 'GRASP Values')
+    ax.set_xlabel('Vext m-1')
+    ax.set_ylabel('Volume Conc')
+    ax.set_title(f'Slope: {m},\n Yintercept = {b}')
+
+    plt.savefig(f'{name}_VConc2Ext.png' , dpi = 200)
+
+
+    return m,b
+# #Plot Vext VS volume Conc
+
+# PlotE2C(v_hex_sea,name ='v_hex_sea')
+# PlotE2C(v_sph_sea,name ='v_sph_sea')
+
+# PlotE2C(v_sph_fine,name ='v_sph_fine')
+# PlotE2C(v_hex_fine,name ='v_hex_fine')
+
+# PlotE2C(v_sph_dust,name ='v_sph_dust')
+# PlotE2C(v_hex_dust,name ='v_hex_dust')
 
 
 # def ComparisionPlots(LidarOnlyShape1,LidarOnlyShape2, CombShape1, CombShape2,key1 = None,key2= None,UNCERT= None): #Comapre the fits and retreivals between independendt and combined retreivals
