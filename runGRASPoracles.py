@@ -587,10 +587,11 @@ def PlotSingle(rslts_Sph,HSRL_sphrodT):
     return combdict 
 
 
-def Plotcomb(rslts_Sph2,rslts_Tamu2):
+def Plotcomb(rslts_Sph2,rslts_Tamu2,LidarPolSph,LidarPolTAMU):
 
 
-
+    # plot_HSRL(LidarPolSph[0][0],LidarPolTAMU[0][0],UNCERT, forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
+    
     if (rslts_Sph2!=None )and (rslts_Tamu2!=None):
         RepMode =2
     else:
@@ -751,19 +752,300 @@ def Plotcomb(rslts_Sph2,rslts_Tamu2):
         axs2[0,0].legend(prop = { "size": 21 }, ncol=2)
         axsErr[0,0].legend(prop = { "size": 21 }, ncol=1)
         axs2[2,1].legend()
-        lat_t = Hex['latitude']
-        lon_t = Hex['longitude']
-        dt_t = Hex['datetime']
+        # lat_t = Hex['latitude']
+        # lon_t = Hex['longitude']
+        # dt_t = Hex['datetime']
         plt.tight_layout(rect=[0, 0, 1, 1])
         
-        axs2.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{dt_t}{RepMode}_RSPRetrieval{RepMode}.png', dpi = 400)
+        axs2.figure.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{RepMode}_RSPRetrieval{RepMode}.png', dpi = 400)
         
         # plt.suptitle(f'RSP Aerosol Retrieval \n  Lat:{lat_t} Lon :{lon_t}   Date: {dt_t}')
         if RepMode ==2:
-            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{dt_t}2+3_RSPRetrieval.png', dpi = 400)
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/2+3_RSPRetrieval.png', dpi = 400)
         else:
             fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{dt_t}{NoMode}_RSPRetrieval.png', dpi = 400)
 
+
+
+def PlotcombEachMode(rslts_Sph2,rslts_Tamu2,HSRL_sphrodT,HSRL_TamuT,LidarPolSph=None,LidarPolTAMU=None):
+    plt.rcParams['font.size'] = '26'
+    plt.rcParams["figure.autolayout"] = True
+    #Stokes Vectors Plot
+    date_latlon = ['datetime', 'longitude', 'latitude']
+    Xaxis = ['MapR','lambda','sca_ang','rv','height']
+    Retrival = ['dVdlnr','aodMode','ssaMode','n', 'k']
+    RetrivalMAP = ['MapVol','aodMode','ssaMode','n', 'k']
+    RetrivalLidar = ['lidarVol','aodMode','ssaMode','n', 'k']
+    #['sigma', 'vol', 'aodMode','ssaMode', 'rEff', 'costVal']
+    Angles =   ['sza', 'vis', 'fis','angle' ]
+    Stokes =   ['meas_I', 'fit_I', 'meas_P_rel', 'fit_P_rel']
+    Pij    = ['p11', 'p12', 'p22', 'p33'], 
+    Lidar=  ['heightStd','g','LidarRatio','LidarDepol', 'gMode', 'LidarRatioMode', 'LidarDepolMode']
+
+
+    # plot_HSRL(LidarPolSph[0][0],LidarPolTAMU[0][0],UNCERT, forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
+    
+    if (LidarPolTAMU!=None )and (LidarPolSph!=None):  #When plotting joint retrieval with individual retrieval
+        RepMode =2
+        # Spheriod = LidarPolSph[0][0]
+        # Hex =LidarPolTAMU[0][0]
+
+    else:
+        RepMode =1
+    
+    
+    Spheriod = PlotSingle(rslts_Sph,HSRL_sphrodT)
+    Hex = PlotSingle(rslts_Tamu2,HSRL_TamuT)
+
+
+
+    
+    cm_sp = ['k','#8B4000', '#87C1FF']
+    cm_t = ["#BC106F",'#E35335', 'b']
+    color_sph = '#0c7683'
+    color_tamu = "#BC106F"
+
+    fig, axs2 = plt.subplots(nrows= 9, ncols=2, figsize=(25, 45))
+    fig, axsErr = plt.subplots(nrows= 9, ncols=2, figsize=(10, 15))
+        
+
+    # Plot the AOD data
+    y = [0,1,2,0,1,2,]
+    x = np.repeat((0,1),3)
+    
+
+    # markerSPh = ["$*$","$O$","$O$","$*$","$O$","$O$","$O$","$*$"]
+    # markerHex = np.repeat("H", len(Spheriod['lambda']))
+    # markerHex[0],markerHex[3],markerHex[7] = "</_\>","</_\>","</_\>"
+
+    
+
+    lambda_ticks = np.round(Spheriod['lambda'], decimals=2)
+    lambda_ticks_str = [str(x) for x in lambda_ticks]
+
+    NoMode =Spheriod['MapR'].shape[0]
+    if Spheriod['MapR'].shape[0] ==2 :
+            mode_v = ["Fine", "Dust","Marine"]
+    if Spheriod['MapR'].shape[0] ==3 :
+        mode_v = ["Fine", "Dust","Marine"]
+    linestyle =[':', '-','-.']
+
+
+
+    for RetNo in range(RepMode):
+
+        if  RetNo ==1: 
+            Spheriod,Hex = LidarPolSph[0][0],LidarPolTAMU[0][0]
+
+
+            cm_sp = ['#757565','#5F381A', '#4BCBE2']
+            cm_t =  ["#882255",'#D44B15', '#1E346D']
+
+
+            # cm_sp2 = ['b','#BFBF2A', '#844772']
+            # cm_t2 = ["#14411b",'#936ecf', '#FFA500']
+
+           
+
+
+        if  RetNo ==0:
+
+            cm_sp = ['#4459AA','#14411b', '#87C1FF']
+            cm_t = ["#14411b",'#adbf4b', '#9BB54C']
+
+
+            cm_sp2 = ['b','#BFBF2A', '#844772']
+            cm_t2 = ["#14411b",'#936ecf', '#FFA500']
+
+
+            Spheriod,Hex = PlotSingle(rslts_Sph,HSRL_sphrodT),PlotSingle(rslts_Tamu2,HSRL_TamuT)
+            # cm_sp = ['#b54cb5','#14411b', '#87C1FF']
+            # cm_t = ["#14411b",'#adbf4b', 'b']
+            color_sph = '#adbf4b'
+            color_tamu = "#936ecf"
+
+        
+
+
+        a =-1
+        
+        #Retrivals:
+        for i in range(len(Retrival)):
+            b =i%2
+            if a ==8: a=-1
+            # a = i%3
+            for mode in range(NoMode): #for each modes
+                
+                a = a+1
+                
+                if  RetNo ==0: 
+                    ErrMap = Spheriod[RetrivalMAP[i]][mode] - Hex[RetrivalMAP[i]][mode]
+                    ErrLidar = Spheriod[RetrivalLidar[i]][mode] - Hex[RetrivalLidar[i]][mode]
+                    keyInd = 'Single'
+                
+                if  RetNo ==1:
+                    ErrMap = Spheriod[Retrival[i]][mode] - Hex[Retrival[i]][mode]
+                    ErrLidar = Spheriod[Retrival[i]][mode] - Hex[Retrival[i]][mode]
+                    keyInd = 'Joint'
+
+                if i ==0 and RetNo ==0: #Plotting single sensor retrievals
+
+
+                    
+                    cm_sp2 = ['b','#14411b', '#14411b']
+                    cm_t2 = ["#14411b",'#936ecf', '#FFA500']
+                    color_sph2 = '#adbf4b'
+                    color_tamu2 = "#936ecf"
+
+                  
+                    axs2[a,b].plot(Spheriod['MapR'][mode], Spheriod['MapVol'][mode], marker = "$O$",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"RSP_Sphd")
+                    axs2[a,b].plot(Hex['MapR'][mode],Hex['MapVol'][mode], marker = "H", color=cm_t[mode] ,lw = 5, ls = linestyle[mode],label=f"RSP_Hex")
+                    
+
+                    axs2[a,b].plot(Spheriod['lidarR'][mode], Spheriod['lidarVol'][mode], marker = "$O$",color = cm_sp2[mode],lw = 5,ls = linestyle[mode], label=f"HSRL_Sphd")
+                    axs2[a,b].plot(Hex['lidarR'][mode],Hex['lidarVol'][mode], marker = "H", color = cm_t2[mode]  ,lw = 5, ls = linestyle[mode],label=f"HSRL_Hex")
+                    
+                    axsErr[a,b].plot(Spheriod['MapR'][mode], ErrMap,  marker = "o",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    axsErr[a,b].plot(Spheriod['MapR'][mode], ErrLidar,  marker = "o",color = cm_t2[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    
+                    axs2[a,b].set_xlabel(r'rv $ \mu m$')
+                    axs2[a,b].set_ylabel(r'dVdlnr')
+                    axs2[a,b].set_xscale("log")
+                    axs2[a,b].set_title(f'{mode_v[mode]}')
+
+                    axsErr[a,b].set_xlabel(r'rv $ \mu m$')
+                    axsErr[a,b].set_xscale("log")
+                    axs2[a,b].legend()
+
+                if i ==0 and RetNo ==1: #Plotting single sensor retrievals
+
+                    cm_sp2 = ['#211363','#50438E','#476DE2']
+                    cm_t2 = ['#BBC97C','#D29F4B','#87799C']
+                    color_sph2 = '#adbf4b'
+                    color_tamu2 = "#936ecf"
+
+                  
+                    axs2[a,b].plot(Spheriod['r'][mode], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"Joint_Sphd")
+                    axs2[a,b].plot(Hex['r'][mode],Hex[Retrival[i]][mode], marker = "H", color=cm_t[mode] ,lw = 5, ls = linestyle[mode],label=f"Joint_Hex")
+                    
+
+                    # axs2[a,b].plot(Spheriod['lidarR'][mode], Spheriod['lidarVol'][mode], marker = "$O$",color = cm_sp2[mode],lw = 5,ls = linestyle[mode], label=f"HSRL_Sphrod")
+                    # axs2[a,b].plot(Hex['lidarR'][mode],Hex['lidarVol'][mode], marker = "H", color = cm_t2[mode]  ,lw = 5, ls = linestyle[mode],label=f"HSRL_Hex")
+                    
+                    # axsErr[a,b].plot(Spheriod['MapR'][mode], ErrMap,  marker = "o",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    # axsErr[a,b].plot(Spheriod['MapR'][mode], ErrLidar,  marker = "o",color = cm_t2[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    
+                    axs2[a,b].set_xlabel(r'rv $ \mu m$')
+                    axs2[a,b].set_ylabel(r'dVdlnr')
+                    axs2[a,b].set_xscale("log")
+                    axs2[a,b].set_title(f'{mode_v[mode]}')
+
+                    # axsErr[a,b].set_xlabel(r'rv $ \mu m$')
+                    # axsErr[a,b].set_xscale("log")
+                    axs2[a,b].legend(prop = { "size": 22 },loc='upper center', bbox_to_anchor=(0.5, -0.4), shadow=True, ncol=3)
+
+                if i>0:
+                    
+                    axs2[a,b].errorbar(lambda_ticks_str, Spheriod[Retrival[i]][mode],yerr=UNCERT[Retrival[i]], marker = "$O$",markeredgecolor='k',capsize=7,capthick =2,markersize=25, color = cm_sp[mode],lw = 4,ls = linestyle[mode], label=f"{keyInd}Sphd")
+                    axs2[a,b].errorbar(lambda_ticks_str,Hex[Retrival[i]][mode],yerr=UNCERT[Retrival[i]],capsize=7,capthick =2,  marker = "H",markeredgecolor='k',markersize=25, color = cm_t[mode] ,lw = 4, ls = linestyle[mode],label=f"{keyInd}Hex")
+                    
+        
+                    axsErr[a,b].errorbar(lambda_ticks_str, ErrMap,  marker = "o",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    axsErr[a,b].set_xticks(lambda_ticks_str) 
+                    # axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+                    axsErr[a,b].set_xlabel(r'$\lambda \mu m$')
+                     
+                    axs2[a,b].set_xticks(lambda_ticks_str) 
+                    # axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+                    axs2[a,b].set_xlabel(r'$\lambda \mu m$')
+                    # axs2[a,b].set_xlim(0, np.maximum(Spheriod[Retrival[i]][mode],Hex[Retrival[i]][mode]))
+                    # fill = np.arange(np.min(Spheriod[Retrival[i]]), np.max(Spheriod[Retrival[i]]))
+                    # # Fill between y-coordinates 0.35 and 0.4, for x-coordinates from 0 to 1
+                    # axs2[a, b].fill(np.repeat(lambda_ticks_str[0], len(fill)), fill, color='gray', linewidth=5)
+
+                    # # Plot a line with x-coordinate 0.53, y-coordinate np.min(Spheriod[Retrival[i]]), and 0.55, np.max(Spheriod[Retrival[i]])
+                    # # Fill the region between the lines at 0.53 and 0.55
+                    # axs2[a, b].fill_between('0.53', '0.55', Spheriod[Retrival[i]], color='gray', alpha=0.3)
+
+                    # # Fill the region between the lines at 1 and 1.06
+                    # axs2[a, b].fill_between('1', '1.06', Spheriod[Retrival[i]], color='gray', alpha=0.3)
+                    #                     # Plot a line with x-coordinate 1, y-coordinate np.min(Spheriod[Retrival[i]]), and 1.06, np.max(Spheriod[Retrival[i]])
+                                        # axs2[a, b].plot('1.06',fill, color='gray', linewidth=5, alpha=0.3)
+                    axs2[a,b].set_ylabel(f'{Retrival[i]}')
+                    axs2[a,b].set_title(f'{mode_v[mode]}')
+
+                    
+                    axs2[a,b].legend(prop = { "size": 21 },loc='upper center', bbox_to_anchor=(0.5, -0.4), shadow=True, ncol=4)
+                    # axs2[a,b].legend(ncol = 4)
+                    
+                                
+                
+        axs2[7,1].errorbar(lambda_ticks_str, Spheriod['aod'],yerr=0.03+UNCERT['aod']*Spheriod['aod'], marker = "$O$",color = cm_sp[mode],markeredgecolor='k',capsize=7,capthick =2,markersize=25,lw = 4, label=f"{keyInd}Sphd")
+        axs2[7,1].errorbar(lambda_ticks_str, Hex['aod'],yerr=0.03+UNCERT['aod']* Hex['aod'], marker = "H", color = cm_t[mode] ,lw = 4,markeredgecolor='k',capsize=7,capthick =2,markersize=25, label=f"{keyInd}Hex")
+        axsErr[7,1].errorbar(lambda_ticks_str, ErrMap, marker = "o", color = color_tamu ,lw = 5,markeredgecolor='k',capsize=5,capthick =2,markersize=25, label=f"Hex")
+            
+        
+        axs2[7,1].set_xticks(lambda_ticks_str)
+        # axs[2,1].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+        axsErr[7,1].set_xlabel(r'$\lambda$')
+        axsErr[7,1].set_ylabel('Total AOD')    
+        axs2[7,1].set_xlabel(r'$\lambda$')
+        axs2[7,1].set_ylabel('Total AOD')
+
+        axs2[8,1].legend(prop = { "size": 21 }, ncol=2)
+        axsErr[8,1].legend(prop = { "size": 21 }, ncol=1)
+        axs2[7,1].legend()
+
+        if RetNo ==0:
+            axs2[6,1].scatter(mode_v,rslts_Sph[0]['sph'], color=cm_sp[mode], marker = "$RO$",s=500,label = "RSPsph")
+            axs2[6,1].scatter(mode_v,rslts_Tamu[0]['sph'],color=cm_t[mode], marker = "$RH$",s=500, label = "RSPhex")
+            axs2[6,1].scatter(mode_v,HSRL_sphrodT[0][0]['sph'],color=cm_sp2[mode],  marker = "$HO$",s=500, label = "HSRLsph")
+            axs2[6,1].scatter(mode_v,HSRL_TamuT[0][0]['sph'], color=cm_t2[mode],marker = "$HH$",s=500, label = "HSRLhex")
+            # axs2[6,1].legend(prop = { "size": 21 },ncol=1)
+            axs2[6,1].set_xlabel("Aerosol type")
+            axs2[6,1].set_ylabel('Spherical Frac')
+
+
+            axs2[8,1].scatter('RSP SPh',rslts_Sph[0]['costVal'], color=cm_sp[mode],s=400, label = "RSPsph")
+            axs2[8,1].scatter('RSP Hex',rslts_Tamu[0]['costVal'], color=cm_t[mode],s=400,label = "RSPhex")
+            axs2[8,1].scatter('HSRL SPh',HSRL_sphrodT[0][0]['costVal'], color=cm_sp2[mode],s=400,label = "RSPsph")
+            axs2[8,1].scatter('HSRL Hex',HSRL_TamuT[0][0]['costVal'], color=cm_t2[mode],s=400,label = "RSPhex")
+            # axs2[8,1].legend()
+            # axs2[8,1].set_xlabel("CostVal")
+            axs2[8,1].set_ylabel("CostVal")
+        
+        if RetNo ==1:
+            axs2[6,1].scatter(mode_v,LidarPolSph[0][0]['sph'], color=cm_sp2[mode], marker = "$RO$",s=500,label = "Jointsph")
+            axs2[6,1].scatter(mode_v,LidarPolSph[0][0]['sph'],color=cm_t2[mode], marker = "$RH$",s=500, label = "Jointhex")
+           # axs2[6,1].legend(prop = { "size": 21 },ncol=1)
+            axs2[6,1].set_xlabel("Aerosol type")
+            axs2[6,1].set_ylabel('Spherical Frac')
+
+
+            axs2[8,1].scatter('Joint SPh',LidarPolSph[0][0]['costVal'], color='r',s=400, label = "RSPsph")
+            axs2[8,1].scatter('Joint Hex',LidarPolSph[0][0]['costVal'], color='k',s=400,label = "RSPhex")
+            # axs2[8,1].legend()
+            # axs2[8,1].set_xlabel("CostVal")
+            axs2[8,1].set_ylabel("CostVal")
+
+        axs2[6,1].legend(prop = { "size": 18 },loc='upper center', bbox_to_anchor=(0.5, -0.4), shadow=True, ncol=4)
+        axs2[8,1].legend(prop = { "size": 18 },loc='upper center', bbox_to_anchor=(0.5, -0.4), shadow=True, ncol=4)
+        axs2[7,1].legend(prop = { "size": 18 },loc='upper center', bbox_to_anchor=(0.5, -0.4), shadow=True, ncol=4)
+                 
+
+
+        # lat_t = Hex['latitude']
+        # lon_t = Hex['longitude']
+        # dt_t = Hex['datetime']
+        plt.tight_layout(rect=[0, 0, 1, 1])
+        
+        plt.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{RepMode}_RSPRetrieval{RepMode}.png', dpi = 400)
+        
+        # plt.suptitle(f'RSP Aerosol Retrieval \n  Lat:{lat_t} Lon :{lon_t}   Date: {dt_t}')
+        if RepMode ==2:
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/2+3_RSPRetrieval.png', dpi = 400)
+        else:
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{NoMode}_RSPRetrieval.png', dpi = 400)
 
 
     
