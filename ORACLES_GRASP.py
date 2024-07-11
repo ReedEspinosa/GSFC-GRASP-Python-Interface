@@ -16,7 +16,7 @@ This code reads Polarimetric data from the Campaigns and runs GRASP. This code w
 import sys
 import warnings
 from CreateRsltsDict import Read_Data_RSP_Oracles, Read_Data_HSRL_constHgt
-from CreateRsltsDict import Read_Data_HSRL_Oracles,Read_Data_HSRL_Oracles_Height,Read_Data_HSRL_constHgt
+from CreateRsltsDict import Read_Data_HSRL_Oracles,Read_Data_HSRL_Oracles_Height,Read_Data_HSRL_Oracles_Height_No355
 import netCDF4 as nc
 from runGRASP import graspDB, graspRun, pixel, graspYAML
 from matplotlib import pyplot as plt
@@ -136,9 +136,13 @@ def VariableNoise(YamlFileName,nwl=3): #This will store the inforamtion of the c
 
     return combined_string
 
-def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,ConsType):
+def update_HSRLyaml(YamlFileName, noMod, maxr, minr, a, Kernel_type,ConsType,  RSP_rslt = None, LagrangianOnly = None, RSPUpdate= None, AprioriLagrange =None):
     '''HSRL provides information on the aerosol in each height,
       and RSP measures the total column intergrated values. We can use the total column information to bound the HSRL retrievals
+    Set RSPUpdate= True to update the inital consdition from RSP retrievals
+    Set LagrangianOnly = True to just cahnge the lagrangian for apriori in Vertical profile norm.
+    
+    
     '''
     #This function creates new yaml with initial conditions updated form microphysical properties of  Polarimeter retrievals
 
@@ -154,63 +158,67 @@ def update_HSRLyaml(YamlFileName, RSP_rslt, noMod, maxr, minr, a, Kernel_type,Co
     # RSP_rslt = np.load('RSP_sph.npy',allow_pickle= True).item()
     print(len(YamlChar))
 
-    # if ManualChange == True:
-    #     initCond = data['inversion']['constraints'][characteristic[]][f'mode[{noMd+a}]']['initial_guess']
-    #     initCond = initCond['value'] = float(RSP_rslt['vol'][noMd]) 
-
+    if LagrangianOnly == True:
+        assert(AprioriLagrange != None)
+        for noMd in range(noMod): #TODO assumed that vertical prof normalization is the first characteristics, needs to be more genratlized 
+            initCond = data['retrieval']['constraints']['characteristic[1]'][f'mode[{noMd+a}]']['single_pixel']['a_priori_estimates']['lagrange_multiplier'] = float(AprioriLagrange),float(AprioriLagrange),float(AprioriLagrange),float(AprioriLagrange),float(AprioriLagrange),float(AprioriLagrange)
+            print("Updating the lagrange_multiplier in a_priori_estimates")
+                       
+    if RSPUpdate== True:
+        assert RSP_rslt != None
     #change the yaml intitial conditions using the RSP GRASP output
-    for i in range(len(YamlChar)): #loop over the character types in the list
-        for noMd in range(noMod): #loop over the aerosol modes (i.e 2 for fine and coarse)
-            #State Varibles from yaml file: 
-            # data['retrieval']['constraints'][f'characteristic[0]'][f'mode[{noMd+a}]']['value'][0] =  1e-8
-            # data['retrieval']['constraints'][f'characteristic[0]'][f'mode[{noMd+a}]']['max'][0] =1e-7
-            # data['retrieval']['constraints'][f'characteristic[0]'][f'mode[{noMd+a}]']['min'][0] =1e-9
-            # #     # print("Updating",YamlChar[i])
-            initCond = data['retrieval']['constraints'][f'characteristic[{i+a}]'][f'mode[{noMd+a}]']['initial_guess']
-            # if YamlChar[i] == 'aerosol_concentration': #Update the in and max values from aerosol properties retrieved from the RSP measurements
-            # #     # initCond['max'] = float(np.max(RSP_rslt['vol'][noMd])*maxr) #value from the GRASP result for RSP
-            # #     # initCond['min'] = float(RSP_rslt['vol'][noMd]*minr)
-            #     initCond['value'] = float(RSP_rslt['vol'][noMd]) #value from the GRASP result for RSP
-            
-            if YamlChar[i] == 'size_distribution_lognormal':
-                initCond['value'] = float(RSP_rslt['rv'][noMd]),float(RSP_rslt['sigma'][noMd])
-                initCond['max'] =float(RSP_rslt['rv'][noMd]*maxr),float(RSP_rslt['sigma'][noMd]*maxr)
-                initCond['min'] =float(RSP_rslt['rv'][noMd]*minr),float(RSP_rslt['sigma'][noMd]*minr)
-                # print("Updating",YamlChar[i])
-                if ConsType == 'strict': #This will set the retrieved parameteter to false. 
-                    data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
-            
-            if YamlChar[i] == 'real_part_of_refractive_index_spectral_dependent':
-                initCond['index_of_wavelength_involved'] = [1,2,3]
-                #Adding off sets because the HSRL abd RSP wavelengths dont match, this should be improved
-                if noMd==0: offs = 0  
-                if noMd==1: offs = 0
+        for i in range(len(YamlChar)): #loop over the character types in the list
+            for noMd in range(noMod): #loop over the aerosol modes (i.e 2 for fine and coarse)
+                #State Varibles from yaml file: 
+                # data['retrieval']['constraints'][f'characteristic[0]'][f'mode[{noMd+a}]']['value'][0] =  1e-8
+                # data['retrieval']['constraints'][f'characteristic[0]'][f'mode[{noMd+a}]']['max'][0] =1e-7
+                # data['retrieval']['constraints'][f'characteristic[0]'][f'mode[{noMd+a}]']['min'][0] =1e-9
+                # #     # print("Updating",YamlChar[i])
+                initCond = data['retrieval']['constraints'][f'characteristic[{i+a}]'][f'mode[{noMd+a}]']['initial_guess']
+                # if YamlChar[i] == 'aerosol_concentration': #Update the in and max values from aerosol properties retrieved from the RSP measurements
+                # #     # initCond['max'] = float(np.max(RSP_rslt['vol'][noMd])*maxr) #value from the GRASP result for RSP
+                # #     # initCond['min'] = float(RSP_rslt['vol'][noMd]*minr)
+                #     initCond['value'] = float(RSP_rslt['vol'][noMd]) #value from the GRASP result for RSP
+                
+                if YamlChar[i] == 'size_distribution_lognormal':
+                    initCond['value'] = float(RSP_rslt['rv'][noMd]),float(RSP_rslt['sigma'][noMd])
+                    initCond['max'] =float(RSP_rslt['rv'][noMd]*maxr),float(RSP_rslt['sigma'][noMd]*maxr)
+                    initCond['min'] =float(RSP_rslt['rv'][noMd]*minr),float(RSP_rslt['sigma'][noMd]*minr)
+                    # print("Updating",YamlChar[i])
+                    if ConsType == 'strict': #This will set the retrieved parameteter to false. 
+                        data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
+                
+                if YamlChar[i] == 'real_part_of_refractive_index_spectral_dependent':
+                    initCond['index_of_wavelength_involved'] = [1,2,3]
+                    #Adding off sets because the HSRL abd RSP wavelengths dont match, this should be improved
+                    if noMd==0: offs = 0  
+                    if noMd==1: offs = 0
 
-                initCond['value'] =float(RSP_rslt['n'][noMd][0]+offs),float(RSP_rslt['n'][noMd][2]),float(RSP_rslt['n'][noMd][4])
-                initCond['max'] =float((RSP_rslt['n'][noMd][0]+offs)*maxr),float(RSP_rslt['n'][noMd][2]*maxr),float(RSP_rslt['n'][noMd][4]*maxr)
-                initCond['min'] =float((RSP_rslt['n'][noMd][0]+offs)*minr),float(RSP_rslt['n'][noMd][2]*minr),float(RSP_rslt['n'][noMd][4]*minr)
-                # print("Updating",YamlChar[i])
-                if ConsType == 'strict':  # tot set retrival in setting files to False
-                    data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
-            
-            if YamlChar[i] == 'imaginary_part_of_refractive_index_spectral_dependent':
-                initCond['index_of_wavelength_involved'] = [1,2,3]
-                initCond['value'] =float(RSP_rslt['k'][noMd][0]),float(RSP_rslt['k'][noMd][2]),float(RSP_rslt['k'][noMd][4])
-                initCond['max'] =float(RSP_rslt['k'][noMd][0]*maxr),float(RSP_rslt['k'][noMd][2]*maxr),float(RSP_rslt['k'][noMd][4]*maxr)
-                initCond['min'] = float(RSP_rslt['k'][noMd][0]*minr),float(RSP_rslt['k'][noMd][2]*minr),float(RSP_rslt['k'][noMd][4]*minr)
-                # print("Updating",YamlChar[i])
-                if ConsType == 'strict':
-                    data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
-            
-            if YamlChar[i] == 'sphere_fraction':
-               
-                initCond['value'] = float(RSP_rslt['sph'][noMd]/100)
-                initCond['max'] =float(RSP_rslt['sph'][noMd] *maxr/100) #GARSP output is in %
-                initCond['min'] =float(RSP_rslt['sph'][noMd] *minr/100)
-                # print("Updating",YamlChar[i])
-                if ConsType == 'strict':
-                    data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
-            
+                    initCond['value'] =float(RSP_rslt['n'][noMd][0]+offs),float(RSP_rslt['n'][noMd][2]),float(RSP_rslt['n'][noMd][4])
+                    initCond['max'] =float((RSP_rslt['n'][noMd][0]+offs)*maxr),float(RSP_rslt['n'][noMd][2]*maxr),float(RSP_rslt['n'][noMd][4]*maxr)
+                    initCond['min'] =float((RSP_rslt['n'][noMd][0]+offs)*minr),float(RSP_rslt['n'][noMd][2]*minr),float(RSP_rslt['n'][noMd][4]*minr)
+                    # print("Updating",YamlChar[i])
+                    if ConsType == 'strict':  # tot set retrival in setting files to False
+                        data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
+                
+                if YamlChar[i] == 'imaginary_part_of_refractive_index_spectral_dependent':
+                    initCond['index_of_wavelength_involved'] = [1,2,3]
+                    initCond['value'] =float(RSP_rslt['k'][noMd][0]),float(RSP_rslt['k'][noMd][2]),float(RSP_rslt['k'][noMd][4])
+                    initCond['max'] =float(RSP_rslt['k'][noMd][0]*maxr),float(RSP_rslt['k'][noMd][2]*maxr),float(RSP_rslt['k'][noMd][4]*maxr)
+                    initCond['min'] = float(RSP_rslt['k'][noMd][0]*minr),float(RSP_rslt['k'][noMd][2]*minr),float(RSP_rslt['k'][noMd][4]*minr)
+                    # print("Updating",YamlChar[i])
+                    if ConsType == 'strict':
+                        data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
+                
+                if YamlChar[i] == 'sphere_fraction':
+                
+                    initCond['value'] = float(RSP_rslt['sph'][noMd]/100)
+                    initCond['max'] =float(RSP_rslt['sph'][noMd] *maxr/100) #GARSP output is in %
+                    initCond['min'] =float(RSP_rslt['sph'][noMd] *minr/100)
+                    # print("Updating",YamlChar[i])
+                    if ConsType == 'strict':
+                        data['retrieval']['constraints'][f'characteristic[{i+a}]']['retrieved'] = 'false'
+                
 
 
     if Kernel_type == "sphro":
@@ -384,6 +392,9 @@ def AeroProfNorm_FMF(DictHsrl):
     VextDst = DMR1 * Vext1
     VextDst [np.where(VextDst <=0)[0]]= 1e-6
     Vextoth = (1-DMR1)* Vext1
+
+    print(DMR1)
+
     #Separating the contribution of non-dust
 
     # AEt= DictHsrl[5] #total angstrom exponent
@@ -566,78 +577,220 @@ def AeroProfNorm_FMF(DictHsrl):
 
     return FineProfext,DstProfext,SeaProfext
 
+
+def AeroClassAOD(DictHsrl):
+    "seperates the cintribution of dust, fine and marine aerosols and caculates the AOD contribtuion form each aerosol type"
+    rslt = DictHsrl[0]
+    Wl = [355,532]
+    Aod_Classified = {}
+    for rep in range(2):
+        
+        print(Wl[rep])
+
+        Vext1 = rslt['meas_VExt'][:,rep]
+        Vext1[np.where(Vext1<=0)] = 1e-10
+
+        
+        hgt =  rslt['RangeLidar'][:,0][:]
+        DP1064= rslt['meas_DP'][:,2][:]
+
+        # Calculating the boundary layer height
+        BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+        BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+        #altitude of the aircraft99
+        AerID = DictHsrl[5]
+
+        DMR1 = DictHsrl[2]
+        DMR1[DMR1==0] = 0.2
+        
+        # DMR1[DMR1==0] = np.linspace(indxMaxDMR,0,lnDMR)
+
+        #Some values of DMR are >1,  in such cases we recaculate the values. Otherwise, use the values reported in the HSRL products
+        if np.any(DMR1 > 1) or np.any(AerID == 8 ) : #If there is any pure dust event
+
+            warnings.warn('DMR > 1, Recaculating', UserWarning)
+            DP1064= rslt['meas_DP'][:,2][:]  #Depol at 1064 nm
+            aDP= DictHsrl[3] #Particle depol ratio at 532
+            maxDP =  np.nanmax(aDP)
+            DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
+            # DMR1[DMR1==0] = 0.0001
+        else:
+            # maxDP =  0.35 #From the paper
+            # aDP= DictHsrl[3]
+            DMR1 = DictHsrl[2]
+            # maxDP =  np.nanmax(aDP)
+            # print('No pure dustEvent')
+
+        Vext1[np.where(Vext1<=0)] = 1e-10
+        Vextoth = (1-DMR1)*Vext1
+        VextDst = Vext1 - Vextoth 
+        FMF1 = DictHsrl[4]
+
+        
+        #Filtering
+        FMF1[np.where(FMF1<0)[0] ]= 0.00001
+        FMF1[np.where(FMF1>=1)[0]]= 0.99
+        # print(FMF)
+        
+        #Spearating the contribution from fine mode 
+        VextFMF = FMF1* Vextoth
+        aboveBL = Vextoth[:BLH_indx[0]]
+
+        belowBL = Vextoth[BLH_indx[0]:]
+
+        print(BLH_indx)
+
+        if BLH< 1000: #if the boundary layer is low then assume the fine mode aerosol to be well mixed
+            Vextfine = np.concatenate((aboveBL, np.ones(len(belowBL))*10**-6))
+        else:
+            belowBL = VextFMF[BLH_indx[0]:]
+            Vextfine = np.concatenate((aboveBL,belowBL))
+
+        # belowBL = VextFMF[BLH_indx[0]:] #Fine mode fractuon below BLH calchuateing using aeVoth/aesph
+        # Vextfine = np.concatenate((aboveBL,belowBL))
+        
+
+        # Vextfine = np.concatenate((aboveBL, np.ones(len(belowBL))*10**-6))
+        VextSea = Vextoth -Vextfine
+
+        VextDst[np.where(VextDst<=0)[0]] = 1e-10
+        Vextfine[np.where(Vextfine<=0)[0]] = 1e-10
+        VextSea[np.where(VextSea<=0)[0]] = 1e-10
+        VextSea[:BLH_indx[0]] = 1e-10
+
+        print(Wl[rep])
+          #stores aerosol contribution for each mode based on the classification. 
+        # Plot the various line plots on the secondary x-axis
+        Aod_Classified[f'Aod_dst_{Wl[rep]}'] = np.trapz(VextDst[::-1],hgt[::-1])
+        Aod_Classified[f'Aod_sea_{Wl[rep]}'] = np.trapz(VextSea[::-1],hgt[::-1])
+        Aod_Classified[f'Aod_fine_{Wl[rep]}'] = np.trapz(Vextfine[::-1],hgt[::-1])
+        Aod_Classified[f'Aod_T_{Wl[rep]}'] = np.trapz(Vext1[::-1], hgt[::-1])
+        Aod_Classified[f'Aod_oth_{Wl[rep]}'] =np.trapz(Vextoth [::-1], hgt[::-1])
+        Aod_Classified[f'Aod_below_BLH_{Wl[rep]}'] = np.trapz(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
+        Aod_Classified[f'Aod_above_BLH_{Wl[rep]}'] = np.trapz(Vext1[:BLH_indx[0]][::-1], hgt[:BLH_indx[0]][::-1])
+        
+        print(hgt[BLH_indx[0]:], 'below the boundary layer')
+
+    print(Aod_Classified)
+
+   
+    return Aod_Classified
+
+
 def AeroProfNorm_sc2(DictHsrl):
 
     """This sceme is more simple as just based on DMR from HSRL data products"""
 
     rslt = DictHsrl[0]
+    Idx1064 = np.where(rslt['lambda'] == 1064/1000)[0][0]
+    Idx532 = np.where(rslt['lambda'] == 532/1000)[0][0]
+    print(Idx1064,Idx532 )
+
+
     max_alt = rslt['OBS_hght']
     # Vext1 = (rslt['meas_VExt'][:,0]+rslt['meas_VExt'][:,1])/2
-    Vext1 = rslt['meas_VExt'][:,0]
-    Vext1[np.where(Vext1<=0)] = 1e-6
+    Vext1 = rslt['meas_VExt'][:,Idx532]
+    Vext1[np.where(Vext1<=0)] = 1e-10
 
     
     hgt =  rslt['RangeLidar'][:,0][:]
-    DP1064= rslt['meas_DP'][:,2][:]
+    DP1064= rslt['meas_DP'][:,Idx1064][:]
 
     # Calculating the boundary layer height
     BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
     BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
     #altitude of the aircraft99
-    
+    AerID = DictHsrl[5]
+
     DMR1 = DictHsrl[2]
+    indxMaxDMR = (np.max(np.where(DMR1==0)[0])) 
+    DMR1[DMR1==0] = 0.2
+    
+    # DMR1[DMR1==0] = np.linspace(indxMaxDMR,0,lnDMR)
+
+
    
     #Some values of DMR are >1,  in such cases we recaculate the values. Otherwise, use the values reported in the HSRL products
-    if np.any(DMR1 > 1): #If there is any pure dust event
+    if np.any(DMR1 > 1) or np.any(AerID == 8 ) : #If there is any pure dust event
 
         warnings.warn('DMR > 1, Recaculating', UserWarning)
-        DP1064= rslt['meas_DP'][:,2][:]  #Depol at 1064 nm
+        DP1064= rslt['meas_DP'][:,Idx1064][:]  #Depol at 1064 nm
         aDP= DictHsrl[3] #Particle depol ratio at 532
         maxDP =  np.nanmax(aDP)
         DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
-        
+        # DMR1[DMR1==0] = 0.0001
     else:
         # maxDP =  0.35 #From the paper
         # aDP= DictHsrl[3]
         DMR1 = DictHsrl[2]
         # maxDP =  np.nanmax(aDP)
         # print('No pure dustEvent')
-    
 
-        
-    Vext1[np.where(Vext1<=0)] = 1e-7
+    Vext1[np.where(Vext1<=0)] = 1e-10
     Vextoth = (1-DMR1)*Vext1
     VextDst = Vext1 - Vextoth 
     FMF1 = DictHsrl[4]
 
     
     #Filtering
-    FMF1[np.where(FMF1<0)[0] ]= 0.1
-    FMF1[np.where(FMF1>=1)[0]]= 0.9
+    FMF1[np.where(FMF1<0)[0] ]= 0.00001
+    FMF1[np.where(FMF1>=1)[0]]= 0.99
     # print(FMF)
     
     #Spearating the contribution from fine mode 
     VextFMF = FMF1* Vextoth
     aboveBL = Vextoth[:BLH_indx[0]]
 
-    # belowBL = Vextoth[BLH_indx[0]:]
+    belowBL = Vextoth[BLH_indx[0]:]
 
-    belowBL = VextFMF[BLH_indx[0]:] #Fine mode fractuon below BLH calchuateing using aeVoth/aesph
+    print(BLH_indx)
 
-    # Vextfine = np.concatenate((aboveBL, np.ones(len(belowBL))*10**-6))
-    Vextfine = np.concatenate((aboveBL,belowBL))
+    if BLH< 1000: #if the boundary layer is low then assume the fine mode aerosol to be well mixed
+        Vextfine = np.concatenate((aboveBL, np.ones(len(belowBL))*10**-6))
+    else:
+        belowBL = VextFMF[BLH_indx[0]:]
+        Vextfine = np.concatenate((aboveBL,belowBL))
+
+    # belowBL = VextFMF[BLH_indx[0]:] #Fine mode fractuon below BLH calchuateing using aeVoth/aesph
+    # Vextfine = np.concatenate((aboveBL,belowBL))
+    
 
     # Vextfine = np.concatenate((aboveBL, np.ones(len(belowBL))*10**-6))
     VextSea = Vextoth -Vextfine
 
-    VextDst[np.where(VextDst<=0)[0]] = 1e-6
-    Vextfine[np.where(Vextfine<=0)[0]] = 1e-6
-    VextSea[np.where(VextSea<=0)[0]] = 1e-6
+    VextDst[np.where(VextDst<=0)[0]] = 1e-10
+    Vextfine[np.where(Vextfine<=0)[0]] = 1e-10
+    VextSea[np.where(VextSea<=0)[0]] = 1e-10
     VextSea[:BLH_indx[0]] = 1e-10
+
+
+    Aod_Classified = {}  #stores aerosol contribution for each mode based on the classification. 
+    # Plot the various line plots on the secondary x-axis
+    Aod_Classified['Aod_dst'] = np.trapz(VextDst[::-1],hgt[::-1])
+    Aod_Classified['Aod_sea'] = np.trapz(VextSea[::-1],hgt[::-1])
+    Aod_Classified['Aod_fine'] = np.trapz(Vextfine[::-1],hgt[::-1])
+    Aod_Classified['Aod_T'] = np.trapz(Vext1[::-1], hgt[::-1])
+
+    Aod_Classified['Aod_below_BLH'] = np.trapz(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
+    Aod_Classified['Aod_above_BLH'] = np.trapz(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
+    
+    #Aerosol classification for 355
+    # Vext355 = rslt['meas_VExt'][:,0]
+
+
+
+
+    # print(hgt[BLH_indx[0]:], 'below the boundary layer')
+
+
+    # Added = Aod_Classified['Aod_dst']+Aod_Classified['Aod_sea']+Aod_Classified['Aod_fine']
+
+    # print('Aod_dst %:', round(100*(Aod_Classified['Aod_dst']/Aod_Classified['Aod_T']),3),'Aod_sea %:',round(100*(Aod_Classified['Aod_sea']/Aod_Classified['Aod_T']),3),'Aod_fine%:',round(100*(Aod_Classified['Aod_fine']/Aod_Classified['Aod_T']),3) )
+    
    
-    VextDst[0] = 1e-8
-    Vextfine[0] = 1e-8
-    VextSea[0] = 1e-8
+    # VextDst[0] = 1e-10
+    # Vextfine[0] = 1e-10
+    # VextSea[0] = 1e-10
 
     # VBack = 0.00002*Vextoth
     # Voth = 0.999998*Vextoth
@@ -647,9 +800,30 @@ def AeroProfNorm_sc2(DictHsrl):
     DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
     FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
     SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
-
+    # Temp = DictHsrl[5]
 
     fig = plt.figure()
+
+    # Define the vmin and vmax for the color scale
+    vmin = 290
+    vmax = 300
+
+    # Create subplots
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6), sharey = True)
+
+    # Plot the first contour plot on the first subplot
+   
+    # Overlay the second contour plot on the second subplot
+    # contour2 = ax[1].contourf(Temp[HSRLPixNo-300:HSRLPixNo+300, :].T, 
+    #                         aspect='auto', origin='lower', 
+    #                         cmap='rainbow', alpha=1, 
+    #                         vmin=vmin, vmax=vmax, 
+    #                         levels=np.linspace(vmin, vmax, 20))
+    # fig.colorbar(contour2, ax=ax[1], orientation='vertical')
+    
+
+
+
     plt.plot(VextDst,hgt, color = '#067084',label='Dust')
     plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
     plt.plot(Vextfine,hgt,color ='y',label='fine')
@@ -664,8 +838,7 @@ def AeroProfNorm_sc2(DictHsrl):
     plt.legend()
 
 
-    return FineProf,DstProf,SeaProf
-
+    return FineProf,DstProf,SeaProf,Aod_Classified
 
 def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo): 
         
@@ -714,7 +887,7 @@ def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,M
         return rslts
 
 #Running the GRASP for spherical or hexahedral shape model for HSRL data
-def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= None,ConsType = None,releaseYAML =True, ModeNo=None,VertProfConstrain =None,Simplestcase =None,rslts_Sph=None):
+def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= None,ConsType = None,releaseYAML =True, ModeNo=None,VertProfConstrain =None,Simplestcase =None,rslts_Sph=None,RSP_rslt = None, LagrangianOnly = None, RSPUpdate= None, AprioriLagrange =None):
         #Path to the kernel files
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
         if Kernel_type == "sphro":  #If spheroid model
@@ -736,7 +909,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
                 minr =0.95
                 a=1
                 
-                update_HSRLyaml(fwdModelYAMLpath, rslts_Sph[0], ModeNo, maxr, minr, a,Kernel_type,ConsType)
+                update_HSRLyaml(fwdModelYAMLpath, ModeNo, maxr, minr, a,Kernel_type,ConsType,RSP_rslt, LagrangianOnly, RSPUpdate, AprioriLagrange)
                 fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/Settings_Sphd_RSP_HSRL.yaml'
             
             
@@ -767,8 +940,8 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
                 minr =0.95
                 a=1
                 
-                
-                update_HSRLyaml(fwdModelYAMLpath, rslts_Tamu[0], ModeNo, maxr, minr, a,Kernel_type,ConsType)
+                update_HSRLyaml(fwdModelYAMLpath, ModeNo, maxr, minr, a,Kernel_type,ConsType,RSP_rslt, LagrangianOnly, RSPUpdate, AprioriLagrange)
+                # update_HSRLyaml(fwdModelYAMLpath, rslts_Tamu[0], ModeNo, maxr, minr, a,Kernel_type,ConsType)
                 fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/Settings_TAMU_RSP_HSRL.yaml'
             #Path to the GRASP Executable for TAMU
             info = VariableNoise(fwdModelYAMLpath,nwl)
@@ -784,8 +957,10 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
 
         if Simplestcase == True:  #Height grid is constant and no gas correction applied
             DictHsrl = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo,gaspar =None,SimpleCase = True)
+            # DictHsrl = Read_Data_HSRL_Oracles_Height_No355(HSRLfile_path,HSRLfile_name,HSRLPixNo,gaspar =None,SimpleCase = True)
         else: #Variable grid height and gas correction applied
             DictHsrl = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo,gaspar =True)
+            # DictHsrl = Read_Data_HSRL_Oracles_Height_No355(HSRLfile_path,HSRLfile_name,HSRLPixNo,gaspar =True)
 
         rslt = DictHsrl[0]
         max_alt = rslt['OBS_hght']
@@ -794,223 +969,11 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
         with open(fwdModelYAMLpath, 'r') as f:  
             data = yaml.safe_load(f)
         
-        # if VertProfConstrain == True: #True of we want to apply vertical profile normalization
-        #     InstruNoise = 1e-6 #instrument's uncertainity
-            
-        #     Vext1 = rslt['meas_VExt'][:,1]  #m-1
-        #     Vext1[np.where(Vext1<=0)] = InstruNoise  #Filter out any negative or zero values (This is just for vert normalization parameter)
-        #     hgt =  rslt['RangeLidar'][:,0][:] #Height
-            
-
-        #     #Dust mixing ratio  using the Sugimoto and Lee, Appl Opt 2006"
-            
-        #     DP1064= rslt['meas_DP'][:,2][:]  #Depol at 1064 nm
-        #     aDP= DictHsrl[3] #Particle depol ratio at 532
-        #     maxDP =  np.nanmax(aDP)
-        #     DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
-
-            
-        #     if np.any(DMR1 > 1):
-        #         warnings.warn('DMR > 1, renormalizing', UserWarning)
-        #         DMR = DMR1/np.nanmax(DMR1)
-        #     else: 
-        #         DMR= DMR1 
-
-        #     # AEt= DictHsrl[5] #total angstrom exponent
-        #     # AEsph= DictHsrl[3] #spherical angstrom exp
-            
-        #     #Boundary layer height
-        #     BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
-        #     BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
-
-            #Caculating the fine mode fraction
-            # FMF = AEt/AEsph #assumption: angstrom exponent for evry large particle is very small
-            # FMF = FMF(AEt)[3]
-            # FMFv[np.where(np.isnan(FMFv))[0]]= 0
-
-            # FMF = DictHsrl[4]
-            
-            # #Filtering
-            # FMF[np.where(FMF<0)[0] ]= 0
-            # FMF[np.where(FMF>=1)[0]]= 0
-            # # print(FMF)
-            
-
-            # #Separating the contribution of dust to total extinction
-            # VextDst = DMR1 * Vext1
-            # VextDst [np.where(VextDst <=0)[0]]= 1e-18 
-
-
-            # #Separating the contribution of non-dust
-            # Vextoth = (1-DMR1)* Vext1
-
-            # # #Spearating the contribution from fine mode 
-            # Vextfine = FMF*Vextoth
-            # Vextfine[np.where(Vextfine <=0)[0]]= 1e-18 
-
-            # # Vextfine[np.where(hgt>=BLH)[0]] = Vextoth[np.where(hgt>=BLH)[0]]
-            
-            # # Vextfine[np.where(hgt<BLH)[0]]= Vextfine[np.where(hgt<BLH)[0]] 
-            # if BLH>1000:
-            #     FMFBelowBL = np.nanmean(FMF[np.where(hgt<BLH)[0]])
-            #     Vextfine[np.where(hgt<BLH)[0]]= FMFBelowBL*Vextoth[np.where(hgt<BLH)[0]]  
-
-
-            # #Contribution from sea salt = ext from non dust - fine
-            # VextSea = Vextoth - Vextfine
-            # # VextSea[np.where(hgt<BLH)[0]] = Vextoth[np.where(hgt<BLH)[0]]
-            # VextSea[np.where(hgt>=BLH)[0]] = 1e-18
-            # VextSea[np.where(VextSea <=0)[0]]= 1e-18 
-
-            #assuming that sea salt is limited within the boundary layer
-            
-            # VextSea[np.where(hgt<BLH)[0]]= 0.9999998*Vextoth[np.where(hgt<BLH)[0]] 
-            # VextSea[np.where(hgt<BLH)[0]]= 0.9999998*Vextoth[np.where(hgt<BLH)[0]] 
-
-            #assuming that sea salt is limited within the boundary layer
-            
-            
-
-            # Vextfine[np.where(hgt<BLH)[0]]= 0.0000002*Vextoth[np.where(hgt<BLH)[0]] 
-
-
-            #Normalizing such that int(Vext.dh) = 1. This is equivalent of using vol conc
-            
-            # DstProfext =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-            # FineProfext = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-            # SeaProfext = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
-            
-            # # DstProfext =VextDst/ np.trapz(VextDst[::-1],hgt[::-1]/1000)
-            # # FineProfext = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1]/1000)
-            # # SeaProfext = VextSea/ np.trapz(VextSea[::-1],hgt[::-1]/1000)
-
-            # #Plotting the extinction from each aerosol
-            # fig,ax = plt.subplots(1,1, figsize=(6,6))
-            # ax.plot(VextDst,hgt, color = '#067084',label='Dust')
-            # ax.plot(VextSea,hgt,color ='#6e526b',label='Salt')
-            # ax.plot(Vextfine,hgt,color ='y',label='fine')
-            # ax.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
-            # ax.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
-            # ax.set_xlabel('VExt m-1')
-            # ax.set_ylabel('Altitude m')
-            # plt.legend()
-            # plt.savefig('Vert.png', dpi = 300)
-            
-
-            # print(Vextoth[BLH_indx])
-            
-            # if BLH<1000: #asuming that if the boundary layer is shallower then thr fine mode is realtively well mixed #TODO confirm
-            #     Vextfine[np.where(hgt<BLH)[0]] =0.0000002*Vextoth[np.where(hgt<BLH)[0]] 
-
-            # VextSea = np.ones(len(hgt)) *1e-10
-            # print(Vextfine, np.where(Vextfine <=0)[0]) 
-            # Vextfine[np.where(hgt<=BLH)[0]]= 1e-6
-
-            # Vextfine = Vextoth - VextSea
-            # Vextfine[np.where(hgt>=BLH)[0]] = Vextoth[np.where(hgt>=BLH)[0]]
-            # Vextfine[np.where(Vextfine <=0)[0]]= 1e-18 
-            # DMR1 = DictHsrl[2]
-            # print(DMR1)
-            # DMR1[0][np.where(np.isnan(DMR1[0]))] = 0
-
-            # hex_dust = {'Hexdm': 24456.650, 'Hexdc': -4.906e-06}
-            # sph_dust = {'Sphdm': 19421.576, 'Sphdc': 6.52e-06}
-            # hex_fine = {'Hexfm':10093.924,'Hexfc': 6.966e-06}
-            # sph_fine = {'Sphfm':10698.098,'Sphfc': 3.603e-06}
-            # hex_sea = {'HexSm': 8749.598,'HexSc': 1.807e-5} #TODO correct this value of HexSc
-            # sph_sea = {'SphSm': 8749.598,'SphSc':1.807e-5}
-
-            #Converting Vext to Conc caculated using the grasp formward model
         
-            # hex_dust = {'Hexdm': 24385.083, 'Hexdc': 2.594e-6}
-            # sph_dust = {'Sphdm': 19291.567, 'Sphdc': 9.810e-7}
-            # hex_fine = {'Hexfm':4837.431,'Hexfc': 4.766e-06}
-            # sph_fine = {'Sphfm':5168.1777,'Sphfc':-7.9823e-07}
-            # hex_sea = {'HexSm': 13521.506,'HexSc': -4.765e-7} #TODO correct this value of HexSc
-            # sph_sea = {'SphSm': 13897.093,'SphSc':-3.858e-7}
 
 
-            # if Kernel_type == "TAMU" :
-            #     Concfine = hex_fine['Hexfm'] * Vextfine + hex_fine['Hexfc']
-            #     Concfine[np.where(Concfine<0)[0]] = 1e-8
-            #     Concdust = hex_dust['Hexdm'] * VextDst + hex_dust['Hexdc']
-            #     Concdust[np.where(Concdust<0)[0]] = 1e-8
-            #     Concsea = hex_sea['HexSm'] * VextSea + hex_sea['HexSc']
-            #     Concsea[np.where(Concsea<0)[0]] = 1e-8
-            
-            # if Kernel_type == "sphro" :
-            #     Concfine = sph_fine['Sphfm'] * Vextfine + sph_fine['Sphfc']
-            #     Concfine[np.where(Concfine<0)[0]] = 1e-8
-            #     Concdust = sph_dust['Sphdm'] * VextDst + sph_dust['Sphdc']
-            #     Concdust[np.where(Concdust<0)[0]] = 1e-8
-            #     Concsea = sph_sea['SphSm'] * VextSea + sph_sea['SphSc']
-            #     Concsea[np.where(Concsea<0)[0]] = 1e-8
-
-            # DstProf =Concdust/ np.trapz(Concdust[::-1],hgt[::-1])
-            # FineProf = Concfine/np.trapz(Concfine[::-1],hgt[::-1])
-            # SeaProf = Concsea/ np.trapz(Concsea[::-1],hgt[::-1])
-
-            
-            # Vext1 = rslt['meas_VExt'][:,0]
-            # hgt =  rslt['RangeLidar'][:,0][:]
-            # DP1064= rslt['meas_DP'][:,2][:]
-
-            # #Boundary layer height
-            # BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
-            # BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
-            #  #altitude of the aircraft
-            # # print(rslt['OBS_hght'])
-            
-            # DMR1 = DictHsrl[2]
-            # # print(DMR1)
-            # # DMR1[0][np.where(np.isnan(DMR1[0]))] = 0
-            # if np.any(DMR1 > 1):
-            #     warnings.warn('DMR > 1, renormalizing', UserWarning)
-            #     DMR = DMR1/np.nanmax(DMR1)
-            # else: 
-            #     DMR= DMR1 
-
-            # # else:
-            # #     DMR = DMR1
-            #     #Renormalize.
-            # Vext1[np.where(Vext1<=0)] = 1e-6
-            # Vextoth = abs(1-0.99999*DMR)*Vext1
-            
-            # VextDst = Vext1 - Vextoth 
-            # # VextDst[np.where(VextDst<=0)] = 1e-6
-            # # # DMR[DMR>1] = 1  # ratios must be 1
-            # # # VextDst = 0.99999*DMR*Vext1
-
-            # # aboveBL = Vextoth[:BLH_indx[0]]
-            # # mean = np.nanmean(aboveBL[:50])
-            # # belowBL = Vextoth[BLH_indx[0]:]
-
-            # # Vextfine = np.concatenate((0.99999*aboveBL, np.ones(len(belowBL))*10**-8))
-            # # VextSea = Vextoth -Vextfine
-
-            # # # VBack = 0.00002*Vextoth
-            # # # Voth = 0.999998*Vextoth
-            # # # VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
-            # # # Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
-
-            # # ax[1].plot(Concdust,hgt, color = '#067084',label='Dust')
-            # # ax[1].plot(Concsea,hgt,color ='#6e526b',label='Salt')
-            # # ax[1].plot(Concfine,hgt,color ='y',label='fine')
-            # # # ax[1].plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
-        
-            # # plt.plot(FineProf,hgt,color ='y',label='fine')
-            # # plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
-            # # plt.plot(DstProf,hgt, color = '#067084',label='Dust')
-
-            # fig = plt.figure()
-            # plt.scatter(FineProfext,hgt,color ='y',label='fine')
-            # plt.scatter(SeaProfext,hgt,color ='#6e526b',label='Salt')
-            # plt.scatter(DstProfext,hgt, color = '#067084',label='Dust')
-            # plt.legend()
-
-
-            AeroProf = AeroProfNorm_sc2(DictHsrl)
-            
+            AeroProf = AeroProfNorm_sc2(DictHsrl) #vertical profiles of Dust, marine and fine contribution to the total aod caculated based on the dust mixing ratio and fine mode fraction.
+            AerClassAOD = AeroClassAOD(DictHsrl)
             # AeroProf =AeroProfNorm_FMF(DictHsrl)
 
             FineProfext,DstProfext,SeaProfext = AeroProf[0],AeroProf[1],AeroProf[2]
@@ -1057,9 +1020,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
         #rslts contain all the results form the GRASP inverse run
         rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
         
-        return rslts, max_alt, info
-
-
+        return rslts, max_alt, info, AerClassAOD 
 
 def PlotRandomGuess(filename_npy, NoItr): 
     #This function plots the values  from all the  random inital guesses. 
@@ -1161,8 +1122,10 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
 
 # /tmp/tmpn596k7u8$
     rslt_HSRL_1 = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo)
+    # rslt_HSRL_1 = Read_Data_HSRL_Oracles_Height_No355(HSRLfile_path,HSRLfile_name,HSRLPixNo)
     rslt_HSRL =  rslt_HSRL_1[0]
     rslt_RSP = Read_Data_RSP_Oracles(file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn)
+
     
     rslt= {}  # Teh order of the data is  First lidar(number of wl ) and then Polarimter data 
     rslt['lambda'] = np.concatenate((rslt_HSRL['lambda'],rslt_RSP['lambda']))
@@ -1172,7 +1135,8 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     IndHSRL = rslt_HSRL['lambda'].shape[0]
     sort_Lidar, sort_MAP  = np.array([0,3,7]),np.array([1,2,4,5,6])
     
-
+    # sort_Lidar, sort_MAP  = np.array([0,2,6]),np.array([1,3,4,5])
+    
 # The shape of the variables in RSPkeys and HSRLkeys should be equal to no of wavelength
 #  Setting np.nan in place of the measurements for wavelengths for which there is no data
     RSPkeys = ['meas_I', 'meas_P','sza', 'vis', 'sca_ang', 'fis']
@@ -1232,210 +1196,9 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
         print(rslt['gaspar'])
 
 
-        # if VertProfConstrain == True: #True of we want to apply vertical profile normalization
-    
-    
-    # hgt =  rslt_HSRL['RangeLidar'][:,0][:]
-    # DP1064= rslt_HSRL['meas_DP'][:,2][:]
-    # aDP= rslt_HSRL_1[3] #Particle depol ratio at 532
-    # maxDP =  np.nanmax(aDP)
-    # Vext1 = rslt_HSRL['meas_VExt'][:,1]
-    # #Dust mixing ratio  using the Sugimoto and Lee, Appl Opt 2006"
-    # DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
-    
-
-    
-    # if np.any(DMR1 > 1):
-    #     warnings.warn('DMR > 1, renormalizing', UserWarning)
-    #     DMR = DMR1/np.nanmax(DMR1)
-    # else: 
-    #     DMR= DMR1 
-
-    # # AEt= rslt_HSRL_1[5]
-    # # AEsph= rslt_HSRL_1[3]
-
-    # FMF = rslt_HSRL_1[4]
-    # #Boundary layer height
-    # BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
-    # BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
-
-    # #Caculating the fine mode fraction
-    # # FMF = AEt/AEsph #assumption: angstrom exponent for evry large particle is very small
-    # #Filtering
-    # FMF[np.where(FMF<0)[0] ]= 0
-    # FMF[np.where(FMF>=1)[0]] = 1
-    # # print(FMF)
-    
-
-    # #Separating the contribution of dust to total extinction
-    # VextDst = DMR1 * Vext1
-    # #Separating the contribution of non-dust
-    # Vextoth = (1-DMR1)* Vext1
-
-    # #Spearating the contribution from fine mode 
-    # Vextfine = FMF*Vextoth
-
-    # # Vextfine[np.where(hgt>=BLH)[0]] = Vextoth[np.where(hgt>=BLH)[0]]
-    
-    # Vextfine[np.where(hgt<BLH)[0]]= Vextfine[np.where(hgt<BLH)[0]] 
-    # Vextfine[np.where(Vextfine <=0)[0]]= 1e-18 
-
-    # #Contribution from sea salt = ext from non dust - fine
-    # VextSea = Vextoth - Vextfine
-    # # VextSea[np.where(hgt<BLH)[0]] = Vextoth[np.where(hgt<BLH)[0]]
-    # VextSea[np.where(hgt>=BLH)[0]] = 1e-18
-    # VextSea[np.where(VextSea <=0)[0]]= 1e-18 
-
-    # #Normalizing such that int(Vext.dh) = 1. This is equivalent of using vol conc
-    # DstProfext =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-    # FineProfext = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-    # SeaProfext = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
-
-    # #Plotting the extinction from each aerosol
-    # fig,ax = plt.subplots(1,1, figsize=(6,6))
-    # ax.plot(VextDst,hgt, color = '#067084',label='Dust')
-    # ax.plot(VextSea,hgt,color ='#6e526b',label='Salt')
-    # ax.plot(Vextfine,hgt,color ='y',label='fine')
-    # ax.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
-    # ax.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
-    # ax.set_xlabel('VExt m-1')
-    # ax.set_ylabel('Altitude m')
-    # plt.legend()
-    # plt.savefig('Vert.png', dpi = 300)       
-    # #
-    
-
-    
-
-    #Converting Vext to Conc caculated using the grasp formward model
-
-    # hex_dust = {'Hexdm': 24385.083, 'Hexdc': 2.594e-6}
-    # sph_dust = {'Sphdm': 19291.567, 'Sphdc': 9.810e-7}
-    # hex_fine = {'Hexfm':10093.924,'Hexfc': 6.966e-06}
-    # sph_fine = {'Sphfm':10698.098,'Sphfc': 3.603e-06}
-    # hex_sea = {'HexSm': 8351.136,'HexSc': 0} #TODO correct this value of HexSc
-    # sph_sea = {'SphSm': 8749.598,'SphSc':1.807e-5}
-
-
-
-    # hex_dust = {'Hexdm': 24456.650, 'Hexdc': -4.906e-06}
-    # sph_dust = {'Sphdm': 19421.576, 'Sphdc': 6.52e-06}
-    # hex_fine = {'Hexfm':10093.924,'Hexfc': 6.966e-06}
-    # sph_fine = {'Sphfm':10698.098,'Sphfc': 3.603e-06}
-    # hex_sea = {'HexSm': 8351.136,'HexSc': 0} #TODO correct this value of HexSc
-    # sph_sea = {'SphSm': 8749.598,'SphSc':1.807e-5}
-
-
-    # if Kernel_type == "TAMU" :
-    #     Concfine = hex_fine['Hexfm'] * Vextfine + hex_fine['Hexfc']
-    #     Concdust = hex_dust['Hexdm'] * VextDst + hex_dust['Hexdc']
-    #     Concsea = hex_sea['HexSm'] * VextSea + hex_sea['HexSc']
-    
-    # if Kernel_type == "sphro" :
-    #     Concfine = sph_fine['Sphfm'] * Vextfine + sph_fine['Sphfc']
-    #     Concdust = sph_dust['Sphdm'] * VextDst + sph_dust['Sphdc']
-    #     Concsea = sph_sea['SphSm'] * VextSea + sph_sea['SphSc']
-    
-
-    # DstProf =Concdust/ np.trapz(Concdust[::-1],hgt[::-1])
-    # FineProf = Concfine/np.trapz(Concfine[::-1],hgt[::-1])
-    # SeaProf = Concsea/ np.trapz(Concsea[::-1],hgt[::-1])
-
-
-    # rslt2 = rslt_HSRL_1[0]
-    # Vext1 = rslt_HSRL['meas_VExt'][:,0]
-    # hgt =  rslt_HSRL['RangeLidar'][:,0][:]
-    # DP1064= rslt_HSRL['meas_DP'][:,2][:]
-    # aDP= rslt_HSRL_1[4] #Particle depol ratio at 532
-    # maxDP =  np.nanmax(aDP[HSRLPixNo])
-    # #Dust mixing ratio  using the Sugimoto and Lee, Appl Opt 2006"
-    # DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
-    
-
-    # AEt= rslt_HSRL_1[5][HSRLPixNo]
-    # AEsph= rslt_HSRL_1[3][HSRLPixNo]
-    
-
-    # #Boundary layer height
-    # BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
-    # BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
-
-
-    # if np.any(DMR1 > 1):
-    #     warnings.warn('DMR > 1, renormalizing', UserWarning)
-    #     DMR = DMR1/np.nanmax(DMR1)
-    # else:
-    #     DMR = DMR1
-    #     #Renormalize.
-    
-    # # Vext_noise = 1e-6
-    # VextDst = DMR1 * Vext1
-    # Vextoth = (1-DMR)* Vext1
-    # FMF = AEt/AEsph #assumption: angstrom exponent for evry large particle is very small
-   
-    # Vextfine = FMF*Vextoth 
-    # Vextfine[np.where(Vextfine <0)]= 1e-8 
-    # VextSea = Vextoth - Vextfine
-    # VextSea[np.where(hgt>BLH)] = 1e-8
-
-    
-
-    # #Converting Vext to Conc caculated using the grasp formward model
- 
-    # hex_dust = {'Hexdm': 24385.083, 'Hexdc': 2.594e-6}
-    # sph_dust = {'Sphdm': 19291.567, 'Sphdc': 9.810e-7}
-    # hex_fine = {'Hexfm':10093.924,'Hexfc': 6.966e-06}
-    # sph_fine = {'Sphfm':10698.098,'Sphfc': 3.603e-06}
-    # hex_sea = {'HexSm': 8351.136,'HexSc': -4.560e-08}
-    # sph_sea = {'SphSm': 8749.598,'SphSc':1.807e-5}
-
-
-    # if Kernel_type == "TAMU" :
-    #     Concfine = hex_fine['Hexfm'] * Vextfine + hex_fine['Hexfc']
-    #     Concdust = hex_dust['Hexdm'] * Vextfine + hex_dust['Hexdc']
-    #     Concsea = hex_sea['HexSm'] * Vextfine + hex_sea['HexSc']
-    
-    # if Kernel_type == "sphro" :
-    #     Concfine = sph_fine['Sphfm'] * Vextfine + sph_fine['Sphfc']
-    #     Concdust = sph_dust['Sphdm'] * Vextfine + sph_dust['Sphdc']
-    #     Concsea = sph_sea['SphSm'] * Vextfine + sph_sea['SphSc']
-    
-
-    # DstProf =Concdust/ np.trapz(Concdust[::-1],hgt[::-1])
-    # FineProf = Concfine/np.trapz(Concfine[::-1],hgt[::-1])
-    # SeaProf = Concsea/ np.trapz(Concsea[::-1],hgt[::-1])
- 
-
-
-    # DMR[DMR>1] = 1  # ratios must be 1
-    # VextDst = 0.99999*DMR*Vext1
-    
-    # VBack = 0.00002*Vextoth
-    # Voth = 0.99998*Vextoth
-
-    # VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
-    # Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
-    
-    # DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-    # FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-    # SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
-    
-    # # #apriori estimate for the vertical profile
-    # fig = plt.figure()
-    # plt.plot(VextDst,hgt, color = '#067084',label='Dust')
-    # plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
-    # plt.plot(Vextfine,hgt,color ='y',label='fine')
-    # plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
-    # plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
-    # plt.legend()
-
-    # fig = plt.figure()
-    # plt.plot(FineProf,hgt,color ='y',label='fine')
-    # plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
-    # plt.plot(DstProf,hgt, color = '#067084',label='Dust')
-    # plt.legend()
 
     AeroProf = AeroProfNorm_sc2(rslt_HSRL_1)
+    
     # AeroProf =AeroProfNorm_FMF(rslt_HSRL_1)
     FineProfext,DstProfext,SeaProfext = AeroProf[0],AeroProf[1],AeroProf[2]
 
@@ -2167,22 +1930,36 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT,rslts_Sph2=None,rslts_Tamu2=N
         RepMode =2
     else:
         RepMode =1
+    
+    
     Spheriod,Hex = rslts_Sph[0],rslts_Tamu[0]
 
-    cm_sp = ['k','#8B4000', '#87C1FF']
-    cm_t = ["#BC106F",'#E35335', 'b']
+    cm_sp = ['#4459AA','#14411b', '#87C1FF']
+    cm_t = ["#14411b",'#adbf4b', '#9BB54C']
+
+
+    cm_sp2 = ['b','#BFBF2A', '#844772']
+    cm_t2 = ["#14411b",'#936ecf', '#FFA500']
+
+
+    j_sp = ['#757565','#5F381A', '#4BCBE2']
+    j_t = ["#882255",'#D44B15', '#1E346D']
+
+
+
     color_sph = '#0c7683'
     color_tamu = "#BC106F"
 
     fig, axs2 = plt.subplots(nrows= 3, ncols=2, figsize=(35, 20))
+    fig, axsErr = plt.subplots(nrows= 3, ncols=2, figsize=(20, 15))
         
 
 
     for i in range(RepMode):
         if i ==1:
             Spheriod,Hex = rslts_Sph2[0],rslts_Tamu2[0]
-            cm_sp = ['#b54cb5','#14411b', '#87C1FF']
-            cm_t = ["#14411b",'#adbf4b', 'b']
+            # cm_sp = ['#b54cb5','#14411b', '#87C1FF']
+            # cm_t = ["#14411b",'#adbf4b', 'b']
             color_sph = '#adbf4b'
             color_tamu = "#936ecf"
 
@@ -2218,6 +1995,9 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT,rslts_Sph2=None,rslts_Tamu2=N
         for i in range(len(Retrival)):
             a,b = i%3,i%2
             for mode in range(Spheriod['r'].shape[0]): #for each modes
+
+                Err = Spheriod[Retrival[i]][mode] - Hex[Retrival[i]][mode]
+                   
                 if i ==0:
 
                     # axs2[a,b].errorbar(Spheriod['r'][mode], Spheriod[Retrival[i]][mode],xerr=UNCERT['rv'],capsize=5,capthick =2, marker = "$O$",color = cm_sp[mode],lw = 3,ls = linestyle[mode], label=f"Sphrod_{mode_v[mode]}")
@@ -2226,12 +2006,38 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT,rslts_Sph2=None,rslts_Tamu2=N
                     axs2[a,b].plot(Spheriod['r'][mode], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_sp[mode],lw = 2,ls = linestyle[mode], label=f"Sphrod_{mode_v[mode]}")
                     axs2[a,b].plot(Hex['r'][mode],Hex[Retrival[i]][mode], marker = "H", color = cm_t[mode] ,lw = 2, ls = linestyle[mode],label=f"Hex_{mode_v[mode]}")
                     
+                    # DiffShape = Spheriod[Retrival[i]][mode] - Hex[Retrival[i]][mode]
+                    # Err = DiffShape  # how much does hexhahderal vary  from spheriod
+
+                    # if DiffShape>0: markerErr = "$S>$"
+                    # if DiffShape<=0: markerErr =  "."
+
+                    axsErr[a,b].plot(Spheriod['r'][mode], Err,  marker = "o",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    
+                    
+                    
                     axs2[0,0].set_xlabel(r'rv $ \mu m$')
                     axs2[0,0].set_xscale("log")
+
+                    axsErr[a,b].set_xlabel(r'rv $ \mu m$')
+                    axsErr[a,b].set_xscale("log")
                 else:
 
                     axs2[a,b].errorbar(lambda_ticks_str, Spheriod[Retrival[i]][mode],yerr=UNCERT[Retrival[i]], marker = "$O$",markeredgecolor='k',capsize=7,capthick =2,markersize=25, color = cm_sp[mode],lw = 4,ls = linestyle[mode], label=f"Sphrod_{mode_v[mode]}")
                     axs2[a,b].errorbar(lambda_ticks_str,Hex[Retrival[i]][mode],yerr=UNCERT[Retrival[i]],capsize=7,capthick =2,  marker = "H",markeredgecolor='k',markersize=25, color = cm_t[mode] ,lw = 4, ls = linestyle[mode],label=f"Hex_{mode_v[mode]}")
+                    
+                    
+                    # DiffShape = Spheriod[Retrival[i]][mode] - Hex[Retrival[i]][mode]
+                    # Err = DiffShape  # how much does hexhahderal vary  from spheriod
+
+                    # if DiffShape>0: markerErr = "$S>$"
+                    # if DiffShape<=0: markerErr =  "."
+
+                    axsErr[a,b].plot(lambda_ticks_str, Err,  marker = "o",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    axsErr[a,b].set_xticks(lambda_ticks_str) 
+                    # axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+                    axsErr[a,b].set_xlabel(r'$\lambda \mu m$')
+                    
                     
                     # axs[a,b].plot(Spheriod['lambda'], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_sp[mode],lw = 2,ls = linestyle[mode],markersize=15, label=f"Sphrod_{mode_v[mode]}")
                     # axs[a,b].plot(Hex['lambda'],Hex[Retrival[i]][mode], marker = "H",color = cm_t[mode] ,lw = 2,  ls = linestyle[mode],markersize=15, label=f"Hex_{mode_v[mode]}")
@@ -2248,14 +2054,17 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT,rslts_Sph2=None,rslts_Tamu2=N
         
         axs2[2,1].errorbar(lambda_ticks_str, Spheriod['aod'],yerr=0.03+UNCERT['aod']*Spheriod['aod'], marker = "$O$",color = color_sph,markeredgecolor='k',capsize=7,capthick =2,markersize=25,lw = 4, label=f"Sphroid")
         axs2[2,1].errorbar(lambda_ticks_str, Hex['aod'],yerr=0.03+UNCERT['aod']* Hex['aod'], marker = "H", color = color_tamu ,lw = 4,markeredgecolor='k',capsize=7,capthick =2,markersize=25, label=f"Hex")
-            
+        axsErr[2,1].errorbar(lambda_ticks_str, Err, marker = "o", color = color_tamu ,lw = 5,markeredgecolor='k',capsize=5,capthick =2,markersize=25, label=f"Hex")
+          
         
         axs2[2,1].set_xticks(lambda_ticks_str)
         # axs[2,1].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
-                
+        axsErr[2,1].set_xlabel(r'$\lambda$')
+        axsErr[2,1].set_ylabel('Total AOD')    
         axs2[2,1].set_xlabel(r'$\lambda$')
         axs2[2,1].set_ylabel('Total AOD')
         axs2[0,0].legend(prop = { "size": 21 }, ncol=2)
+        axsErr[0,0].legend(prop = { "size": 21 }, ncol=1)
         axs2[2,1].legend()
         lat_t = Hex['latitude']
         lon_t = Hex['longitude']
@@ -2339,9 +2148,10 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT,rslts_Sph2=None,rslts_Tamu2=N
 
             plt.tight_layout(rect=[0, 0, 1, 1])
 
-
-
 def Ext2Vconc(botLayer,topLayer,Nlayers,wl, Shape, AeroType = None, ):
+
+
+    "Run GRASP forward model"
 
     dict_of_dicts = {}
 
@@ -2367,7 +2177,7 @@ def Ext2Vconc(botLayer,topLayer,Nlayers,wl, Shape, AeroType = None, ):
     if 'seasalt' in AeroType.lower():
         rv,sigma, n, k, sf = 1.5 , 0.6, 1.33, 0.0001, 0.999          
     if 'fine' in AeroType.lower():
-        rv,sigma, n, k, sf = 0.13, 0.49, 1.45, 0.003, 0.99
+        rv,sigma, n, k, sf = 0.13, 0.49, 1.45, 0.003, 1e-6
     
     #Setting the shape model Sphroids and Hexhedral
     if 'sph' in Shape.lower():
@@ -2447,7 +2257,7 @@ def Ext2Vconc(botLayer,topLayer,Nlayers,wl, Shape, AeroType = None, ):
 
     return dict_of_dicts, VConcandExt
    
-#     #for Hexahedra
+
 
 # botLayer = 2000
 # topLayer = 4000
@@ -2483,6 +2293,1085 @@ def PlotE2C(v,name = None):
 
     return m,b
 # #Plot Vext VS volume Conc
+
+def PlotSensitivity(SphLagrangian,TAMULagrangian, variableName):
+        Index1 = [0,1,2]
+        Index2 = [0,1,2]
+        # AprioriLagrange = [1e-2,1e-1,1]
+
+        fig, axs1= plt.subplots(nrows = 1, ncols =3, figsize= (20,10))  #TODO make it more general which adjust the no of rows based in numebr of wl
+        plt.subplots_adjust(top=0.78)
+
+        fig, axs2= plt.subplots(nrows = 1, ncols =3, figsize= (20,10))
+        plt.subplots_adjust(top=0.78)
+        
+        fig, axs= plt.subplots(nrows = 1, ncols =2, figsize= (15,10))
+       
+        for j in range(len(variableName)):
+            Hsph = SphLagrangian[j][0][0]
+            HTam = TAMULagrangian[j][0][0]
+
+
+
+
+    #Converting range to altitude
+            altd = (Hsph['RangeLidar'][:,0])/1000 #altitude for spheriod
+            altT = (Hsph['RangeLidar'][:,0])/1000 #altitude for hexahedra
+            
+            for i in range(3):
+                wave = str(Hsph['lambda'][i]) +"μm"
+                axs1[i].plot(Hsph['fit_VBS'][:,Index1[i]],altd, marker = "$O$",label =f"Sph{variableName[j]}",alpha =0.8)
+                axs1[i].plot(HTam['fit_VBS'][:,Index2[i]],altd,ls = "--", label=f"Hex{variableName[j]}", marker = "h")
+
+                axs1[i].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+
+                # print(UNCERT)
+                # axs[i].errorbar(Hsph['fit_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#025043", marker = "$O$",label ="Sphd")
+                # axs[i].errorbar(HTam['fit_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#d24787",ls = "--", label="Hex", marker = "h")
+
+                axs1[i].set_xlabel(f'$ VBS (m^{-1}Sr^{-1})$')
+                axs1[0].set_ylabel('Height above ground (km)')
+
+                axs1[i].set_title(wave)
+
+                if j ==0:
+                    axs1[i].errorbar(Hsph['meas_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#695E93", capsize=3,capthick =1,alpha =0.4, label =f"{UNCERT['VBS']}")
+                
+                    axs1[i].plot(Hsph['meas_VBS'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
+                
+
+                if (i ==0 ):
+                    # axs1[i].errorbar(Hsph['meas_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#695E93", capsize=3,capthick =1,alpha =0.4, label =f"{UNCERT['VBS']}")
+                
+                    # axs1[i].plot(Hsph['meas_VBS'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
+                
+                    axs1[0].legend(prop = { "size": 10 })
+                # plt.suptitle(f"HSRL Vertical Backscatter profile  \nLat,Lon: {HTam['latitude']}, {HTam['longitude']} Date: {HTam['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+            # pdf_pages.savefig()
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_HSRL Vertical Backscatter profile_Lagrangian_multiplier .png',dpi = 300)
+                # plt.tight_layout()
+            
+
+            # AOD = np.trapz(Hsph['meas_VExt'],altd)
+            for i in range(3):
+                wave = str(Hsph['lambda'][i]) +"μm"
+
+                axs2[i].plot(Hsph['fit_DP'][:,Index1[i]],altd, marker = "$O$",label =f"Sph{variableName[j]}")
+                axs2[i].plot(HTam['fit_DP'][:,Index2[i]],altd, ls = "--",marker = "h",label=f"Hex{variableName[j]}")
+                
+                # axs[i].errorbar(Hsph['fit_DP'][:,i],altd,xerr= UNCERT['DP'],fmt='-o',color = "#025043", marker = "$O$",label ="Sphd")
+                # axs[i].errorbar(HTam['fit_DP'][:,i],altd,xerr= UNCERT['DP'],fmt='-o',color = "#d24787",ls = "--", label="Hex", marker = "h")
+
+
+                axs2[i].set_xlabel('DP %')
+                axs2[i].set_title(wave)
+                if j ==0:
+                    axs2[i].errorbar(Hsph['meas_DP'][:,Index1[i]],altd,xerr= UNCERT['DP'],color = '#695E93', capsize=4,capthick =1,alpha =0.6, label =f"{UNCERT['DP']}%")
+                    
+                    axs2[i].plot(Hsph['meas_DP'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
+               
+                if (i ==0 ):
+                    axs2[0].legend(prop = { "size": 10 })
+                axs2[0].set_ylabel('Height above ground (km)')
+                # plt.suptitle(f"HSRL Depolarization Ratio \n Lat,Lon: {HTam['latitude']}, {HTam['longitude']}  Date: {HTam['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+            # pdf_pages.savefig()
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_HSRL Depolarization Ratio_LagrangianMultiplier.png',dpi = 300)
+            plt.subplots_adjust(top=0.78)
+            for i in range(2):
+                
+                wave = str(Hsph['lambda'][i]) +"μm"
+                # axs[i].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+
+                axs[i].plot(1000*Hsph['fit_VExt'][:,Index1[i]],altd, marker = "$O$",label =f"Sph{variableName[j]}")
+                axs[i].plot(1000*HTam['fit_VExt'][:,Index2[i]],altd,ls = "--", marker = "h",label=f"Hex{variableName[j]}")
+                
+                axs[i].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+                axs[i].ticklabel_format(style="sci", axis="x")
+                # axs[i].errorbar(Hsph['fit_VExt'][:,i],altd,xerr= UNCERT['VEXT'],color = "#025043", marker = "$O$",label ="Sphd")
+                # axs[i].errorbar(HTam['fit_VExt'][:,i],altd,xerr= UNCERT['VEXT'],color = "#d24787",ls = "--", label="Hex", marker = "h")
+
+                
+                
+                axs[i].set_xlabel(f'$VExt (km^{-1})$')
+                axs[0].set_ylabel('Height above ground (km)')
+                axs[i].set_title(wave)
+                axs[i].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+
+
+                if j ==0:
+                    axs[i].errorbar(1000*Hsph['meas_VExt'][:,Index1[i]],altd,xerr= UNCERT['VEXT']*1000*Hsph['meas_VExt'][:,i],color = '#695E93',capsize=4,capthick =1,alpha =0.7, label =f"{UNCERT['VEXT']*100}%")
+                
+                    axs[i].plot(1000*Hsph['meas_VExt'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
+                
+                if i ==0:
+                   
+                    axs[0].legend(prop = { "size": 10 })
+                # plt.suptitle(f"HSRL Vertical Extinction profile TAMU\n Lat,Lon: {HTam['latitude']},{HTam['longitude']}  Date: {HTam['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+            plt.tight_layout()
+            # pdf_pages.savefig()
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_HSRL_Vertical_Ext_profile_Var1.png',dpi = 300)
+
+def PlotSensitivity2(SphLagrangian,TAMULagrangian):
+        Index1 = [0,1,2]
+        Index2 = [0,1,2]
+        # AprioriLagrange = [1e-2,1e-1,1]
+
+        fig, axs1= plt.subplots(nrows = 1, ncols =3, figsize= (15,6))  #TODO make it more general which adjust the no of rows based in numebr of wl
+        plt.subplots_adjust(top=0.78)
+
+        fig, axs2= plt.subplots(nrows = 1, ncols =3, figsize= (15,6))
+        plt.subplots_adjust(top=0.78)
+        
+        fig, axs= plt.subplots(nrows = 1, ncols =2, figsize= (11,6))
+       
+        for j in range(5):
+            Hsph = SphLagrangian[j][0][0]
+            HTam = TAMULagrangian[j][0][0]
+
+
+
+
+    #Converting range to altitude
+            altd = (Hsph['RangeLidar'][:,0])/1000 #altitude for spheriod
+            altT = (Hsph['RangeLidar'][:,0])/1000 #altitude for hexahedra
+            
+            for i in range(3):
+                wave = str(Hsph['lambda'][i]) +"μm"
+                axs1[i].plot(Hsph['fit_VBS'][:,Index1[i]],altd, marker = "$O$",label =f"{VariName[j]}",alpha =0.8)
+                # axs1[i].plot(HTam['fit_VBS'][:,Index2[i]],altd,ls = "--", label=f"{AprioriLagrange[j]}", marker = "h")
+
+                axs1[i].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+
+                # print(UNCERT)
+                # axs[i].errorbar(Hsph['fit_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#025043", marker = "$O$",label ="Sphd")
+                # axs[i].errorbar(HTam['fit_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#d24787",ls = "--", label="Hex", marker = "h")
+
+                axs1[i].set_xlabel(f'$ VBS (m^{-1}Sr^{-1})$')
+                axs1[0].set_ylabel('Height above ground (km)')
+
+                axs1[i].set_title(wave)
+
+                if j ==0:
+                    axs1[i].errorbar(Hsph['meas_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#695E93", capsize=3,capthick =1,alpha =0.4, label =f"{UNCERT['VBS']}")
+                
+                    axs1[i].plot(Hsph['meas_VBS'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
+                
+
+                if (i ==0 ):
+                    # axs1[i].errorbar(Hsph['meas_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#695E93", capsize=3,capthick =1,alpha =0.4, label =f"{UNCERT['VBS']}")
+                
+                    # axs1[i].plot(Hsph['meas_VBS'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
+                
+                    axs1[0].legend()
+                plt.suptitle(f"HSRL Vertical Backscatter profile  \nLat,Lon: {HTam['latitude']}, {HTam['longitude']} Date: {HTam['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+            # pdf_pages.savefig()
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_HSRL Vertical Backscatter profile_Lagrangian_multiplier .png',dpi = 300)
+                # plt.tight_layout()
+            
+
+            # AOD = np.trapz(Hsph['meas_VExt'],altd)
+            for i in range(3):
+                wave = str(Hsph['lambda'][i]) +"μm"
+
+                axs2[i].plot(Hsph['fit_DP'][:,Index1[i]],altd, marker = "$O$",label =f"{AprioriLagrange[j]}")
+                # axs2[i].plot(HTam['fit_DP'][:,Index2[i]],altd, ls = "--",marker = "h",label=f"{AprioriLagrange[j]}")
+                
+                # axs[i].errorbar(Hsph['fit_DP'][:,i],altd,xerr= UNCERT['DP'],fmt='-o',color = "#025043", marker = "$O$",label ="Sphd")
+                # axs[i].errorbar(HTam['fit_DP'][:,i],altd,xerr= UNCERT['DP'],fmt='-o',color = "#d24787",ls = "--", label="Hex", marker = "h")
+
+
+                axs2[i].set_xlabel('DP %')
+                axs2[i].set_title(wave)
+                if j ==0:
+                    axs2[i].errorbar(Hsph['meas_DP'][:,Index1[i]],altd,xerr= UNCERT['DP'],color = '#695E93', capsize=4,capthick =1,alpha =0.6, label =f"{UNCERT['DP']}%")
+                    
+                    axs2[i].plot(Hsph['meas_DP'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
+               
+                if (i ==0 ):
+                    axs2[0].legend()
+                axs2[0].set_ylabel('Height above ground (km)')
+                plt.suptitle(f"HSRL Depolarization Ratio \n Lat,Lon: {HTam['latitude']}, {HTam['longitude']}  Date: {HTam['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+            # pdf_pages.savefig()
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_HSRL Depolarization Ratio_LagrangianMultiplier.png',dpi = 300)
+            plt.subplots_adjust(top=0.78)
+            for i in range(2):
+                wave = str(Hsph['lambda'][i]) +"μm"
+
+                axs[i].plot(Hsph['fit_VExt'][:,Index1[i]],altd, marker = "$O$",label =f"{AprioriLagrange[j]}")
+                # axs[i].plot(HTam['fit_VExt'][:,Index2[i]],altd,ls = "--", marker = "h",label=f"{AprioriLagrange[j]}")
+                
+                axs[i].xaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+                axs[i].ticklabel_format(style="sci", axis="x")
+                # axs[i].errorbar(Hsph['fit_VExt'][:,i],altd,xerr= UNCERT['VEXT'],color = "#025043", marker = "$O$",label ="Sphd")
+                # axs[i].errorbar(HTam['fit_VExt'][:,i],altd,xerr= UNCERT['VEXT'],color = "#d24787",ls = "--", label="Hex", marker = "h")
+
+                
+                
+                axs[i].set_xlabel(f'$VExt (m^{-1})$')
+                axs[0].set_ylabel('Height above ground (km)')
+                axs[i].set_title(wave)
+
+                if j ==0:
+                    axs[i].errorbar(Hsph['meas_VExt'][:,Index1[i]],altd,xerr= UNCERT['VEXT']*Hsph['meas_VExt'][:,i],color = '#695E93',capsize=4,capthick =1,alpha =0.7, label =f"{UNCERT['VEXT']*100}%")
+                
+                    axs[i].plot(Hsph['meas_VExt'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
+                
+                if i ==0:
+                   
+                    axs[0].legend()
+                plt.suptitle(f"HSRL Vertical Extinction profile TAMU\n Lat,Lon: {HTam['latitude']},{HTam['longitude']}  Date: {HTam['datetime']}\n ") #Initial condition strictly constrainted by RSP retrievals
+            plt.tight_layout()
+            # pdf_pages.savefig()
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_HSRL_Vertical_Ext_profile_lagragian_multiplier.png',dpi = 300)
+
+def errPlots(rslts_Sph,rslts_Tamu):
+
+
+    ErrSph = 100*(abs(rslts_Sph[0]['meas_I'] - rslts_Sph[0]['fit_I']))/rslts_Sph[0]['meas_I']
+    ErrHex = 100*(abs(rslts_Tamu[0]['meas_I'] - rslts_Tamu[0]['fit_I']))/rslts_Tamu[0]['meas_I']
+
+
+    #This fucntion the error between the measuremtn and the fit from RSP for all wl and all scattering angles.
+    wl = rslts_Sph[0]['lambda']
+    colorwl = ['#70369d','#4682B4','#01452c','#FF7F7F','#d4af37','#4c0000']
+    
+    fig, axs = plt.subplots(nrows= 1, ncols=2, figsize=(16, 9), sharey =True)
+    for i in range(len(wl)):
+        axs[0].plot(rslts_Sph[0]['sca_ang'][:,i], ErrSph[:,i] ,color = colorwl[i],marker = "$O$",markersize= 10, lw = 0.2,label=f"{np.round(wl[i],2)}")
+        axs[1].plot(rslts_Tamu[0]['sca_ang'][:,i], ErrHex[:,i],color = colorwl[i], marker = 'H',markersize= 12, lw = 0.2,label=f"{np.round(wl[i],2)}" )
+    axs[0].set_title('Spheriod')
+    axs[1].set_title('Hexahedral')
+
+    axs[0].plot(rslts_Sph[0]['sca_ang'][:,0], 100*UNCERT['I']*np.ones(len(ErrSph[:,i])) ,color = 'k',ls = '--', lw = 1,label=f"Meas Uncert")
+    axs[1].plot(rslts_Sph[0]['sca_ang'][:,0], 100*UNCERT['I']*np.ones(len(ErrSph[:,i])) ,color = 'k',ls = '--', lw = 1,label=f"Meas Uncert")
+
+
+    axs[0].set_ylabel('Error I %')
+    # axs[1].set_ylabel('Error %')
+    plt.legend( ncol=2)
+
+    axs[0].set_xlabel(r'${\theta_s}$')
+    axs[1].set_xlabel(r'${\theta_s}$')
+    plt.suptitle("RSP-Only Case 1")
+    # plt.savefig(f'{file_name[2:]}_{RSP_PixNo}_ErrorI.png', dpi = 300)
+
+    #Absolute err because DOLP are in %
+    ErrSphP = 100*(abs(rslts_Sph[0]['meas_P_rel'] - rslts_Sph[0]['fit_P_rel']))
+    ErrHexP = 100*(abs(rslts_Tamu[0]['meas_P_rel'] - rslts_Tamu[0]['fit_P_rel']))
+
+        
+    
+    fig, axs = plt.subplots(nrows= 1, ncols=2, figsize=(16, 9), sharey =True)
+    for i in range(len(wl)):
+        axs[0].plot(rslts_Sph[0]['sca_ang'][:,i], ErrSphP[:,i] ,color = colorwl[i],marker = "$O$",markersize= 10, lw = 0.2,label=f"{np.round(wl[i],2)}")
+        axs[1].plot(rslts_Tamu[0]['sca_ang'][:,i], ErrHexP[:,i],color = colorwl[i], marker = 'H',markersize= 12, lw = 0.2,label=f"{np.round(wl[i],2)}" )
+    axs[0].set_title('Spheriod')
+    axs[1].set_title('Hexahedral')
+
+    axs[0].plot(rslts_Sph[0]['sca_ang'][:,0], 100*UNCERT['DoLP']*np.ones(len(ErrSph[:,i])) ,color = 'k',ls = '--', lw = 1,label=f"Meas Uncert")
+    axs[1].plot(rslts_Sph[0]['sca_ang'][:,0], 100*UNCERT['DoLP']*np.ones(len(ErrSph[:,i])) ,color = 'k',ls = '--', lw = 1,label=f"Meas Uncert")
+
+
+    axs[0].set_ylabel('Error DoLP %')
+    # axs[1].set_ylabel('Error %')
+    plt.legend( ncol=2)
+
+    axs[0].set_xlabel(r'${\theta_s}$')
+    axs[1].set_xlabel(r'${\theta_s}$')
+    plt.suptitle("RSP-Only Case 1")
+
+def PlotSingle(rslts_Sph,HSRL_sphrodT):
+
+    #Combine the data from Lidar only and Map only 
+
+    sort_MAP = np.array([1, 2, 4, 5, 6])
+    sort_Lidar = np.array([0, 3, 7])
+
+    keys = ['lambda', 'aodMode', 'ssaMode', 'n', 'k', 'aod']
+    combdict ={}
+
+    combdict['lidarVol'] = HSRL_sphrodT[0][0]['dVdlnr']
+    combdict['lidarR'] = HSRL_sphrodT[0][0]['r']
+    
+    combdict['MapVol'] = rslts_Sph[0]['dVdlnr']
+    combdict['MapR'] = rslts_Sph[0]['r']
+    for key in keys:
+
+        
+
+        if len(rslts_Sph[0][key].shape)==1:
+            Val2 = np.ones((8))
+            Val2[sort_MAP ] =rslts_Sph[0][key]
+            Val2[sort_Lidar] = HSRL_sphrodT[0][0][key]
+
+            combdict[key] = Val2
+
+        else:
+            Val2 = np.ones((rslts_Sph[0][key].shape[0],8))
+            Val2[:,sort_MAP ] =rslts_Sph[0][key]
+            Val2[:,sort_Lidar] = HSRL_sphrodT[0][0][key]
+
+            combdict[key] = Val2
+
+    return combdict 
+
+def Plotcomb(rslts_Sph2,rslts_Tamu2,LidarPolSph,LidarPolTAMU):
+
+
+    # plot_HSRL(LidarPolSph[0][0],LidarPolTAMU[0][0],UNCERT, forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
+    
+    if (rslts_Sph2!=None )and (rslts_Tamu2!=None):
+        RepMode =2
+    else:
+        RepMode =1
+
+
+    Spheriod,Hex = rslts_Sph2,rslts_Tamu2
+
+    cm_sp = ['k','#8B4000', '#87C1FF']
+    cm_t = ["#BC106F",'#E35335', 'b']
+    color_sph = '#0c7683'
+    color_tamu = "#BC106F"
+
+    fig, axs2 = plt.subplots(nrows= 3, ncols=2, figsize=(35, 20))
+    fig, axsErr = plt.subplots(nrows= 3, ncols=2, figsize=(20, 15))
+        
+
+
+    for i in range(RepMode):
+        if i ==1:
+            Spheriod,Hex = rslts_Sph2,rslts_Tamu2
+            cm_sp = ['#b54cb5','#14411b', '#87C1FF']
+            cm_t = ["#14411b",'#adbf4b', 'b']
+            color_sph = '#adbf4b'
+            color_tamu = "#936ecf"
+
+        plt.rcParams['font.size'] = '26'
+        plt.rcParams["figure.autolayout"] = True
+        #Stokes Vectors Plot
+        date_latlon = ['datetime', 'longitude', 'latitude']
+        Xaxis = ['MapR','lambda','sca_ang','rv','height']
+        Retrival = ['dVdlnr','aodMode','ssaMode','n', 'k']
+        RetrivalMAP = ['MapVol','aodMode','ssaMode','n', 'k']
+        RetrivalLidar = ['lidarVol','aodMode','ssaMode','n', 'k']
+        #['sigma', 'vol', 'aodMode','ssaMode', 'rEff', 'costVal']
+        Angles =   ['sza', 'vis', 'fis','angle' ]
+        Stokes =   ['meas_I', 'fit_I', 'meas_P_rel', 'fit_P_rel']
+        Pij    = ['p11', 'p12', 'p22', 'p33'], 
+        Lidar=  ['heightStd','g','LidarRatio','LidarDepol', 'gMode', 'LidarRatioMode', 'LidarDepolMode']
+
+        # Plot the AOD data
+        y = [0,1,2,0,1,2,]
+        x = np.repeat((0,1),3)
+        NoMode =Spheriod['MapR'].shape[0]
+        if Spheriod['MapR'].shape[0] ==2 :
+                mode_v = ["fine", "dust","marine"]
+        if Spheriod['MapR'].shape[0] ==3 :
+            mode_v = ["fine", "dust","marine"]
+        linestyle =[':', '-','-.']
+        
+
+        lambda_ticks = np.round(Spheriod['lambda'], decimals=2)
+        lambda_ticks_str = [str(x) for x in lambda_ticks]
+
+        
+        
+        #Retrivals:
+        for i in range(len(Retrival)):
+            a,b = i%3,i%2
+            for mode in range(Spheriod['MapR'].shape[0]): #for each modes
+
+                ErrMap = Spheriod[RetrivalMAP[i]][mode] - Hex[RetrivalMAP[i]][mode]
+                ErrLidar = Spheriod[RetrivalLidar[i]][mode] - Hex[RetrivalLidar[i]][mode]
+               
+                    
+                if i ==0:
+
+                    cm_sp2 = ['#b54cb5','#14411b', '#87C1FF']
+                    cm_t2 = ["#14411b",'#adbf4b', 'b']
+                    color_sph2 = '#adbf4b'
+                    color_tamu2 = "#936ecf"
+
+                    
+
+                    # axs2[a,b].errorbar(Spheriod['r'][mode], Spheriod[Retrival[i]][mode],xerr=UNCERT['rv'],capsize=5,capthick =2, marker = "$O$",color = cm_sp[mode],lw = 3,ls = linestyle[mode], label=f"Sphrod_{mode_v[mode]}")
+                    # axs2[a,b].errorbar(Hex['r'][mode],Hex[Retrival[i]][mode], marker = "H",xerr=UNCERT['rv'],capsize=5,capthick =2, color = cm_t[mode] ,lw = 3, ls = linestyle[mode],label=f"Hex_{mode_v[mode]}")
+                        
+                    axs2[a,b].plot(Spheriod['MapR'][mode], Spheriod['MapVol'][mode], marker = "$O$",color = cm_sp[mode],lw = 3,ls = linestyle[mode], label=f"RSP_Sphrod_{mode_v[mode]}")
+                    axs2[a,b].plot(Hex['MapR'][mode],Hex['MapVol'][mode], marker = "H", color=cm_sp2[mode] ,lw = 3, ls = linestyle[mode],label=f"RSP_Hex_{mode_v[mode]}")
+                    
+
+                    axs2[a,b].plot(Spheriod['lidarR'][mode], Spheriod['lidarVol'][mode], marker = "$O$",color = cm_t[mode],lw = 3,ls = linestyle[mode], label=f"HSRL_Sphrod_{mode_v[mode]}")
+                    axs2[a,b].plot(Hex['lidarR'][mode],Hex['lidarVol'][mode], marker = "H", color = cm_t2[mode]  ,lw = 3, ls = linestyle[mode],label=f"HSRL_Hex_{mode_v[mode]}")
+                    
+                    # DiffShape = Spheriod[Retrival[i]][mode] - Hex[Retrival[i]][mode]
+                    # Err = DiffShape  # how much does hexhahderal vary  from spheriod
+
+                    # if DiffShape>0: markerErr = "$S>$"
+                    # if DiffShape<=0: markerErr =  "."
+
+                    axsErr[a,b].plot(Spheriod['MapR'][mode], ErrMap,  marker = "o",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    axsErr[a,b].plot(Spheriod['MapR'][mode], ErrLidar,  marker = "o",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    
+                    
+                    
+                    axs2[0,0].set_xlabel(r'rv $ \mu m$')
+                    axs2[0,0].set_xscale("log")
+
+                    axsErr[a,b].set_xlabel(r'rv $ \mu m$')
+                    axsErr[a,b].set_xscale("log")
+
+
+                    
+                else:
+
+                    axs2[a,b].errorbar(lambda_ticks_str, Spheriod[Retrival[i]][mode],yerr=UNCERT[Retrival[i]], marker = "$O$",markeredgecolor='k',capsize=7,capthick =2,markersize=25, color = cm_sp[mode],lw = 4,ls = linestyle[mode], label=f"Sphrod_{mode_v[mode]}")
+                    axs2[a,b].errorbar(lambda_ticks_str,Hex[Retrival[i]][mode],yerr=UNCERT[Retrival[i]],capsize=7,capthick =2,  marker = "H",markeredgecolor='k',markersize=25, color = cm_t[mode] ,lw = 4, ls = linestyle[mode],label=f"Hex_{mode_v[mode]}")
+                    
+                    
+                    # DiffShape = Spheriod[Retrival[i]][mode] - Hex[Retrival[i]][mode]
+                    # Err = DiffShape  # how much does hexhahderal vary  from spheriod
+
+                    # if DiffShape>0: markerErr = "$S>$"
+                    # if DiffShape<=0: markerErr =  "."
+
+                    axsErr[a,b].errorbar(lambda_ticks_str, ErrMap,  marker = "o",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    axsErr[a,b].set_xticks(lambda_ticks_str) 
+                    # axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+                    axsErr[a,b].set_xlabel(r'$\lambda \mu m$')
+                    
+                    
+                    # axs[a,b].plot(Spheriod['lambda'], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_sp[mode],lw = 2,ls = linestyle[mode],markersize=15, label=f"Sphrod_{mode_v[mode]}")
+                    # axs[a,b].plot(Hex['lambda'],Hex[Retrival[i]][mode], marker = "H",color = cm_t[mode] ,lw = 2,  ls = linestyle[mode],markersize=15, label=f"Hex_{mode_v[mode]}")
+                    
+                    axs2[a,b].set_xticks(lambda_ticks_str) 
+                    # axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+                    axs2[a,b].set_xlabel(r'$\lambda \mu m$')
+                    # axs2[a,b].set_xlim(0, np.maximum(Spheriod[Retrival[i]][mode],Hex[Retrival[i]][mode]))
+                    # fill = np.arange(np.min(Spheriod[Retrival[i]]), np.max(Spheriod[Retrival[i]]))
+                    # # Fill between y-coordinates 0.35 and 0.4, for x-coordinates from 0 to 1
+                    # axs2[a, b].fill(np.repeat(lambda_ticks_str[0], len(fill)), fill, color='gray', linewidth=5)
+
+                    # # Plot a line with x-coordinate 0.53, y-coordinate np.min(Spheriod[Retrival[i]]), and 0.55, np.max(Spheriod[Retrival[i]])
+                    # # Fill the region between the lines at 0.53 and 0.55
+                    # axs2[a, b].fill_between('0.53', '0.55', Spheriod[Retrival[i]], color='gray', alpha=0.3)
+
+                    # # Fill the region between the lines at 1 and 1.06
+                    # axs2[a, b].fill_between('1', '1.06', Spheriod[Retrival[i]], color='gray', alpha=0.3)
+                    #                     # Plot a line with x-coordinate 1, y-coordinate np.min(Spheriod[Retrival[i]]), and 1.06, np.max(Spheriod[Retrival[i]])
+                                        # axs2[a, b].plot('1.06',fill, color='gray', linewidth=5, alpha=0.3)
+                    axs2[a,b].set_ylabel(f'{Retrival[i]}')
+                                
+            
+        # axs[2,1].plot(Spheriod['lambda'], Spheriod['aod'], marker = "$O$",color = color_sph,markersize=15,lw = 2, label=f"Sphroid")
+        # axs[2,1].plot(Hex['lambda'], Hex['aod'], marker = "H", color = color_tamu ,markersize=15,lw = 2, label=f"Hexahedral")
+        
+        axs2[2,1].errorbar(lambda_ticks_str, Spheriod['aod'],yerr=0.03+UNCERT['aod']*Spheriod['aod'], marker = "$O$",color = color_sph,markeredgecolor='k',capsize=7,capthick =2,markersize=25,lw = 4, label=f"Sphroid")
+        axs2[2,1].errorbar(lambda_ticks_str, Hex['aod'],yerr=0.03+UNCERT['aod']* Hex['aod'], marker = "H", color = color_tamu ,lw = 4,markeredgecolor='k',capsize=7,capthick =2,markersize=25, label=f"Hex")
+        axsErr[2,1].errorbar(lambda_ticks_str, ErrMap, marker = "o", color = color_tamu ,lw = 5,markeredgecolor='k',capsize=5,capthick =2,markersize=25, label=f"Hex")
+            
+        
+        axs2[2,1].set_xticks(lambda_ticks_str)
+        # axs[2,1].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+        axsErr[2,1].set_xlabel(r'$\lambda$')
+        axsErr[2,1].set_ylabel('Total AOD')    
+        axs2[2,1].set_xlabel(r'$\lambda$')
+        axs2[2,1].set_ylabel('Total AOD')
+        axs2[0,0].legend(prop = { "size": 21 }, ncol=2)
+        axsErr[0,0].legend(prop = { "size": 21 }, ncol=1)
+        axs2[2,1].legend()
+        # lat_t = Hex['latitude']
+        # lon_t = Hex['longitude']
+        # dt_t = Hex['datetime']
+        plt.tight_layout(rect=[0, 0, 1, 1])
+        
+        axs2.figure.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{RepMode}_RSPRetrieval{RepMode}.png', dpi = 400)
+        
+        # plt.suptitle(f'RSP Aerosol Retrieval \n  Lat:{lat_t} Lon :{lon_t}   Date: {dt_t}')
+        if RepMode ==2:
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/2+3_RSPRetrieval.png', dpi = 400)
+        else:
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{dt_t}{NoMode}_RSPRetrieval.png', dpi = 400)
+
+def PlotcombEachMode(rslts_Sph2,rslts_Tamu2,HSRL_sphrodT,HSRL_TamuT,LidarPolSph=None,LidarPolTAMU=None):
+
+
+
+    plt.rcParams['font.size'] = '55'
+    # plt.rcParams["figure.autolayout"] = True
+    plt.rcParams['font.weight'] = 'normal'
+   
+    #Stokes Vectors Plot
+    date_latlon = ['datetime', 'longitude', 'latitude']
+    Xaxis = ['MapR','lambda','sca_ang','rv','height']
+    Retrival = ['dVdlnr','n', 'k','aodMode','ssaMode']
+    RetrivalMAP = ['MapVol','aodMode','ssaMode','n', 'k']
+    RetrivalLidar = ['lidarVol','aodMode','ssaMode','n', 'k']
+    #['sigma', 'vol', 'aodMode','ssaMode', 'rEff', 'costVal']
+    Angles =   ['sza', 'vis', 'fis','angle' ]
+    Stokes =   ['meas_I', 'fit_I', 'meas_P_rel', 'fit_P_rel']
+    Pij    = ['p11', 'p12', 'p22', 'p33'], 
+    Lidar=  ['heightStd','g','LidarRatio','LidarDepol', 'gMode', 'LidarRatioMode', 'LidarDepolMode']
+
+    RSPIdx = np.array([1, 2, 4, 5, 6])
+    HSRLIdx = np.array([0, 3, 7])
+    # plot_HSRL(LidarPolSph[0][0],LidarPolTAMU[0][0],UNCERT, forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
+    
+    if (LidarPolTAMU!= None )and (LidarPolSph!=None):  #When plotting joint retrieval with individual retrieval
+        RepMode =2
+        # Spheriod = LidarPolSph[0][0]
+        # Hex =LidarPolTAMU[0][0]
+
+    else:
+        RepMode =1
+    
+    
+    Spheriod = PlotSingle(rslts_Sph2,HSRL_sphrodT)
+    Hex = PlotSingle(rslts_Tamu2,HSRL_TamuT)
+
+
+    markerSph = ['o','.','.','o','.','.','.','o']
+    markerHex = ['D','H','H','D','H','H','H','D']
+
+    fig, axs2 = plt.subplots(nrows= 6, ncols=3, figsize=(65, 80))
+    # fig, axsErr = plt.subplots(nrows= 6, ncols=3, figsize=(10, 15))
+        
+    fig.patch.set_alpha(0.0)
+    # Plot the AOD data
+    y = [0,1,2,0,1,2,]
+    x = np.repeat((0,1),3)
+
+    
+
+    lambda_ticks = np.round(Spheriod['lambda'], decimals=2)
+    lambda_ticks_str = [str(x) for x in lambda_ticks]
+
+    NoMode =Spheriod['MapR'].shape[0]
+    if Spheriod['MapR'].shape[0] ==2 :
+            mode_v = ["Fine", "Dust","Marine"]
+    if Spheriod['MapR'].shape[0] ==3 :
+        mode_v = ["Fine", "Dust","Marine"]
+    linestyle =['-', '-','-.']
+
+    cm_spj = ['#4459AA','#568FA0', 'r']
+    cm_tj = ["#FB6807",'#C18BB7', 'y']
+
+
+
+    for RetNo in range(RepMode):
+
+        if  RetNo ==1: 
+            Spheriod,Hex = LidarPolSph[0][0],LidarPolTAMU[0][0]
+
+
+            # cm_sp = ['#757565','#5F381A', '#4BCBE2']
+            # cm_t =  ["#882255",'#D44B15', '#1E346D']
+
+
+            # cm_sp2 = ['b','#BFBF2A', '#844772']
+            # cm_t2 = ["#14411b",'#936ecf', '#FFA500']
+
+           
+
+
+        if  RetNo ==0:
+
+            cm_t = ['#14411b','#94673E','#00B2FF']
+            cm_sp = ['#8A898E','#DCD98D','#23969A']
+
+
+            cm_t2 = ["#882255",'#FE5200','#8F64B3']
+            cm_sp2 = ["#DEA520",'#44440F','#212869']
+
+
+            
+
+
+            # cm_sp2 = ['b','#BFBF2A', '#844772']
+            # cm_t2 = ["#14411b",'#936ecf', '#FFA500']
+
+
+            Spheriod,Hex = PlotSingle(rslts_Sph2,HSRL_sphrodT),PlotSingle(rslts_Tamu2,HSRL_TamuT)
+            # cm_sp = ['#b54cb5','#14411b', '#87C1FF']
+            # cm_t = ["#14411b",'#adbf4b', 'b']
+            color_sph = '#adbf4b'
+            color_tamu = "#936ecf"
+
+        
+
+
+        # a =-1
+        
+        #Retrivals:
+        for i in range(len(Retrival)):
+            
+            a = i
+            # if a ==8: a=-1
+            # a = i%3
+            for mode in range(NoMode): #for each modes
+                
+                b = mode
+                
+                if  RetNo ==0: 
+                    ErrMap = Spheriod[RetrivalMAP[i]][mode] - Hex[RetrivalMAP[i]][mode]
+                    ErrLidar = Spheriod[RetrivalLidar[i]][mode] - Hex[RetrivalLidar[i]][mode]
+                    keyInd = 'Single'
+                
+                if  RetNo ==1:
+                    ErrMap = Spheriod[Retrival[i]][mode] - Hex[Retrival[i]][mode]
+                    ErrLidar = Spheriod[Retrival[i]][mode] - Hex[Retrival[i]][mode]
+                    keyInd = 'Joint'
+
+                if i ==0 and RetNo ==0: #Plotting single sensor retrievals
+
+
+                    
+                    # cm_sp2 = ['b','#14411b', '#14411b']
+                    # cm_t2 = ["#14411b",'#936ecf', '#FFA500']
+
+
+                    color_sph2 = '#adbf4b'
+                    color_tamu2 = "#936ecf"
+
+                  
+                    axs2[a,b].plot(Spheriod['MapR'][mode], Spheriod['MapVol'][mode], marker = "$O$",color = cm_sp[mode],lw = 15,ls = linestyle[mode], label=f"RSP_Sphd")
+                    axs2[a,b].plot(Hex['MapR'][mode],Hex['MapVol'][mode], marker = "H", color=cm_t[mode] ,lw = 10, ls = linestyle[mode],label=f"RSP_Hex")
+                    
+
+                    axs2[a,b].plot(Spheriod['lidarR'][mode], Spheriod['lidarVol'][mode], marker = "$O$",color = cm_sp2[mode],lw = 15,ls = linestyle[mode], label=f"HSRL_Sphd")
+                    axs2[a,b].plot(Hex['lidarR'][mode],Hex['lidarVol'][mode], marker = "H", color = cm_t2[mode]  ,lw = 15, ls = linestyle[mode],label=f"HSRL_Hex")
+                    
+                    # axsErr[a,b].plot(Spheriod['MapR'][mode], ErrMap,  marker = "o",color = cm_sp[mode],lw = 15,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    # axsErr[a,b].plot(Spheriod['MapR'][mode], ErrLidar,  marker = "o",color = cm_t2[mode],lw = 15,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    
+                    axs2[a,b].set_xlabel(r'rv $ \mu m$')
+                    axs2[a,b].set_ylabel(r'dVdlnr')
+                    axs2[a,b].set_xscale("log")
+                    axs2[a,b].set_title(f'{mode_v[mode]}', weight='bold')
+
+                    # axsErr[a,b].set_xlabel(r'rv $ \mu m$')
+                    # axsErr[a,b].set_xscale("log")
+                    axs2[a,b].legend()
+
+                if i ==0 and RetNo ==1: #Plotting single sensor retrievals
+
+                    cm_sp= cm_sp2
+                    cm_t = cm_t2
+
+
+                    color_sph2 = '#adbf4b'
+                    color_tamu2 = "#936ecf"
+
+                  
+                    axs2[a,b].plot(Spheriod['r'][mode], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_spj[mode],lw = 15,ls = linestyle[mode], label=f"Joint_Sphd")
+                    axs2[a,b].plot(Hex['r'][mode],Hex[Retrival[i]][mode], marker = "H", color=cm_tj[mode] ,lw = 15, ls = linestyle[mode],label=f"Joint_Hex")
+                    
+
+                    # axs2[a,b].plot(Spheriod['lidarR'][mode], Spheriod['lidarVol'][mode], marker = "$O$",color = cm_sp2[mode],lw = 5,ls = linestyle[mode], label=f"HSRL_Sphrod")
+                    # axs2[a,b].plot(Hex['lidarR'][mode],Hex['lidarVol'][mode], marker = "H", color = cm_t2[mode]  ,lw = 5, ls = linestyle[mode],label=f"HSRL_Hex")
+                    
+                    # axsErr[a,b].plot(Spheriod['MapR'][mode], ErrMap,  marker = "o",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    # axsErr[a,b].plot(Spheriod['MapR'][mode], ErrLidar,  marker = "o",color = cm_t2[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    
+                    axs2[a,b].set_xlabel(r'rv $ \mu m$', weight='bold')
+                    axs2[a,b].set_ylabel(r'dVdlnr', weight='bold')
+                    axs2[a,b].set_xscale("log")
+                    axs2[a,b].set_title(f'{mode_v[mode]}', weight='bold')
+
+                    # axsErr[a,b].set_xlabel(r'rv $ \mu m$')
+                    # axsErr[a,b].set_xscale("log")
+                    axs2[a,b].legend()
+                    # axs2[a,b].legend(prop = { "size": 22 },loc='upper center', bbox_to_anchor=(0.5, -0.4), shadow=True, ncol=3)
+
+                if i>0:
+                    
+                    axs2[a,b].errorbar(lambda_ticks_str,Hex[Retrival[i]][mode],yerr=UNCERT[Retrival[i]], color = cm_t[mode] ,lw = 1, ls = linestyle[mode])
+                    axs2[a,b].errorbar(lambda_ticks_str, Spheriod[Retrival[i]][mode],yerr=UNCERT[Retrival[i]], color = cm_sp[mode],lw = 1,ls = linestyle[mode])
+                    
+
+                    for scp in range(len(lambda_ticks_str)):
+                        axs2[a,b].errorbar(lambda_ticks_str[scp],Hex[Retrival[i]][mode][scp],capsize=7,capthick =2,  marker =  markerHex[scp],markersize=50, color = cm_t[mode] ,lw = 1,alpha = 0.8, ls = linestyle[mode])
+                        axs2[a,b].errorbar(lambda_ticks_str[scp], Spheriod[Retrival[i]][mode][scp], marker = markerSph[scp],markeredgecolor='k',capsize=7,capthick =2,markersize=55,alpha = 0.8,color = cm_sp[mode],lw = 1,ls = linestyle[mode])
+                        
+                    for scp2 in range(1):
+                        axs2[a,b].errorbar(lambda_ticks_str[scp2],Hex[Retrival[i]][mode][scp2],capsize=7,capthick =2,  marker =  markerHex[scp],markersize=50, color = cm_t[mode] ,lw = 1,alpha = 0.8, ls = linestyle[mode], label=f"{keyInd}Hex")
+                        axs2[a,b].errorbar(lambda_ticks_str[scp2], Spheriod[Retrival[i]][mode][scp2], marker = markerSph[scp],markeredgecolor='k',capsize=7,capthick =2,markersize=55,alpha = 0.8,color = cm_sp[mode],lw = 1,ls = linestyle[mode], label=f"{keyInd}Sphd")
+                      
+                        if scp2 ==0:
+                            if a ==2:
+                                axs2[a,b].legend(prop = { "size": 45 },ncol=2)
+                                # axs2[a,b].legend(prop = { "size": 21 },loc='upper center', bbox_to_anchor=(0.5, -0.4), shadow=True, ncol=2)
+                   
+
+        
+                    # axsErr[a,b].errorbar(lambda_ticks_str, ErrMap,  marker = "o",color = cm_sp[mode],lw = 5,ls = linestyle[mode], label=f"{mode_v[mode]}")
+                    # axsErr[a,b].set_xticks(lambda_ticks_str) 
+                    # # axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+                    # axsErr[a,b].set_xlabel(r'$\lambda \mu m$')
+                     
+                    axs2[a,b].set_xticks(lambda_ticks_str) 
+                    # axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+                    
+                    axs2[a,b].set_xlabel(r'$\lambda \mu m$')
+
+                    # axs2[a,b].legend()
+                    # axs2[a,b].set_xlim(0, np.maximum(Spheriod[Retrival[i]][mode],Hex[Retrival[i]][mode]))
+                    # fill = np.arange(np.min(Spheriod[Retrival[i]]), np.max(Spheriod[Retrival[i]]))
+                    # # Fill between y-coordinates 0.35 and 0.4, for x-coordinates from 0 to 1
+                    # axs2[a, b].fill(np.repeat(lambda_ticks_str[0], len(fill)), fill, color='gray', linewidth=5)
+
+                    # # Plot a line with x-coordinate 0.53, y-coordinate np.min(Spheriod[Retrival[i]]), and 0.55, np.max(Spheriod[Retrival[i]])
+                    # # Fill the region between the lines at 0.53 and 0.55
+                    # axs2[a, b].fill_between('0.53', '0.55', Spheriod[Retrival[i]], color='gray', alpha=0.3)
+
+                    # # Fill the region between the lines at 1 and 1.06
+                    # axs2[a, b].fill_between('1', '1.06', Spheriod[Retrival[i]], color='gray', alpha=0.3)
+                    #                     # Plot a line with x-coordinate 1, y-coordinate np.min(Spheriod[Retrival[i]]), and 1.06, np.max(Spheriod[Retrival[i]])
+                                        # axs2[a, b].plot('1.06',fill, color='gray', linewidth=5, alpha=0.3)
+                    if b ==0:
+                        axs2[a,b].set_ylabel(f'{Retrival[i]}', weight='bold')
+                    if a ==0:
+                        axs2[a,b].set_title(f'{mode_v[mode]}', weight='bold')
+
+                    
+                    # axs2[a,b].legend(ncol = 4)
+                    
+        axs2[5,1].errorbar(lambda_ticks_str, Spheriod['aod'], lw = 1)
+        axs2[5,1].errorbar(lambda_ticks_str, Hex['aod'], lw = 1)
+                              
+        for scp in range(len(lambda_ticks_str)):
+            axs2[5,1].errorbar(lambda_ticks_str[scp], Spheriod['aod'][scp], marker = markerSph[scp],markeredgecolor='k',capsize=7,capthick =2,markersize=50, color = cm_sp[mode])
+            axs2[5,1].errorbar(lambda_ticks_str[scp],Hex['aod'][scp],capsize=7,capthick =2,  marker =  markerHex[scp],markeredgecolor='k',markersize=55, color = cm_t[mode])
+            # if scp ==1:
+            #     axs2[7,1].legend()
+        for scp in range(1):
+            axs2[5,1].errorbar(lambda_ticks_str[scp], Spheriod['aod'][scp], marker = markerSph[scp],markeredgecolor='k',capsize=7,capthick =2,markersize=50, color = cm_sp[mode], label=f"{keyInd}Sphd")
+            axs2[5,1].errorbar(lambda_ticks_str[scp],Hex['aod'][scp],capsize=7,capthick =2,  marker =  markerHex[scp],markeredgecolor='k',markersize=55, color = cm_t[mode],label=f"{keyInd}Hex")
+            axs2[5,1].legend(prop = { "size": 18 })
+                
+        # axs2[7,1].errorbar(lambda_ticks_str, Spheriod['aod'],yerr=0.03+UNCERT['aod']*Spheriod['aod'], marker = "$O$",color = cm_sp[mode],markeredgecolor='k',capsize=7,capthick =2,markersize=25,lw = 4, label=f"{keyInd}Sphd")
+        # axs2[7,1].errorbar(lambda_ticks_str, Hex['aod'],yerr=0.03+UNCERT['aod']* Hex['aod'], marker = "H", color = cm_t[mode] ,lw = 4,markeredgecolor='k',capsize=7,capthick =2,markersize=25, label=f"{keyInd}Hex")
+        # axsErr[7,1].errorbar(lambda_ticks_str, ErrMap, marker = "o", color = color_tamu ,lw = 5,markeredgecolor='k',capsize=5,capthick =2,markersize=25, label=f"Hex")
+            
+        
+        axs2[5,1].set_xticks(lambda_ticks_str)
+        # axs[2,1].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
+        # axsErr[5,1].set_xlabel(r'$\lambda$', weight='bold')
+        # axsErr[5,1].set_ylabel('Total AOD', weight='bold')    
+        axs2[5,1].set_xlabel(r'$\lambda$', weight='bold')
+        axs2[5,1].set_ylabel('Total AOD', weight='bold')
+
+        # axs2[8,1].legend(prop = { "size": 21 }, ncol=2)
+        # axsErr[8,1].legend(prop = { "size": 21 }, ncol=1)
+        axs2[5,1].legend(ncol=2)
+
+        if RetNo ==0:
+            axs2[5,2].scatter(mode_v,rslts_Sph[0]['sph'], color=cm_sp[mode], marker = "$RO$",s=1500,label = "RSPsph")
+            axs2[5,2].scatter(mode_v,rslts_Tamu[0]['sph'],color=cm_t[mode], marker = "$RH$",s=1500, label = "RSPhex")
+            axs2[5,2].scatter(mode_v,HSRL_sphrodT[0][0]['sph'],color=cm_sp2[mode],  marker = "$HO$",s=1500, label = "HSRLsph")
+            axs2[5,2].scatter(mode_v,HSRL_TamuT[0][0]['sph'], color=cm_t2[mode],marker = "$HH$",s=1500, label = "HSRLhex")
+            # axs2[6,1].legend(prop = { "size": 21 },ncol=1)
+            axs2[5,2].set_xlabel("Aerosol type", weight='bold')
+            axs2[5,2].set_ylabel('Spherical Frac', weight='bold')
+
+
+            axs2[5,0].scatter('RSP SPh',rslts_Sph[0]['costVal'], color=cm_sp[mode],s=1400, label = "RSPsph")
+            axs2[5,0].scatter('RSP Hex',rslts_Tamu[0]['costVal'], color=cm_t[mode],s=1400,label = "RSPhex")
+            axs2[5,0].scatter('HSRL SPh',HSRL_sphrodT[0][0]['costVal'], color=cm_sp2[mode],s=1400,label = "RSPsph")
+            axs2[5,0].scatter('HSRL Hex',HSRL_TamuT[0][0]['costVal'], color=cm_t2[mode],s=1400,label = "RSPhex")
+            # axs2[8,1].legend()
+            # axs2[8,1].set_xlabel("CostVal")
+            axs2[5,0].set_ylabel("CostVal", weight='bold')
+        
+        if RetNo ==1:
+
+            # for scp in range(3):
+            axs2[5,2].errorbar(mode_v[scp],LidarPolSph[0][0]['sph'][scp], marker = '+',markeredgecolor='k',capsize=7,capthick =2,markersize=50, color = cm_sp[mode],label = "Jointsph")
+            axs2[5,2].errorbar(mode_v[scp],LidarPolSph[0][0]['sph'][scp],capsize=7,capthick =2,  marker =  '*',markeredgecolor='k',markersize=55, color = cm_t[mode],label = "Jointsph")
+        
+            
+            axs2[5,2].legend(prop = { "size": 18 },ncol=1)
+            axs2[5,2].set_xlabel("Aerosol type", weight='bold')
+            axs2[5,2].set_ylabel('Spherical Frac', weight='bold')
+
+
+            axs2[5,0].scatter('Joint SPh',LidarPolSph[0][0]['costVal'], color='r',s=400, label = "RSPsph")
+            axs2[5,0].scatter('Joint Hex',LidarPolSph[0][0]['costVal'], color='k',s=400,label = "RSPhex")
+            # axs2[8,1].legend()
+            # axs2[8,1].set_xlabel("CostVal")
+            axs2[5,0].set_ylabel("CostVal", weight='bold')
+
+        # axs2[6,1].legend(prop = { "size": 18 },loc='upper center', bbox_to_anchor=(0.5, -0.4), shadow=True, ncol=4)
+        # axs2[8,1].legend(prop = { "size": 18 },loc='upper center', bbox_to_anchor=(0.5, -0.4), shadow=True, ncol=4)
+        # axs2[7,1].legend(prop = { "size": 18 },loc='upper center', bbox_to_anchor=(0.5, -0.4), shadow=True, ncol=4)
+                 
+
+
+        # lat_t = Hex['latitude']
+        # lon_t = Hex['longitude']
+        # dt_t = Hex['datetime']
+        # plt.tight_layout(rect=[0, 0, 1, 1])
+        
+        plt.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{RepMode}_RSPRetrieval{RepMode}.png', dpi = 400 ,transparent=True)
+        
+        # plt.suptitle(f'RSP Aerosol Retrieval \n  Lat:{lat_t} Lon :{lon_t}   Date: {dt_t}')
+        if RepMode ==2:
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/2+3_RSPRetrieval.png', dpi = 400)
+        else:
+            fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{NoMode}_RSPRetrieval.png', dpi = 400)
+
+
+
+    
+def VolEqSph_to_VolEqHex(rv_sph ,psi_sph, psi_hex ):
+    
+    """
+        rv_sph: volume equivalent radius of spheroid
+        
+        psi_sph : ensemble weighted degree of sphericity of  spheroids
+        
+        psi_hex : ensemble weighted degree of sphericity of hexahderals
+               
+    """
+    
+    
+    #This is assuming that Reff radius for hexahedrals and spheriods are the same. 
+    
+    rv_hex = (psi_sph/psi_hex)*rv_sph
+    
+    return rv_hex
+
+
+
+
+def ComparePhaseFunct(Shape):
+
+    "Run GRASP forward model for different shapes"
+
+    Kernel =['Ver_sph' , 'KERNELS_BASE']
+    sf =[1e-6, 1]
+
+
+    Shape_rsltdict = {}
+
+    
+    krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
+    binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
+    ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+    UpKerFile =  'settings_FWD_dust_RSP.yml'  #Yaml file after updating the state vectors
+
+    fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_dust_Vext_conc.yml'
+    
+    #
+    
+    # rv,sigma, n, k, sf = 2, 0.5, 1.55, 0.004, 1e-6
+    # Volume = 0.06
+    # VConcandExt = np.zeros((len(Volume),2))*np.nan
+
+    
+   
+    
+    #Geometry
+    #Inputs for simulation
+    sza = 40 # solar zenith angle
+    wvls = [0.355,0.410,0.470,0.532,0.55,0.670,0.865,1.064] # wavelengths in μm
+    msTyp = [41, 46 ] # grasp measurements types (I, Q, U) [must be in ascending order]
+    azmthΑng = np.r_[0:180:10] # azimuth angles to simulate (0,10,...,175)
+    vza = np.r_[0:75:5] # viewing zenith angles to simulate [in GRASP cord. sys.]
+    upwardLooking = False # False -> downward looking imagers, True -> upward looking
+
+
+    Nvza = len(vza)
+    Nazimth = len(azmthΑng)
+    thtv_g = np.tile(vza, len(msTyp)*len(azmthΑng)) # create list of all viewing zenith angles in (Nvza X Nazimth X 3) grid
+    phi_g = np.tile(np.concatenate([np.repeat(φ, len(vza)) for φ in azmthΑng]), len(msTyp)) # create list of all relative azimuth angles in (Nvza X Nazimth X 3) grid
+    nbvm = len(thtv_g)/len(msTyp)*np.ones(len(msTyp), int) # number of view angles per Stokes element (Nvza X Nazimth)
+    meas = np.r_[np.repeat(0.1, nbvm[0]), np.repeat(0.01, nbvm[1])] # dummy measurement values for I, Q and U, respectively 
+
+    nowPix = pixel(dt.datetime.now(), 1, 1, 0, 0, masl=0, land_prct=0)
+    for wvl in wvls: nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv_g, phi_g, meas)
+
+# # setup "graspRun" object and run GRASP binary
+#     print('Using settings file at %s' % fwdModelYAMLpath)
+#     gr = graspRun(pathYAML=fwdModelYAMLpath, releaseYAML=True, verbose=True) # setup instance of graspRun class, add the above pixel, run grasp and read the output to gr.invRslt[0] (dict)
+#     gr.addPix(nowPix) # add the pixel we created above
+#     gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPathGRASP) # run grasp binary (output read to gr.invRslt[0] [dict])
+#     print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1],gr.invRslt[0]['aod'][-1])) # 
+
+   
+
+
+#     for i in range(len(Kernel)):
+#         for j in range (len(sf)):
+        
+# #change the value of concentration in the yaml file
+#             with open(fwdModelYAMLpath, 'r') as f:  
+#                 data = yaml.safe_load(f) 
+#                 # print(data)
+#                 # data['retrieval']['constraints']['characteristic[2]']['mode[1]']['initial_guess']['value'][0] = float(Volume[i])
+#                 # data['retrieval']['constraints']['characteristic[3]']['mode[1]']['initial_guess']['value'][0],data['retrieval']['constraints']['characteristic[3]']['mode[1]']['initial_guess']['value'][1] = float(rv),float(sigma)
+#                 # data['retrieval']['constraints']['characteristic[4]']['mode[1]']['initial_guess']['value'][0] = float(n)
+#                 # data['retrieval']['constraints']['characteristic[5]']['mode[1]']['initial_guess']['value'][0] = float(k)
+#                 data['retrieval']['constraints']['characteristic[6]']['mode[1]']['initial_guess']['value'][0] = float(sf[j])
+#                 data['retrieval']['forward_model']['phase_matrix']['kernels_folder'] = Kernel[i]
+
+#             f.close()
+#             # UpKerFile = 'settings_dust_Vext_conc_dump.yml'
+#             with open(ymlPath+UpKerFile, 'w') as f: #write the chnages to new yaml file
+#                 yaml.safe_dump(data, f)
+#             f.close()
+
+#New yaml file after updating state vectors/variables
+    Newyaml = ymlPath+UpKerFile
+    #Running GRASP
+    print('Using settings file at %s' % Newyaml)
+    gr = graspRun(pathYAML= Newyaml, releaseYAML=True, verbose=True) # setup instance of graspRun class, add the above pixel, run grasp and read the output to gr.invRslt[0] (dict)
+    gr.addPix(nowPix) # add the pixel we created above
+    gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath) # run grasp binary (output read to gr.invRslt[0] [dict])
+    print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1],gr.invRslt[0]['aod'][-1])) # 
+
+    Shape_rsltdict = gr.invRslt[0]
+
+
+
+    return  gr.invRslt[0]
+   
+
+def PlotShapeDict(Dict_shape):
+
+    "Plots the phase function for different shape models for comparision"
+
+    plt.rcParams['font.size'] = '18'
+    
+
+    color = ['#614C0E','#E09428','#B1DBFF','#B1DBFF'] #Color blind friendly scheme for different retrieval techniques< :rsponlt, hsrl only and combined
+    WlIdx =  [0,4,7] #Index of the wavelength 
+
+    # color = ['']
+
+    markerIdx= np.arange(0,181,30)
+    marker = ["$0$", 'D', 'o','.']
+    label = ['Spheroid', "Hex", "sph",'']
+
+    
+    "Plots comparing the phase function and dolp for different shape models from Dict_shape['sphCoarseKernel']= ComparePhaseFunct(Shape='sph')"
+    fig,axs = plt.subplots(4,3, figsize =(16,8), sharex=True)
+    shapeNamekeys = Dict_shape.keys()
+    for idx, shapeName in enumerate(Dict_shape.keys()):
+    
+        for i in range(len(WlIdx)):
+            if idx<3:
+                axs[0,i].plot(np.arange(181),Dict_shape[shapeName]['p11'][:,0,i], lw =3, color = color[idx])
+                axs[0,i].scatter(np.arange(181)[markerIdx],Dict_shape[shapeName]['p11'][:,0,i][markerIdx],s = 100,edgecolors='black', linewidths=1, color = color[idx], marker =marker[idx], label = label[idx])
+                axs[0,i].set_yscale('log')
+                axs[1,i].plot(np.arange(181),Dict_shape['Spheroid']['p11'][:,0,i] - Dict_shape['hex']['p11'][:,0,i], lw =3, color = color[idx])
+                
+
+                axs[2,i].plot(np.arange(181),-Dict_shape[shapeName]['p12'][:,0,i]/Dict_shape[shapeName]['p11'][:,0,i],lw =3, color = color[idx])
+                axs[2,i].scatter(np.arange(181)[markerIdx],-Dict_shape[shapeName]['p12'][:,0,i][markerIdx]/Dict_shape[shapeName]['p11'][:,0,i][markerIdx],s = 100,edgecolors='black', linewidths=1, color = color[idx], marker =marker[idx],)
+                axs[3,i].plot(np.arange(181),(-Dict_shape['Spheroid']['p12'][:,0,i]/Dict_shape['Spheroid']['p11'][:,0,i])-(-Dict_shape['hex']['p12'][:,0,i]/Dict_shape['hex']['p11'][:,0,i]),lw =3, color = color[idx])
+               
+                # axs[0,i].set_xlabel(r'$\theta_{s}$')
+                axs[3,i].set_xlabel(r'$\theta_{s}$')
+
+                axs[2,i].set_ylabel(r'-P12/P11')
+
+                # txtylabel = 'P11 \n' + str(Dict_shape[shapeName]['lambda'][WlIdx[i]])
+                if i ==0:
+                    axs[0,i].set_ylabel('P11')
+
+                if i ==0:
+                    axs[0,i].legend(fontsize =18)
+                axs[0,i].set_title(str(Dict_shape[shapeName]['lambda'][WlIdx[i]])+r"$\mu$m")
+                # axs[i,1].set_title(Dict_shape[shapeName]['lambda'][WlIdx[i]])
+
+    titlelabel = '(rv,σ) : ' + str(Dict_shape[shapeName]['rv'])+',' + str(Dict_shape[shapeName]['sigma'])+ " n: " + str(Dict_shape[shapeName]['n'][WlIdx]) + " , k : " + str(Dict_shape[shapeName]['k'][WlIdx]) 
+
+
+
+    plt.suptitle(titlelabel )
+    fig.tight_layout()
+
+    plt.savefig('Phasefunction.png', dpi = 200)
+
+
+
+def PlotShapeDict(Dict_shape):
+
+    "Plots the phase function for different shape models for comparision"
+
+    plt.rcParams['font.size'] = '18'
+
+    color_instrument = ['#800080','#CDEDFF','#404790','#CE357D','#FBD381','#A78236','#711E1E','k']
+          
+    wl = [0.35, 0.41, 0.46, 0.53, 0.55 , 0.67  , 0.86, 1.06]
+
+    color = ['#614C0E','#E09428','#B1DBFF','#B1DBFF'] #Color blind friendly scheme for different retrieval techniques< :rsponlt, hsrl only and combined
+    WlIdx =  [0,4] #Index of the wavelength 
+
+    # color = ['']
+
+    markerIdx= np.arange(0,181,30)
+    marker = ["$0$", 'D', 'o','.']
+    label = ['Spheroid', "Hex", "sph",'']
+
+    
+    "Plots comparing the phase function and dolp for different shape models from Dict_shape['sphCoarseKernel']= ComparePhaseFunct(Shape='sph')"
+    fig,axs = plt.subplots(2,len(WlIdx)+1, figsize =(18,10), sharex=True)
+    shapeNamekeys = Dict_shape.keys()
+
+    for ii in range(len(wl)):
+
+        axs[0,len(WlIdx)].plot(np.arange(181),(100*abs(Dict_shape['Spheroid']['p11'][:,0,ii] - Dict_shape['Hex']['p11'][:,0,ii])/Dict_shape['Spheroid']['p11'][:,0,ii]), lw =3, color = color_instrument[ii], label =wl[ii])
+            # axs[1,i].set_yscale('log')
+        axs[0,len(WlIdx)].set_ylabel(r'Diff P11 %')
+        axs[1,len(WlIdx)].plot(np.arange(181),abs((-Dict_shape['Spheroid']['p12'][:,0,ii]/Dict_shape['Spheroid']['p11'][:,0,ii])-(-Dict_shape['Hex']['p12'][:,0,ii]/Dict_shape['Hex']['p11'][:,0,ii])),lw =3, color = color_instrument[ii], label = wl[ii])
+        axs[1,len(WlIdx)].set_ylabel(r'Abs Diff -P12/P11')
+
+    axs[1,len(WlIdx)].legend(ncol =1, prop = '10')
+    for idx, shapeName in enumerate(Dict_shape.keys()):
+        
+    
+        for i in range(len(WlIdx)):
+
+                
+                if idx<3:
+                    axs[0,i].plot(np.arange(181),Dict_shape[shapeName]['p11'][:,0,i], lw =3, color = color[idx])
+                    axs[0,i].scatter(np.arange(181)[markerIdx],Dict_shape[shapeName]['p11'][:,0,i][markerIdx],s = 100,edgecolors='black', linewidths=1, color = color[idx], marker =marker[idx], label = label[idx])
+                    axs[0,i].set_yscale('log')
+                    
+                    axs[1,i].plot(np.arange(181),-Dict_shape[shapeName]['p12'][:,0,i]/Dict_shape[shapeName]['p11'][:,0,i],lw =3, color = color[idx])
+                    axs[1,i].scatter(np.arange(181)[markerIdx],-Dict_shape[shapeName]['p12'][:,0,i][markerIdx]/Dict_shape[shapeName]['p11'][:,0,i][markerIdx],s = 100,edgecolors='black', linewidths=1, color = color[idx], marker =marker[idx],)
+                    
+                    # axs[0,i].set_xlabel(r'$\theta_{s}$')
+                    axs[1,i].set_xlabel(r'$\theta_{s}$')
+
+                    
+
+                    # txtylabel = 'P11 \n' + str(Dict_shape[shapeName]['lambda'][WlIdx[i]])
+                    if i ==0:
+                        axs[0,i].set_ylabel('P11')
+                        axs[1,i].set_ylabel(r'-P12/P11')
+
+                    if i ==0:
+                        axs[0,i].legend(fontsize =18)
+                    axs[0,i].set_title(str(Dict_shape[shapeName]['lambda'][WlIdx[i]])+r"$\mu$m")
+                    # axs[i,1].set_title(Dict_shape[shapeName]['lambda'][WlIdx[i]])
+
+    titlelabel = '(rv,σ) : ' + str(Dict_shape[shapeName]['rv'])+',' + str(Dict_shape[shapeName]['sigma'])+ " n: " + str(Dict_shape[shapeName]['n'][WlIdx]) + " , k : " + str(Dict_shape[shapeName]['k'][WlIdx]) 
+
+
+
+    plt.suptitle(titlelabel )
+    fig.tight_layout()
+
+    plt.savefig('Phasefunction.png', dpi = 200)
+
+# PlotShapeDict(DictSH)
+
+# def ErrHeatMap(rslt1, rslt2):
+
+    
 
 # PlotE2C(v_hex_sea,name ='v_hex_sea')
 # PlotE2C(v_sph_sea,name ='v_sph_sea')
@@ -2578,8 +3467,6 @@ def PlotE2C(v,name = None):
 #         plt.tight_layout()
 #         pdf_pages.savefig()
 #         fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/FIT_HSRL_Vertical_Ext_profile{NoMode}.png',dpi = 300)
-
-
 
 
 
