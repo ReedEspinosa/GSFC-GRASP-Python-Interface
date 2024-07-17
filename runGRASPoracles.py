@@ -20,6 +20,7 @@ from runGRASP import graspRun, pixel
 
 import math
 
+from netCDF4 import Dataset
 import matplotlib.patches as mpatches
 from matplotlib.ticker import ScalarFormatter
 
@@ -168,7 +169,7 @@ for i in range(1):
 #     HSRLPixNo = HSRLPixNo+1
 #     RSP only retrieval
  
-# # # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
+# # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
     rslts_Sph = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
 #     # rslts_Sph2 = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
     rslts_Tamu = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
@@ -183,20 +184,21 @@ for i in range(1):
 
 # # # #    #HSRL2 only retrieval
     
-    HSRL_sphrodT = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
-    # plot_HSRL(HSRL_sphrodT[0][0],HSRL_sphrodT[0][0], UNCERT,forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrodT[2]) 
-    HSRL_TamuT = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
-    # # plot_HSRL(HSRL_Tamu[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_Tamu[2])    
-    plot_HSRL(HSRL_sphrodT[0][0],HSRL_TamuT[0][0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
+#     HSRL_sphrodT = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
+#     # plot_HSRL(HSRL_sphrodT[0][0],HSRL_sphrodT[0][0], UNCERT,forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrodT[2]) 
+#     HSRL_TamuT = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
+#     # # plot_HSRL(HSRL_Tamu[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_Tamu[2])    
+#     plot_HSRL(HSRL_sphrodT[0][0],HSRL_TamuT[0][0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
 
-# #     # # SphHSRL.append(HSRL_sphrodT)
+#     # # SphHSRL.append(HSRL_sphrodT)
     # TAMUHSRL.append(HSRL_TamuT)
     # PixIndx.append(HSRLPixNo)
 
 # #    # joint RSP + HSRL2  retrieval 
   # # # PlotRandomGuess('gregmi/git/GSFC-GRASP-Python-Interface/try.npy', 2,0)
-    LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
     LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
+    
+    LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
     
     SphJoint.append(LidarPolSph)
     TAMUJoint.append(LidarPolTAMU)
@@ -206,47 +208,6 @@ for i in range(1):
     RSP_plot(LidarPolTAMU[0],LidarPolTAMU[0],RSP_PixNo,UNCERT,LIDARPOL=True)
 
 
-
-
-for i in range(3):
-    RSP_PixNo = RSP_PixNo +1
-    #RSP only retrieval
- 
-# #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
-#     rslts_Sph = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
-# #     # rslts_Sph2 = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
-#     rslts_Tamu = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
-#     # # rslts_Tamu2 = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
-#     RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT)
-   
-
-#     SphRSP.append(rslts_Sph)
-#     TAMURSP.append(rslts_Tamu)
-
-#    #HSRL2 only retrieval
-    
-#     HSRL_sphrodT = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
-#     # plot_HSRL(HSRL_sphrodT[0][0],HSRL_sphrodT[0][0], UNCERT,forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrodT[2]) 
-#     HSRL_TamuT = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
-#     # plot_HSRL(HSRL_Tamu[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_Tamu[2])    
-#     plot_HSRL(HSRL_sphrodT[0][0],HSRL_TamuT[0][0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
-
-# #     SphHSRL.append(HSRL_sphrodT)
-#     TAMUHSRL.append(HSRL_TamuT)
-
-   # joint RSP + HSRL2  retrieval 
-  # # # PlotRandomGuess('gregmi/git/GSFC-GRASP-Python-Interface/try.npy', 2,0)
-    LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
-    LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
-    
-    SphJoint.append(LidarPolSph)
-    TAMUJoint.append(LidarPolTAMU)
-
-    jointIndx.append()
-
-    CombinedLidarPolPlot(LidarPolSph[0],LidarPolTAMU[0],RSP_PixNo,UNCERT)
-    plot_HSRL(LidarPolSph[0][0],LidarPolTAMU[0][0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
-    RSP_plot(LidarPolSph[0],LidarPolTAMU[0],RSP_PixNo,UNCERT,LIDARPOL=True)
 
 
 # def ShowRSPdata(LidarPolSph[0]):
@@ -2183,7 +2144,7 @@ MeasKeys = ['VBS','DP','VExt','I','P_rel']
 MeasErrJ = [3e-7,1,1e-5,0.03, 0.005]
 Rsltdic = LidarPolSph[0][0]
 
-for i in range(len(MeasKeys[j])):
+for i in range(len(MeasKeys)):
     for wlIndx in range(len(Rsltdic[f'meas_{MeasKeys[i]}'][i,:])):
 
         if [f'meas_{MeasKeys[i]}'] == "meas_I":  #relative error
@@ -2196,12 +2157,12 @@ for i in range(len(MeasKeys[j])):
 
 
 
-chiVBS = (J_sph['meas_VBS_0'] + J_sph['meas_VBS_1']+J_sph['meas_VBS_2'])/(3*len(Rsltdic['meas_VBS'][:,0]))
-chiDP= (J_sph['meas_DP_0'] + J_sph['meas_DP_1']+J_sph['meas_DP_2'])/(3*len(Rsltdic['meas_DP'][:,0]))
-chiVExt = (J_sph['meas_VExt_0'] + J_sph['meas_VExt_1'])/(2*len(Rsltdic['meas_VExt'][:,0]))
+chiVBS = (J_sph['VBS_0'] + J_sph['VBS_3']+J_sph['VBS_7'])/(3*len(Rsltdic['meas_VBS'][:,0]))
+chiDP= (J_sph['DP_0'] + J_sph['DP_3']+J_sph['DP_7'])/(3*len(Rsltdic['meas_DP'][:,0]))
+chiVExt = (J_sph['VExt_0'] + J_sph['VExt_3'])/(2*len(Rsltdic['meas_VExt'][:,0]))
 
-chiI =  (J_sph['meas_I_0']+ J_sph['meas_I_1'])/(5*len(Rsltdic['meas_I'][:,0]))
-chiDolp =  (J_sph['meas_P_rel_0']+ J_sph['meas_P_rel_1'])/(5*len(Rsltdic['meas_P_rel'][:,0]))
+chiI =  (J_sph['I_1']+ J_sph['I_2']+ J_sph['I_4']+ J_sph['I_5']+ J_sph['I_6'])/(5*len(Rsltdic['meas_I'][:,0]))
+chiDolp =  (J_sph['P_rel_1']+ J_sph['P_rel_4']+ J_sph['P_rel_5']+ J_sph['P_rel_6']+ J_sph['P_rel_2'])/(5*len(Rsltdic['meas_P_rel'][:,0]))
 
 costValCal['J_sph'] = (chiVBS+chiDP+chiVExt+chiI+chiDolp)/5
 costValCal
@@ -2213,7 +2174,7 @@ MeasKeys = ['VBS','DP','VExt','I','P_rel']
 Rsltdic = LidarPolTAMU[0][0]
 
 
-for i in range(len(MeasKeys[j])):
+for i in range(len(MeasKeys)):
     for wlIndx in range(len(Rsltdic[f'meas_{MeasKeys[i]}'][i,:])):
 
         if [f'meas_{MeasKeys[i]}'] == "meas_I":  #relative error
@@ -2222,19 +2183,151 @@ for i in range(len(MeasKeys[j])):
         else:
 
             Chi=chiSquare(Rsltdic[f'meas_{MeasKeys[i]}'][:,wlIndx],Rsltdic[f'fit_{MeasKeys[i]}'][:,wlIndx],MeasErrJ[i])
-            J_hex[f'{MeasKeys[i]}_{wlIndx}'] = Chi
+            J_hex[f'meas_{MeasKeys[i]}_{wlIndx}'] = Chi
 
 
 
-HchiVBS = (J_hex['meas_VBS_0'] + J_hex['meas_VBS_1']+J_hex['meas_VBS_2'])/(3*len(Rsltdic['meas_VBS'][:,0]))
-HchiDP= (J_hex['meas_DP_0'] + J_hex['meas_DP_1']+J_hex['meas_DP_2'])/(3*len(Rsltdic['meas_DP'][:,0]))
-HchiVExt = (J_hex['meas_VExt_0'] + J_hex['meas_VExt_1'])/(2*len(Rsltdic['meas_VExt'][:,0]))
+HchiVBS = (J_hex['meas_VBS_0'] + J_hex['meas_VBS_3']+J_hex['meas_VBS_7'])/(3*len(Rsltdic['meas_VBS'][:,0]))
+HchiDP= (J_hex['meas_DP_0'] + J_hex['meas_DP_3']+J_hex['meas_DP_7'])/(3*len(Rsltdic['meas_DP'][:,0]))
+HchiVExt = (J_hex['meas_VExt_0'] + J_hex['meas_VExt_3'])/(2*len(Rsltdic['meas_VExt'][:,0]))
 
-HchiI =  (J_hex['meas_I_0']+ J_hex['meas_I_1'])/(5*len(Rsltdic['meas_I'][:,0]))
-HchiDolp =  (J_hex['meas_P_rel_0']+ J_hex['meas_P_rel_1'])/(5*len(Rsltdic['meas_P_rel'][:,0]))
+HchiI =  (J_hex['meas_I_1']+ J_hex['meas_I_2']+ J_hex['meas_I_4']+ J_hex['meas_I_5']+ J_hex['meas_I_6'])/(5*len(Rsltdic['meas_I'][:,0]))
+HchiDolp = (J_hex['meas_P_rel_1']+ J_hex['meas_P_rel_4']+ J_hex['meas_P_rel_5']+ J_hex['meas_P_rel_6']+ J_hex['meas_P_rel_2'])/(5*len(Rsltdic['meas_P_rel'][:,0]))
 
 costValCal['J_hex'] = (HchiVBS+HchiDP+HchiVExt+HchiI+HchiDolp)/5
 costValCal
+
+
+def compareWithHiGEAR(NoMeas,SavImgName ):
+
+    # plt.rcParams['font.size'] = '16'
+
+
+    file_name_APS = '/home/gregmi/ORACLES/HiGEAR/APS_P3_20180924_R2.nc'
+    file_name_DMA = '/home/gregmi/ORACLES/HiGEAR/DMA_P3_20180924_R0.nc'
+    file_name_HW = '/home/gregmi/ORACLES/HiGEAR/Howell-corrected-UHSAS_P3_20180924_R0.nc'
+    file_name_LDMA = '/home/gregmi/ORACLES/HiGEAR/LDMA_P3_20180924_R0.nc'
+    file_name_UHSAS = '/home/gregmi/ORACLES/HiGEAR/UHSAS_P3_20180924_R2.nc'
+
+    Idx_APS = 214   #  Time : 09:07:26 
+    Idx_UHSAS = 2556  #09:07:37.62000
+    Idx_LDMA = 37    #09:07:31.139201
+    Idx_HW = 2556    #09:07:37 
+    Idx_DMA = 30    #09:06:47
+
+
+    DvDlnr_APS,r_APS = Read_HiGear(file_name_APS, Idx_APS)
+    DvDlnrHW,rHW= Read_HiGear(file_name_HW, Idx_HW)
+    DvDlnrLDMA ,rLDMA = Read_HiGear(file_name_LDMA, Idx_LDMA)
+    DvDlnrDM,rDM = Read_HiGear(file_name_DMA, Idx_DMA)
+    DvDlnrUHSAS,rUHSAS = Read_HiGear(file_name_UHSAS, Idx_UHSAS)
+
+
+    plt.scatter(rHW, DvDlnrHW, label ='HW')
+    plt.scatter(rDM , DvDlnrDM, label ='DM')
+    plt.scatter(r_APS , DvDlnr_APS, label ='APS')
+    plt.plot(rLDMA , DvDlnrLDMA, label ='LDMA')
+
+    # plt.scatter(rUHSAS , DvDlnrUHSAS, label ='UHSAS')
+    # plt.xscale('log')
+    plt.xscale('log')
+
+    fig, axs2 = plt.subplots(nrows= 1, ncols=1, figsize=(12, 8))
+        
+    plt.rcParams['font.size'] = '20'
+    for No in range(NoMeas):
+
+        color_instrument = ['#FBD381','#A78236','#CDEDFF','#404790','#CE357D','#711E1E'] #Color blind friendly scheme for different retrieval techniques< :rsponlt, hsrl only and combined
+
+
+        if No ==0:
+            Spheriod,Hex = LidarPolSph[0][0],LidarPolTAMU[0][0]
+            cm_sp = color_instrument[4]
+            cm_t = color_instrument[5]
+            key = 'HSRL+RSP'
+        if No ==1:
+            Spheriod,Hex = HSRL_sphrodT[0][0],HSRL_TamuT[0][0]
+            cm_sp = color_instrument[2]
+            cm_t = color_instrument[3]
+            key = "HSRL"
+        if No ==2:
+            Spheriod,Hex = rslts_Sph[0],rslts_Tamu[0]
+            cm_sp = color_instrument[0]
+            cm_t = color_instrument[1]
+            key='RSP'
+
+
+
+        # plt.rcParams['font.size'] = '17'
+        #Stokes Vectors Plot
+        Retrival = ['dVdlnr','aodMode','ssaMode','n', 'k']
+        #['sigma', 'vol', 'aodMode','ssaMode', 'rEff', 'costVal']
+        Angles =   ['sza', 'vis', 'fis','angle' ]
+        Stokes =   ['meas_I', 'fit_I', 'meas_P_rel', 'fit_P_rel']
+        Pij    = ['p11', 'p12', 'p22', 'p33'], 
+        Lidar=  ['heightStd','g','LidarRatio','LidarDepol', 'gMode', 'LidarRatioMode', 'LidarDepolMode']
+
+        # Plot the AOD data
+
+
+        # Plot the AOD data
+        y = [0,1,2,0,1,2,]
+        x = np.repeat((0,1),3)
+        if Spheriod['r'].shape[0] ==2 :
+            mode_v = ["fine", "dust","marine", 'NonSphMarine']
+        if Spheriod['r'].shape[0] ==3 :
+            mode_v = ["fine", "dust","marine", 'NonSphMarine']
+      
+
+
+        # cm_sp = ['k','#8B4000', '#87C1FF']
+        # cm_t = ["#BC106F",'#E35335', 'b']
+
+        #Retrivals:
+        for i in range(len(Retrival)):
+            a,b = i%3,i%2
+
+            lambda_ticks1 = np.round(Spheriod['lambda'], decimals=2)
+            lambda_ticks2 = np.round(Hex['lambda'], decimals=2)
+
+            
+            for mode in range(1): #for each modes
+                if i ==0:
+
+                    # axs2[a,b].errorbar(Spheriod['r'][mode], Spheriod[Retrival[i]][mode],xerr=UNCERT['rv'],capsize=5,capthick =2, marker = "$O$",color = cm_sp[mode],lw = 3,ls = linestyle[mode], label=f"Sphrod_{mode_v[mode]}")
+                    # axs2[a,b].errorbar(Hex['r'][mode],Hex[Retrival[i]][mode], marker = "H",xerr=UNCERT['rv'],capsize=5,capthick =2, color = cm_t[mode] ,lw = 3, ls = linestyle[mode],label=f"Hex_{mode_v[mode]}")
+                        
+                    axs2.plot(Spheriod['r'][mode], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_sp,lw = 5.5, alpha = 0.8, label=f"{key}_Sph")
+                    axs2.plot(Hex['r'][mode],Hex[Retrival[i]][mode], marker = "H", color = cm_t,lw = 5.5, alpha = 0.8,label=f"{key}_Hex")
+                    # if RSP_plot != None:
+                    #     axs2[a,b].plot(RSP_plot['r'][mode],RSP_plot[Retrival[i]][mode], marker = "H", color = cm_t[mode] ,lw = 5.5, ls = linestyle[mode],label=f"{key2}_{mode_v[mode]}")
+
+
+
+    axs2.plot(rDM , DvDlnrDM, color = 'k', lw = 3, label ='HiGEAR-DM')
+    # axs2.scatter(r_APS , DvDlnr_APS, color = '#0D0084', label ='APS')
+    axs2.plot(rLDMA , DvDlnrLDMA, color = 'b',lw = 3, label ='HiGEAR-LDMA')
+    # axs2.scatter(rUHSAS , DvDlnrUHSAS, color = '#843900', label ='UHSAS')
+    axs2.scatter(rHW, DvDlnrHW, color = '#C70039',  label ='HiGEAR-HW')
+   
+    # axs2.errorbar(rHW, DvDlnrHW,  yerr= 0.1*DvDlnrHW, xerr=0.05*rHW,color = '#D8BB1B')
+    # axs2.errorbar(rDM , DvDlnrDM,yerr= 0.1*DvDlnrDM, xerr=0.05*rDM, color = '#3EB3C7')
+    # axs2.errorbar(r_APS , DvDlnr_APS,yerr= 0.1*DvDlnr_APS, xerr=0.05*r_APS,color = '#0D0084')
+    # axs2.errorbar(rLDMA , DvDlnrLDMA,yerr= 0.1*DvDlnrLDMA, xerr=0.05*rLDMA, color = '#656564')
+
+    # axs2.errorbar(rUHSAS , DvDlnrUHSAS,yerr= 0.1*DvDlnrUHSAS, xerr=0.05*rUHSAS,color = '#843900')
+
+    axs2.set_xlim(7*10**-3,1)
+    axs2.set_xlabel(r"Rv $\mu$m")
+    axs2.set_ylabel(r"dV/dlnr")
+
+    # plt.xscale('log')
+    axs2.set_xscale("log")
+    axs2.legend()
+
+
+    plt.savefig(f'/home/gregmi/git/Results/FineMode{SavImgName}.png', dpi=200 )
+
 
 
 

@@ -38,6 +38,10 @@ import yaml
 
 import pickle
 
+import datetime
+
+from netCDF4 import Dataset
+
 
 
 
@@ -684,12 +688,12 @@ def AeroProfNorm_sc2(DictHsrl):
     rslt = DictHsrl[0]
     Idx1064 = np.where(rslt['lambda'] == 1064/1000)[0][0]
     Idx532 = np.where(rslt['lambda'] == 532/1000)[0][0]
-    print(Idx1064,Idx532 )
+    # print(Idx1064,Idx532 )
 
 
     max_alt = rslt['OBS_hght']
     # Vext1 = (rslt['meas_VExt'][:,0]+rslt['meas_VExt'][:,1])/2
-    Vext1 = rslt['meas_VExt'][:,Idx532]
+    Vext1 = rslt['meas_VExt'][:,0]
     Vext1[np.where(Vext1<=0)] = 1e-10
 
     
@@ -704,7 +708,7 @@ def AeroProfNorm_sc2(DictHsrl):
 
     DMR1 = DictHsrl[2]
     indxMaxDMR = (np.max(np.where(DMR1==0)[0])) 
-    DMR1[DMR1==0] = 0.2
+    DMR1[DMR1==0] = 0.05
     
     # DMR1[DMR1==0] = np.linspace(indxMaxDMR,0,lnDMR)
 
@@ -746,7 +750,7 @@ def AeroProfNorm_sc2(DictHsrl):
     print(BLH_indx)
 
     if BLH< 1000: #if the boundary layer is low then assume the fine mode aerosol to be well mixed
-        Vextfine = np.concatenate((aboveBL, np.ones(len(belowBL))*10**-6))
+        Vextfine = np.concatenate((aboveBL, np.ones(len(belowBL))*10**-5))
     else:
         belowBL = VextFMF[BLH_indx[0]:]
         Vextfine = np.concatenate((aboveBL,belowBL))
@@ -1122,8 +1126,11 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
 
 # /tmp/tmpn596k7u8$
     rslt_HSRL_1 = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo)
+
+
     # rslt_HSRL_1 = Read_Data_HSRL_Oracles_Height_No355(HSRLfile_path,HSRLfile_name,HSRLPixNo)
     rslt_HSRL =  rslt_HSRL_1[0]
+    
     rslt_RSP = Read_Data_RSP_Oracles(file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn)
 
     
@@ -1231,11 +1238,12 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
         #     # print("Updating",YamlChar[i])
 
     max_alt = rslt['OBS_hght'] #altitude of the aircraft
-    print(rslt['OBS_hght'])
+    # print(rslt['OBS_hght'])
 
     Vext = rslt['meas_VExt']
     Updatedyaml = ymlPath+UpKerFile
-
+    # rslt['meas_DP'][1,-1] = np.nan
+    # print(rslt['meas_DP'][1,2])
     Finalrslts =[]
 
     if RandinitGuess == True:
@@ -1284,6 +1292,7 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
 
         #eventually have to adjust code for height, this works only for one pixel (single height value)
         gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML= True )) # This should copy to new YAML object
+        # rslt['meas_DP'][1,-1] = np.nan
         pix = pixel()
         pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage= 'meas', verbose=False)
         gRuns[-1].addPix(pix)
@@ -2793,7 +2802,7 @@ def Plotcomb(rslts_Sph2,rslts_Tamu2,LidarPolSph,LidarPolTAMU):
         else:
             fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{dt_t}{NoMode}_RSPRetrieval.png', dpi = 400)
 
-def PlotcombEachMode(rslts_Sph2,rslts_Tamu2,HSRL_sphrodT,HSRL_TamuT,LidarPolSph=None,LidarPolTAMU=None):
+def PlotcombEachMode(rslts_Sph2,rslts_Tamu2,HSRL_sphrodT,HSRL_TamuT,LidarPolSph=None,LidarPolTAMU=None, HiGEAR=None):
 
 
 
@@ -2856,8 +2865,7 @@ def PlotcombEachMode(rslts_Sph2,rslts_Tamu2,HSRL_sphrodT,HSRL_TamuT,LidarPolSph=
     cm_spj = ['#4459AA','#568FA0', 'r']
     cm_tj = ["#FB6807",'#C18BB7', 'y']
 
-
-
+    
     for RetNo in range(RepMode):
 
         if  RetNo ==1: 
@@ -2961,6 +2969,15 @@ def PlotcombEachMode(rslts_Sph2,rslts_Tamu2,HSRL_sphrodT,HSRL_TamuT,LidarPolSph=
 
                     color_sph2 = '#adbf4b'
                     color_tamu2 = "#936ecf"
+
+
+                    if HiGEAR !=None:
+
+                        dV_HiGEAR, r_HiGEAR = HiGEAR
+                        axs2[a,b].plot(r_HiGEAR, dV_HiGEAR, marker = "$*$",color = cm_spj[mode],lw = 15,ls = linestyle[mode], label=f"HIGEAR")
+
+        
+
 
                   
                     axs2[a,b].plot(Spheriod['r'][mode], Spheriod[Retrival[i]][mode], marker = "$O$",color = cm_spj[mode],lw = 15,ls = linestyle[mode], label=f"Joint_Sphd")
@@ -3120,8 +3137,6 @@ def PlotcombEachMode(rslts_Sph2,rslts_Tamu2,HSRL_sphrodT,HSRL_TamuT,LidarPolSph=
         else:
             fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{NoMode}_RSPRetrieval.png', dpi = 400)
 
-
-
     
 def VolEqSph_to_VolEqHex(rv_sph ,psi_sph, psi_hex ):
     
@@ -3142,9 +3157,14 @@ def VolEqSph_to_VolEqHex(rv_sph ,psi_sph, psi_hex ):
     return rv_hex
 
 
+def ComparePhaseFunct(rv,sigma):
 
 
-def ComparePhaseFunct(Shape):
+    """
+    rv: lsit of volume equivalent radius
+
+    
+    """
 
     "Run GRASP forward model for different shapes"
 
@@ -3160,17 +3180,14 @@ def ComparePhaseFunct(Shape):
     ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
     UpKerFile =  'settings_FWD_dust_RSP.yml'  #Yaml file after updating the state vectors
 
+    UpKerFile_dump = 'settings_FWD_dust_RSP_dump.yml'
+
+
+
     fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_dust_Vext_conc.yml'
     
     #
-    
-    # rv,sigma, n, k, sf = 2, 0.5, 1.55, 0.004, 1e-6
-    # Volume = 0.06
-    # VConcandExt = np.zeros((len(Volume),2))*np.nan
 
-    
-   
-    
     #Geometry
     #Inputs for simulation
     sza = 40 # solar zenith angle
@@ -3191,112 +3208,116 @@ def ComparePhaseFunct(Shape):
     nowPix = pixel(dt.datetime.now(), 1, 1, 0, 0, masl=0, land_prct=0)
     for wvl in wvls: nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv_g, phi_g, meas)
 
-# # setup "graspRun" object and run GRASP binary
-#     print('Using settings file at %s' % fwdModelYAMLpath)
-#     gr = graspRun(pathYAML=fwdModelYAMLpath, releaseYAML=True, verbose=True) # setup instance of graspRun class, add the above pixel, run grasp and read the output to gr.invRslt[0] (dict)
-#     gr.addPix(nowPix) # add the pixel we created above
-#     gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPathGRASP) # run grasp binary (output read to gr.invRslt[0] [dict])
-#     print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1],gr.invRslt[0]['aod'][-1])) # 
 
-   
-
-
-#     for i in range(len(Kernel)):
-#         for j in range (len(sf)):
+    if isinstance(rv, (list, tuple, np.ndarray)):
+        loop_count = len(rv)
         
-# #change the value of concentration in the yaml file
-#             with open(fwdModelYAMLpath, 'r') as f:  
-#                 data = yaml.safe_load(f) 
-#                 # print(data)
-#                 # data['retrieval']['constraints']['characteristic[2]']['mode[1]']['initial_guess']['value'][0] = float(Volume[i])
-#                 # data['retrieval']['constraints']['characteristic[3]']['mode[1]']['initial_guess']['value'][0],data['retrieval']['constraints']['characteristic[3]']['mode[1]']['initial_guess']['value'][1] = float(rv),float(sigma)
-#                 # data['retrieval']['constraints']['characteristic[4]']['mode[1]']['initial_guess']['value'][0] = float(n)
-#                 # data['retrieval']['constraints']['characteristic[5]']['mode[1]']['initial_guess']['value'][0] = float(k)
-#                 data['retrieval']['constraints']['characteristic[6]']['mode[1]']['initial_guess']['value'][0] = float(sf[j])
-#                 data['retrieval']['forward_model']['phase_matrix']['kernels_folder'] = Kernel[i]
+    else:
+        loop_count = 1
+        
 
-#             f.close()
-#             # UpKerFile = 'settings_dust_Vext_conc_dump.yml'
-#             with open(ymlPath+UpKerFile, 'w') as f: #write the chnages to new yaml file
-#                 yaml.safe_dump(data, f)
-#             f.close()
+            
+    for i in range(loop_count):
+        with open(ymlPath+UpKerFile, 'r') as f:  
+            data = yaml.safe_load(f) 
+            # print(data)
+            # data['retrieval']['constraints']['characteristic[2]']['mode[1]']['initial_guess']['value'][0] = float(Volume[i])
+            if loop_count >1: #If rv is list or array
+                data['retrieval']['constraints']['characteristic[2]']['mode[1]']['initial_guess']['value'][0],data['retrieval']['constraints']['characteristic[2]']['mode[1]']['initial_guess']['value'][1] = float(rv[i]),float(sigma)
+            if loop_count == 1: #If rv is list or array
+                data['retrieval']['constraints']['characteristic[2]']['mode[1]']['initial_guess']['value'][0],data['retrieval']['constraints']['characteristic[2]']['mode[1]']['initial_guess']['value'][1] = float(rv),float(sigma)
+    #             
+    # 
+    #           # data['retrieval']['constraints']['characteristic[4]']['mode[1]']['initial_guess']['value'][0] = float(n)
+    #                 # data['retrieval']['constraints']['characteristic[5]']['mode[1]']['initial_guess']['value'][0] = float(k)
+    #                 data['retrieval']['constraints']['characteristic[6]']['mode[1]']['initial_guess']['value'][0] = float(sf[j])
+            KernelName = data['retrieval']['forward_model']['phase_matrix']['kernels_folder']
 
-#New yaml file after updating state vectors/variables
-    Newyaml = ymlPath+UpKerFile
-    #Running GRASP
-    print('Using settings file at %s' % Newyaml)
-    gr = graspRun(pathYAML= Newyaml, releaseYAML=True, verbose=True) # setup instance of graspRun class, add the above pixel, run grasp and read the output to gr.invRslt[0] (dict)
-    gr.addPix(nowPix) # add the pixel we created above
-    gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath) # run grasp binary (output read to gr.invRslt[0] [dict])
-    print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1],gr.invRslt[0]['aod'][-1])) # 
+            f.close()
+            # UpKerFile = 'settings_dust_Vext_conc_dump.yml'
+            with open(ymlPath+UpKerFile_dump, 'w') as f: #write the chnages to new yaml file
+                yaml.safe_dump(data, f)
+            f.close()
 
-    Shape_rsltdict = gr.invRslt[0]
+    #New yaml file after updating state vectors/variables
+        Newyaml = ymlPath+UpKerFile_dump
+        #Running GRASP
+        print('Using settings file at %s' % Newyaml)
+        gr = graspRun(pathYAML= Newyaml, releaseYAML=True, verbose=True) # setup instance of graspRun class, add the above pixel, run grasp and read the output to gr.invRslt[0] (dict)
+        gr.addPix(nowPix) # add the pixel we created above
+        gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath) # run grasp binary (output read to gr.invRslt[0] [dict])
+        print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1],gr.invRslt[0]['aod'][-1])) # 
+
+        if loop_count>1:
+            Shape_rsltdict[f'{KernelName}_{rv[i]}'] = gr.invRslt[0]
+        if loop_count == 1:
+            Shape_rsltdict[f'{KernelName}_{rv}'] = gr.invRslt[0]
 
 
 
-    return  gr.invRslt[0]
+    return  Shape_rsltdict
    
 
-def PlotShapeDict(Dict_shape):
+# def PlotShapeDict(Dict_shape):
 
-    "Plots the phase function for different shape models for comparision"
+#     "Plots the phase function for different shape models for comparision"
 
-    plt.rcParams['font.size'] = '18'
+#     plt.rcParams['font.size'] = '18'
     
 
-    color = ['#614C0E','#E09428','#B1DBFF','#B1DBFF'] #Color blind friendly scheme for different retrieval techniques< :rsponlt, hsrl only and combined
-    WlIdx =  [0,4,7] #Index of the wavelength 
+#     color = ['#614C0E','#E09428','#B1DBFF','#B1DBFF'] #Color blind friendly scheme for different retrieval techniques< :rsponlt, hsrl only and combined
+#     WlIdx =  [0,4,7] #Index of the wavelength 
 
-    # color = ['']
+#     # color = ['']
 
-    markerIdx= np.arange(0,181,30)
-    marker = ["$0$", 'D', 'o','.']
-    label = ['Spheroid', "Hex", "sph",'']
+#     markerIdx= np.arange(0,181,30)
+#     marker = ["$0$", 'D', 'o','.']
+#     label = ['Spheroid', "Hex", "sph",'']
 
     
-    "Plots comparing the phase function and dolp for different shape models from Dict_shape['sphCoarseKernel']= ComparePhaseFunct(Shape='sph')"
-    fig,axs = plt.subplots(4,3, figsize =(16,8), sharex=True)
-    shapeNamekeys = Dict_shape.keys()
-    for idx, shapeName in enumerate(Dict_shape.keys()):
+#     "Plots comparing the phase function and dolp for different shape models from Dict_shape['sphCoarseKernel']= ComparePhaseFunct(Shape='sph')"
+#     fig,axs = plt.subplots(4,3, figsize =(16,8), sharex=True)
+#     shapeNamekeys = Dict_shape.keys()
+#     for idx, shapeName in enumerate(Dict_shape.keys()):
     
-        for i in range(len(WlIdx)):
-            if idx<3:
-                axs[0,i].plot(np.arange(181),Dict_shape[shapeName]['p11'][:,0,i], lw =3, color = color[idx])
-                axs[0,i].scatter(np.arange(181)[markerIdx],Dict_shape[shapeName]['p11'][:,0,i][markerIdx],s = 100,edgecolors='black', linewidths=1, color = color[idx], marker =marker[idx], label = label[idx])
-                axs[0,i].set_yscale('log')
-                axs[1,i].plot(np.arange(181),Dict_shape['Spheroid']['p11'][:,0,i] - Dict_shape['hex']['p11'][:,0,i], lw =3, color = color[idx])
+#         for i in range(len(WlIdx)):
+#             if idx<3:
+#                 axs[0,i].plot(np.arange(181),Dict_shape[shapeName]['p11'][:,0,i], lw =3, color = color[idx])
+#                 axs[0,i].scatter(np.arange(181)[markerIdx],Dict_shape[shapeName]['p11'][:,0,i][markerIdx],s = 100,edgecolors='black', linewidths=1, color = color[idx], marker =marker[idx], label = label[idx])
+#                 axs[0,i].set_yscale('log')
+#                 axs[1,i].plot(np.arange(181),Dict_shape['Spheroid']['p11'][:,0,i] - Dict_shape['hex']['p11'][:,0,i], lw =3, color = color[idx])
                 
 
-                axs[2,i].plot(np.arange(181),-Dict_shape[shapeName]['p12'][:,0,i]/Dict_shape[shapeName]['p11'][:,0,i],lw =3, color = color[idx])
-                axs[2,i].scatter(np.arange(181)[markerIdx],-Dict_shape[shapeName]['p12'][:,0,i][markerIdx]/Dict_shape[shapeName]['p11'][:,0,i][markerIdx],s = 100,edgecolors='black', linewidths=1, color = color[idx], marker =marker[idx],)
-                axs[3,i].plot(np.arange(181),(-Dict_shape['Spheroid']['p12'][:,0,i]/Dict_shape['Spheroid']['p11'][:,0,i])-(-Dict_shape['hex']['p12'][:,0,i]/Dict_shape['hex']['p11'][:,0,i]),lw =3, color = color[idx])
+#                 axs[2,i].plot(np.arange(181),-Dict_shape[shapeName]['p12'][:,0,i]/Dict_shape[shapeName]['p11'][:,0,i],lw =3, color = color[idx])
+#                 axs[2,i].scatter(np.arange(181)[markerIdx],-Dict_shape[shapeName]['p12'][:,0,i][markerIdx]/Dict_shape[shapeName]['p11'][:,0,i][markerIdx],s = 100,edgecolors='black', linewidths=1, color = color[idx], marker =marker[idx],)
+#                 axs[3,i].plot(np.arange(181),(-Dict_shape['Spheroid']['p12'][:,0,i]/Dict_shape['Spheroid']['p11'][:,0,i])-(-Dict_shape['hex']['p12'][:,0,i]/Dict_shape['hex']['p11'][:,0,i]),lw =3, color = color[idx])
                
-                # axs[0,i].set_xlabel(r'$\theta_{s}$')
-                axs[3,i].set_xlabel(r'$\theta_{s}$')
+#                 # axs[0,i].set_xlabel(r'$\theta_{s}$')
+#                 axs[3,i].set_xlabel(r'$\theta_{s}$')
 
-                axs[2,i].set_ylabel(r'-P12/P11')
+#                 axs[2,i].set_ylabel(r'-P12/P11')
 
-                # txtylabel = 'P11 \n' + str(Dict_shape[shapeName]['lambda'][WlIdx[i]])
-                if i ==0:
-                    axs[0,i].set_ylabel('P11')
+#                 # txtylabel = 'P11 \n' + str(Dict_shape[shapeName]['lambda'][WlIdx[i]])
+#                 if i ==0:
+#                     axs[0,i].set_ylabel('P11')
 
-                if i ==0:
-                    axs[0,i].legend(fontsize =18)
-                axs[0,i].set_title(str(Dict_shape[shapeName]['lambda'][WlIdx[i]])+r"$\mu$m")
-                # axs[i,1].set_title(Dict_shape[shapeName]['lambda'][WlIdx[i]])
+#                 if i ==0:
+#                     axs[0,i].legend(fontsize =18)
+#                 axs[0,i].set_title(str(Dict_shape[shapeName]['lambda'][WlIdx[i]])+r"$\mu$m")
+#                 # axs[i,1].set_title(Dict_shape[shapeName]['lambda'][WlIdx[i]])
 
-    titlelabel = '(rv,σ) : ' + str(Dict_shape[shapeName]['rv'])+',' + str(Dict_shape[shapeName]['sigma'])+ " n: " + str(Dict_shape[shapeName]['n'][WlIdx]) + " , k : " + str(Dict_shape[shapeName]['k'][WlIdx]) 
-
-
-
-    plt.suptitle(titlelabel )
-    fig.tight_layout()
-
-    plt.savefig('Phasefunction.png', dpi = 200)
+#     titlelabel = '(rv,σ) : ' + str(Dict_shape[shapeName]['rv'])+',' + str(Dict_shape[shapeName]['sigma'])+ " n: " + str(Dict_shape[shapeName]['n'][WlIdx]) + " , k : " + str(Dict_shape[shapeName]['k'][WlIdx]) 
 
 
 
-def PlotShapeDict(Dict_shape):
+#     plt.suptitle(titlelabel )
+#     fig.tight_layout()
+
+#     plt.savefig('Phasefunction.png', dpi = 200)
+
+
+
+def PlotShapeDict(Dict_shape, name =None):
 
     "Plots the phase function for different shape models for comparision"
 
@@ -3313,22 +3334,41 @@ def PlotShapeDict(Dict_shape):
 
     markerIdx= np.arange(0,181,30)
     marker = ["$0$", 'D', 'o','.']
-    label = ['Spheroid', "Hex", "sph",'']
+    # label = ['Spheroid', "Hex", "sph",'']
 
-    
+
     "Plots comparing the phase function and dolp for different shape models from Dict_shape['sphCoarseKernel']= ComparePhaseFunct(Shape='sph')"
-    fig,axs = plt.subplots(2,len(WlIdx)+1, figsize =(18,10), sharex=True)
-    shapeNamekeys = Dict_shape.keys()
+    fig,axs = plt.subplots(2,len(WlIdx)+3, figsize =(40,10), sharex=True)
+    shapeNamekeys = list(Dict_shape.keys())
+    
+    label = shapeNamekeys
 
+    # if shapeNamekeys
+
+    a = len(WlIdx)
+
+    for j in range(len(shapeNamekeys)-1):
+        if j ==1: a = len(WlIdx)+1
+
+        for ii in range(len(wl)):
+
+
+            axs[0,a].plot(np.arange(181),(100*abs(Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii] - Dict_shape[f'{shapeNamekeys[j+1]}']['p11'][:,0,ii])/Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii]), lw =3, color = color_instrument[ii], label =wl[ii])
+                # axs[1,i].set_yscale('log')
+            axs[0,a].set_ylabel(r'Diff P11 %')
+            axs[1,a].plot(np.arange(181),abs((-Dict_shape[f'{shapeNamekeys[0]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii])-(-Dict_shape[f'{shapeNamekeys[j+1]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[j+1]}']['p11'][:,0,ii])),lw =3, color = color_instrument[ii], label = wl[ii])
+            axs[1,a].set_ylabel(r'Abs Diff -P12/P11')
+            
+            axs[1,a].set_xlabel(r'$\theta_{s}$')
+            axs[0,a].set_title(f'{shapeNamekeys[0]} - {shapeNamekeys[j+1]}')
     for ii in range(len(wl)):
-
-        axs[0,len(WlIdx)].plot(np.arange(181),(100*abs(Dict_shape['Spheroid']['p11'][:,0,ii] - Dict_shape['Hex']['p11'][:,0,ii])/Dict_shape['Spheroid']['p11'][:,0,ii]), lw =3, color = color_instrument[ii], label =wl[ii])
+        axs[0,4].plot(np.arange(181),(100*abs(Dict_shape[f'{shapeNamekeys[1]}']['p11'][:,0,ii] - Dict_shape[f'{shapeNamekeys[2]}']['p11'][:,0,ii])/Dict_shape[f'{shapeNamekeys[1]}']['p11'][:,0,ii]), lw =3, color = color_instrument[ii], label =wl[ii])
             # axs[1,i].set_yscale('log')
-        axs[0,len(WlIdx)].set_ylabel(r'Diff P11 %')
-        axs[1,len(WlIdx)].plot(np.arange(181),abs((-Dict_shape['Spheroid']['p12'][:,0,ii]/Dict_shape['Spheroid']['p11'][:,0,ii])-(-Dict_shape['Hex']['p12'][:,0,ii]/Dict_shape['Hex']['p11'][:,0,ii])),lw =3, color = color_instrument[ii], label = wl[ii])
-        axs[1,len(WlIdx)].set_ylabel(r'Abs Diff -P12/P11')
-
-    axs[1,len(WlIdx)].legend(ncol =1, prop = '10')
+        # axs[0,4].set_ylabel(r'Diff P11 %')
+        axs[1,4].plot(np.arange(181),abs((-Dict_shape[f'{shapeNamekeys[1]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[1]}']['p11'][:,0,ii])-(-Dict_shape[f'{shapeNamekeys[2]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[2]}']['p11'][:,0,ii])),lw =3, color = color_instrument[ii], label = wl[ii])
+        axs[0,4].set_title(f'{shapeNamekeys[1]} - {shapeNamekeys[2]}')
+        axs[1,4].set_xlabel(r'$\theta_{s}$')
+    axs[1,a].legend(ncol =1, prop = '10')
     for idx, shapeName in enumerate(Dict_shape.keys()):
         
     
@@ -3359,19 +3399,95 @@ def PlotShapeDict(Dict_shape):
                     # axs[i,1].set_title(Dict_shape[shapeName]['lambda'][WlIdx[i]])
 
     titlelabel = '(rv,σ) : ' + str(Dict_shape[shapeName]['rv'])+',' + str(Dict_shape[shapeName]['sigma'])+ " n: " + str(Dict_shape[shapeName]['n'][WlIdx]) + " , k : " + str(Dict_shape[shapeName]['k'][WlIdx]) 
-
+    
 
 
     plt.suptitle(titlelabel )
+
+    plt.savefig(f'Phasefunction_{name}.png', dpi = 200)
     fig.tight_layout()
 
-    plt.savefig('Phasefunction.png', dpi = 200)
+  
 
 # PlotShapeDict(DictSH)
 
 # def ErrHeatMap(rslt1, rslt2):
 
+def Values(rv_sph,sigma,psi_sph,psi_hex):
+
+    # rv_sph = np.linspace(0.5,5,10)
+    Dict_sph_rv =ComparePhaseFunct(rv_sph,sigma) 
+
+
+    #TODO have to manually change the kernel name in the settings file. 
+
+    Dict_hex_rv =  ComparePhaseFunct(rv_sph,sigma) 
+
+    rv_hex = VolEqSph_to_VolEqHex(rv_sph ,psi_sph= 0.8521, psi_hex = 0.7 ) 
+    Dict_hex_rv_convert =  ComparePhaseFunct(rv_hex,sigma)     
+
+
+
+
+    DictAll ={}
+    for i in range(len(Dict_hex_rv_convert.keys())):
+        DictAll[f'{i}'] = {}
+        DictAll[f'{i}']['hex_rv_eff'] = Dict_hex_rv_convert[f'{list[Dict_hex_rv_convert.keys()][i]}']
+        DictAll[f'{i}']['sph_rv'] = Dict_sph_rv[f'{list[Dict_sph_rv.keys()][i]}']
+        DictAll[f'{i}']['hex_rv'] = Dict_hex_rv [f'{list[Dict_hex_rv.keys()][i]}']
+
+    DictAll['rv'] = rv_sph
+    DictAll['Mod_rv_reff'] =rv_hex 
+    DictAll['sphericity_sph'] = psi_sph
+    DictAll['sphericity_hex'] = psi_hex
+
+
+    f = open('dict.txt','w')
+    f.write(str(dic))
+    f.close()
+
+
+    return DictAll 
+
+
+def Read_HiGear(file_name, Idx):
+
+    plt.rcParams['font.size'] = '12'
+
+    #Plot the size distribution from HiGEAR Oracles 2018
+
+    # Open a .nc file ("file_name")
+
+    file_id = Dataset(file_name)
+    d = file_id.variables['diameter'][:]  #micrometers
     
+    r = d/2   #Radius
+    lnr = np.log(r) #loge r
+
+    dNdlogd = file_id.variables["dNdlogd"][:,Idx]  #log10 number distribution
+
+    dNdlnr = dNdlogd / np.log(10)
+    dNdlnr [np.where(dNdlnr <=0)[0]] = np.nan #set the bins with 0 concetration to nan, for plotting.
+
+    V = (4/3)* np.pi* r**3  # Volume of an equivalent sphere. 
+    dVdlnr = V * dNdlnr  #dV / dlnr 
+
+    # Vtotal = np.trapz(dVdlnr, lnr)
+
+    DvDlnr = dVdlnr
+
+    # timeStart=  file_id.variables["time_start"][Idx ]  #time
+    # timeEnd = file_id.variables["time_end"][Idx ]
+    # # Convert Unix time to UTC datetime
+    # utc_datetime_start = datetime.datetime.utcfromtimestamp(float(timeStart))
+    # utc_datetime_End = datetime.datetime.utcfromtimestamp(float(timeEnd))
+
+    # print("UTC Date and Time:", utc_datetime_start,utc_datetime_End,'time window:',utc_datetime_End-utc_datetime_start )
+
+
+    return DvDlnr, r 
+
+
 
 # PlotE2C(v_hex_sea,name ='v_hex_sea')
 # PlotE2C(v_sph_sea,name ='v_sph_sea')
