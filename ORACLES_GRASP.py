@@ -17,6 +17,7 @@ This code reads Polarimetric data from the Campaigns and runs GRASP. This code w
 import sys
 from CreateRsltsDict import Read_Data_RSP_Oracles
 from CreateRsltsDict import Read_Data_HSRL_Oracles
+from CreateRsltsDict import Read_LES_Data
 import netCDF4 as nc
 from runGRASP import graspDB, graspRun, pixel, graspYAML
 from matplotlib import pyplot as plt
@@ -26,11 +27,11 @@ import numpy as np
 import datetime as dt
 from numpy import nanmean
 import h5py 
-sys.path.append("/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases")
-from architectureMap import returnPixel
+#sys.path.append("/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases")
+#from architectureMap import returnPixel
 from Plot_ORACLES import PltGRASPoutput
 import yaml
-%matplotlib inline
+#%matplotlib inline
 
 # Path to the Polarimeter data (RSP, In this case)
 file_path = "/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03/"  #Path to the ORACLE data file
@@ -172,7 +173,7 @@ def find_dust(HSRLfile_path, HSRLfile_name, plot=None):
     # Return the filtered dust pixel values and the dust pixel value(s) with the highest frequency count
     return dust_pix, max_dust
 
-def RSP_Run(Kernel_type,PixNo,ang1,ang2,TelNo,nwl): 
+def RSP_Run(Kernel_type,PixNo,ang1,ang2,TelNo,nwl): # fro LES PXno and NWL
         
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
         # Kernel_type =  sphro is for the GRASP spheriod kernal, while TAMU is to run with Hexahedral Kernal
@@ -191,19 +192,68 @@ def RSP_Run(Kernel_type,PixNo,ang1,ang2,TelNo,nwl):
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
         rslt = Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsFn)
         print(rslt['OBS_hght'])
+
         maxCPU = 3 #maximum CPU allocated to run GRASP on server
         gRuns = []
         yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
         #eventually have to adjust code for height, this works only for one pixel (single height value)
         gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML=True )) # This should copy to new YAML object
-        pix = pixel()
-        pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage='meas', verbose=False)
+        pix = pixel() # taking the px class from runGrasp.
+        pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage='meas', verbose=False) #Creates SDATA
         gRuns[-1].addPix(pix)
-        gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU)
+        gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU) # creates GRASP object
 
         #rslts contain all the results form the GRASP inverse run
-        rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath)
+        rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath) # Runs GRASP
         return rslts
+
+##############################################################################################################################################################################################
+
+# Runing GRASP for LES Data
+# Project: Aerosol impact in Twilight Zones using LES 
+# Author: Nirandi Jayasinghe
+
+LES_file_path = '/data/home/njayasinghe/LES/Data/Test/' #LES file_path
+LES_filename = 'dharma_TCu_001620_SZA40_SPHI30_wvl0.669_NOAERO-3.nc' #LES filename
+
+def LES_Run(XPX,YPX,nwl,RT): # fro LES PXno and NWL
+        
+        krnlPath='/data/home/njayasinghe/grasp/src/retrieval/internal_files'
+        fwdModelYAMLpath = '/data/home/njayasinghe/LES/grasp/aod/settings_aod_case01.yml'
+        binPathGRASP = '/data/home/njayasinghe/grasp/build/bin/grasp_app'
+        savePath=f'/data/home/njayasinghe/LES'
+        """# Kernel_type =  sphro is for the GRASP spheriod kernal, while TAMU is to run with Hexahedral Kernal
+        if Kernel_type == "sphro":
+            fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes_Shape_ORACLE_DoLP.yml'
+            # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes_Shape_ORACLE_DoLP_2COARSE.yml'
+            binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP_v112/bin/grasp_app' 
+            savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
+        
+        if Kernel_type == "TAMU":
+            fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes_Shape_ORACLE_DoLP_dust.yml'
+            # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_2modes_Shape_ORACLE_DoLP_dust_2Coarse.yml'
+            binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
+            savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
+        """
+        #rslt is the GRASP rslt dictionary or contains GRASP Objects
+        rslt = Read_LES_Data(LES_file_path, LES_filename, XPX, YPX, nwl,RT)
+        #print(rslt['OBS_hght'])
+
+        maxCPU = 3 #maximum CPU allocated to run GRASP on server
+        gRuns = []
+        yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
+        #eventually have to adjust code for height, this works only for one pixel (single height value)
+        gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML=True )) # This should copy to new YAML object
+        pix = pixel() # taking the px class from runGrasp.
+        pix.populateFromRslt(rslt, radianceNoiseFun=None, dataStage='meas', verbose=False) #Creates SDATA
+        gRuns[-1].addPix(pix)
+        gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU) # creates GRASP object
+
+        #rslts contain all the results form the GRASP inverse run
+        rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath) # Runs GRASP
+        return rslts
+
+######################################################## End of the Code #######################################################################################################################
 
 
 
@@ -765,10 +815,10 @@ import datetime as dt
 from numpy import nanmean
 import h5py 
 sys.path.append("/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases")
-from architectureMap import returnPixel
+#from architectureMap import returnPixel
 from Plot_ORACLES import PltGRASPoutput
 import yaml
-%matplotlib inline
+#%matplotlib inline
 
 # Path to the Polarimeter data (RSP, In this case)
 file_path = "/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03/"  #Path to the ORACLE data file

@@ -16,6 +16,7 @@ import netCDF4 as nc
 from numpy import nanmean
 import yaml
 import pandas as pd
+from netCDF4 import Dataset
 
 #The function Checks for Fill values or negative values and replaces them with nan. To check for negative values, set negative_check = True 
 def checkFillVals(param , negative_check = None):
@@ -80,6 +81,8 @@ def Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResF
 
 # Reads the Data from ORACLES and gives the rslt dictionary for GRASP
 def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsFn): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
+    #ang 1 & ang 2 : index for selected range of view angles.
+    #TelNo : telescope index. RSP has 2 telescopes. 
     
     #Reading the hdf file
     f1_MAP = h5py.File(file_path + file_name,'r+') 
@@ -182,8 +185,8 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     jdv = f1_MAP['Geometry']['Measurement_Time'][TelNo,PixNo,0]+ 2400000.5  #Taking the time stamp for first angle
     
 
-    # All the geometry arrays should be 2D, (angle, wl)
-    rslt['sza'] = np.repeat(Solar_Zenith, nwl).reshape(len(Solar_Zenith), nwl)
+    # All the geometry arrays should be 2D, (angle, wl) --> solar zenith angle, wavelength
+    rslt['sza'] = np.repeat(Solar_Zenith, nwl).reshape(len(Solar_Zenith), nwl) #repeat for number of view angles
     rslt['vis']= np.repeat(Viewing_Zenith, nwl).reshape(len(Viewing_Zenith), nwl) 
     rslt['sca_ang']= np.repeat( Scattering_ang, nwl).reshape(len(Scattering_ang), nwl)  #Nangles x Nwavelengths
     rslt['fis'] = np.repeat(Relative_Azi , nwl).reshape(len(Relative_Azi ), nwl)
@@ -200,6 +203,91 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     f1_MAP.close()
     return rslt
 
+########################################## Reading LES Data ##########################################
+# Project: Aerosol impact in Twilight Zones using LES 
+# Author: Nirandi Jayasinghe
+# Reading LES Data into rslt dict to create SDATA
+# Last Edited: Aug 6th 2024
+
+def Read_LES_Data(file_path, filename, XPX, YPX, nwl,RT):
+
+    #Reading Data
+    Data = Dataset(file_path+filename, 'r')
+    Var_Names = Data.variables.keys()
+
+    data = {}
+
+    #Reading all the variables
+    for name in Var_Names: 
+        data[name] = Data.variables[name][:]
+    
+    wl = data["Rayleigh_Wavelength"].data #wavelengths
+    if nwl == None : nwl = len(wl)  #no of wavelengths
+
+    Lat = 41.5600 #dummy value 
+    Lon = -5.2500 #dummy value
+
+    #Assuming angles for LES data are defined similar to GRASP definition.
+    #view zenith angle
+    vza = data["View_Zenith_Angle"].data
+    #scatteting angle
+    scat_ang = data["scat_ang"].data
+    #solar zenith angle
+    sza = data["Solar_Zenith_Angle"].data
+    #solar azimuth angle
+    saa = data["Solar_Azimuth_Angle"].data
+    #view azimuth angle
+    vaa = data["View_Azimuth_Angle"].data
+
+    #converting angles to radians to calculate relative azimuth angles
+    SZA = np.radians(sza)
+    VZA = np.radians(vza)
+    SAA = np.radians(saa)
+    VAA = np.radians(vaa)
+
+    Rel_Azimuth = (180/np.pi)*(np.arccos((np.cos((scat_ang *np.pi)/180) + np.cos(SZA)*np.cos(VZA))/(- np.sin(SZA)*np.sin(VZA))))
+
+    if (RT==1):
+        # Dimentions:[nVZA,nwl,SZA,Stoke,nX,nY]
+        meas_I = data["RT_1D_Reflectance"].data[:,:nwl,0,0,XPX:XPX+1,YPX:YPX+1]
+        meas_Q = data["RT_1D_Reflectance"].data[:,:nwl,0,1,XPX:XPX+1,YPX:YPX+1]
+        meas_U = data["RT_1D_Reflectance"].data[:,:nwl,0,2,XPX:XPX+1,YPX:YPX+1]
+        DOLP = np.sqrt(meas_Q*meas_Q+meas_U*meas_U)/meas_I
+
+    if (RT==3):
+        # Dimentions:[nVZA,nwl,SZA,Stoke,nX,nY]
+        meas_I = data["RT_3D_Reflectance"].data[:,:nwl,0,0,XPX:XPX+1,YPX:YPX+1]
+        meas_Q = data["RT_3D_Reflectance"].data[:,:nwl,0,1,XPX:XPX+1,YPX:YPX+1]
+        meas_U = data["RT_3D_Reflectance"].data[:,:nwl,0,2,XPX:XPX+1,YPX:YPX+1]
+        DOLP = np.sqrt(meas_Q*meas_Q+meas_U*meas_U)/meas_I
+
+    #creating Results Dictionary for GRASP
+
+    rslt = {}
+
+    rslt['lambda'] = wl #wavelength is in um
+    rslt['longitude'] = Lon
+    rslt['latitude'] = Lat
+    rslt['meas_I'] = meas_I
+    rslt['meas_Q'] = meas_Q
+    rslt['meas_U'] = meas_U
+    rslt['meas_P'] = DOLP
+
+    yy = 2024 ; mm = 8 ; dd = 8 ; hh = 12 ; mi = 00 ; s = 00; ms = 00
+    rslt['datetime'] = dt.datetime(yy,mm,dd,hh,mi,s,ms)
+  
+    # All the geometry arrays should be 2D, (angle, wl) --> solar zenith angle, wavelength
+    rslt['sza'] = np.repeat(sza,nwl).reshape(len(sza),nwl)
+    rslt['vis'] = np.repeat(vza,nwl).reshape(len(vza),nwl)
+    rslt['sca_ang'] = np.repeat(scat_ang,nwl).reshape(len(scat_ang),nwl)
+    rslt['fis'] = np.repeat(Rel_Azimuth,nwl).reshape(len(Rel_Azimuth),nwl)
+    rslt['land_prct'] = 0 #over ocean 
+
+    rslt['OBS_hght'] = data['Sensor_Position'].data #sensor position is 20 km for LES data
+
+    return rslt
+
+    ########################################## END of LES DATA READING ##########################################
 
 def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
 
