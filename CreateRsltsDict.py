@@ -283,7 +283,7 @@ def Read_LES_Data(file_path, filename, XPX, YPX, nwl,RT):
     rslt['fis'] = np.repeat(Rel_Azimuth,nwl).reshape(len(Rel_Azimuth),nwl)
     rslt['land_prct'] = 0 #over ocean 
 
-    rslt['OBS_hght'] = data['Sensor_Position'].data #sensor position is 20 km for LES data
+    rslt['OBS_hght'] = data['Sensor_Position'].data*1000 #sensor position is 20 km for LES data
 
     return rslt
 
