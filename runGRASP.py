@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import tempfile
-import os.path
 import warnings
+import os
 import re
 import time
 import pickle
@@ -17,7 +17,7 @@ import pandas as pd
 from scipy.stats import gaussian_kde
 import numpy as np
 import yaml # may require `conda install pyyaml`
-import miscFunctions as ms
+import miscFunctions as mf
 
 try:
     from netCDF4 import Dataset
@@ -31,6 +31,14 @@ try:
 except ImportError:
     PLOT_LOADED = False
 
+vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
+
+#<><><><>
+# local tmp directory
+LOCAL_TMPDIR_ = os.popen('echo $LOCAL_TMPDIR')
+LOCAL_TMPDIR = LOCAL_TMPDIR_.read()[:-2]
+LOCAL_TMPDIR_.close()
+#<><><><>
 
 class graspDB():
 
@@ -348,7 +356,12 @@ class graspRun():
             self.dirGRASP = None
             self.yamlObj = graspYAML()
             return
-        self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP # set working dir
+        if 'borg' in os.uname()[1]:
+            
+            self.dirGRASP = LOCAL_TMPDIR+tempfile.mkdtemp() if not dirGRASP else dirGRASP
+            os.makedirs(self.dirGRASP, exist_ok=True)
+        else:
+            self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP # set working dir
         if type(pathYAML)==str:
             if os.path.dirname(pathYAML) == self.dirGRASP: # if YAML is in specified working dir
                 self.yamlObj = graspYAML(pathYAML)
@@ -357,7 +370,7 @@ class graspRun():
                 self.yamlObj = graspYAML(pathYAML, newPathYAML)
         elif type(pathYAML)==graspYAML:
             if pathYAML.dl is not None: pathYAML.writeYAML() # incase there are unsaved changes
-            if releaseYAML: # copy so we don't overwrite orinal
+            if releaseYAML: # copy so we don't overwrite orginal
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
                 self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
             elif os.path.dirname(pathYAML.YAMLpath) == self.dirGRASP: # if YAML is in specified working dir:
@@ -819,11 +832,11 @@ class graspRun():
                     λ550Ind = np.argmin(np.abs(rs['lambda']-0.55))
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
-                        rs['βext'][mode,:] = 1e6*ms.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
+                        rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
         if ('dVdlnr' in results[0]):
             for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
             if 'rEff' not in results[0]:
-                rEffs = ms.integratePSD(results, moment='rEff')
+                rEffs = mf.integratePSD(results, moment='rEff')
                 for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
         return results, wavelengths
 
@@ -911,6 +924,7 @@ class graspRun():
         numericLn = re.compile('^[ ]*[0-9]+')
         ptrnHeader = re.compile('^[ ]*#[ ]*(sza[ ]*vis|Range_\[m\][ ]*meas_)')
         ptrnResid = re.compile('[ ]*noise[ ]*abs[ ]*rel[ ]*')
+        ptrnIter = re.compile(r'iteration #\s*(\d+)')
         i = 0
         skipFlds = 1 # the 1st field is just the measurement number
         FITfnd = False
@@ -919,6 +933,12 @@ class graspRun():
                 pixInd = 0
                 while numericLn.match(contents[i+1]):
                     results[pixInd]['costVal'] = float(re.search('^[ ]*[0-9\.]+', contents[i+1]).group())
+                    if not ptrnIter.findall(contents[i+1]) is None:
+                        results[pixInd]['nIter'] = int(ptrnIter.findall(contents[i+1])[0])
+                        if results[pixInd]['nIter'] != 0: # not printing this if it is fwd model only
+                            if self.verbose: print('nIter = %d, for pixel %d' % (results[pixInd]['nIter'], pixInd+1))  
+                    else:
+                        print('nIter not found!, len(contents)=%d, i=%d \n content=%s for pixel %d' % (len(contents), i, contents[i+1], pixInd+1))
                     i += 1
                     pixInd += 1
             if not ptrnFIT.match(contents[i]) is None: # We found fitting data
@@ -1081,7 +1101,7 @@ class rsltDictTools():
             x = x[~np.isnan(y)] # without these 2 lines np.interp (and maybe angstrmIntrp) will return nans, in some circustances
             y = y[~np.isnan(y)]
         if 'aod' in key.lower():
-            return np.asarray([ms.angstrmIntrp(x,y,xNew) for xNew in xn])
+            return np.asarray([mf.angstrmIntrp(x,y,xNew) for xNew in xn])
         else:
             return np.interp(xn, x, y)
 
@@ -1284,7 +1304,18 @@ class graspYAML():
             randomID = hex(np.random.randint(0, 2**63-1))[2:] # needed to prevent identical FN w/ many parallel runs
             tag = newTmpFile if type(newTmpFile)==str else 'NEW'
             newFn = '%s_%s_%s.yml' % (os.path.basename(baseYAMLpath)[:-4], tag, randomID)
-            self.YAMLpath = os.path.join(tempfile.gettempdir(), newFn)
+            # To avoid the overuage of storage (temp space in discover)
+            if 'borg' in os.uname()[1]:
+                # creating a temp space in DISCOVER NOBACKUP drive
+                # if not os.path.exists('temp'):
+                #     os.mkdir('temp')
+                #     print('Creating temp directory')
+                newPat = LOCAL_TMPDIR + tempfile.gettempdir()
+                self.YAMLpath = os.path.join(newPat, newFn)
+                os.makedirs(newPat, exist_ok = True)
+                print('Yes')
+            else:
+                self.YAMLpath = os.path.join(tempfile.gettempdir(), newFn)
             copyfile(baseYAMLpath, self.YAMLpath)
         else:
             self.YAMLpath = baseYAMLpath
@@ -1364,8 +1395,17 @@ class graspYAML():
                     uprBnd = np.array(mode['initial_guess']['max'], dtype=float)
                     rngBnd = fracOfSpace*(uprBnd - lowBnd)/2
                     meanBnd = (lowBnd + uprBnd)/2
-                    newGuess = np.random.uniform(meanBnd-rngBnd, meanBnd+rngBnd).tolist() # guess is spectrally flat relative to rng
-                    mode['initial_guess']['value'] = newGuess
+                    if char['type'] in ['imaginary_part_of_refractive_index_spectral_dependent', 'aerosol_concentration']:
+                        try:
+                            newGuess = mf.loguniform(meanBnd-rngBnd, meanBnd+rngBnd) # guess is spectrally flat relative to rng #HACK
+                        except:
+                            print(char['type'])
+                            print(mode)
+                                
+                        mode['initial_guess']['value'] = newGuess
+                    else: # random number in linear space                        
+                        newGuess = np.random.uniform(meanBnd-rngBnd, meanBnd+rngBnd).tolist()
+                        mode['initial_guess']['value'] = newGuess # guess is spectrally flat relative to rng
         self.writeYAML()
 
     def adjustLambda(self, Nlambda):
@@ -1442,7 +1482,13 @@ class graspYAML():
                     prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal) # new mode exist now, write value to it
                     if not 'mode[%d]' % int(mtch.group(1)) in self.dl['retrieval']['forward_model']['phase_matrix']['radius'].keys(): # phase_matrix radius not present from this mode
                         lstModeRadius = self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]' % (int(mtch.group(1))-1)] # we copy it from previous mode
+                        # needs to modify this to change the r_min and r_max limits
                         self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lstModeRadius)
+                    # Change the maximum iteration before stopping the retrieval, and LM fit
+                    # HACK: this is a hack to change the maximum iteration for the retrieval
+                    # FIXME: this needs to be generalized, by having an input in the casestr or ina canonical casemap file
+                    self.dl['retrieval']['inversion']['convergence']['maximum_iterations_for_stopping'] = 50
+                    self.dl['retrieval']['inversion']['convergence']['maximum_iterations_of_Levenberg-Marquardt'] = 50
         if newVal and write2disk: self.writeYAML() # if no change was made no need to re-write the file
         return prsntVal
 
