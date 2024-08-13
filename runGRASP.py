@@ -1267,7 +1267,7 @@ class graspYAML():
             if None then the text in baseYAMLpath is overwritten by any changes
         newTmpFile –  workYAMLpath points to a file in the tmp directory; new file's name contains newTmpFile if it is a string
             NOTE: new YAML will have unique ID but is located in the common (shared) tmp directory
-        """git config  
+        """  
         assert not (workingYAMLpath and not baseYAMLpath), 'baseYAMLpath must be provided to create a new YAML file at workingYAMLpath!'
         self.lambdaTypes = ['surface_water_CxMnk_iso_noPol',
                             'surface_water_cxmnk_iso_nopol', # this seems to have change case at one point

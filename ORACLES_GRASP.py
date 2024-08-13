@@ -220,7 +220,7 @@ def LES_Run(XPX,YPX,nwl,RT): # for LES px numbers, #wavelengths, 1D/3D RT
         
         krnlPath='/data/home/njayasinghe/grasp/src/retrieval/internal_files'
         #Base YAML template
-        fwdModelYAMLpath = '/data/home/njayasinghe/grasp/examples/polder/settings_example_polder_inversion.yml'
+        fwdModelYAMLpath = '/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/settings_example_polder_inversion.yml'
         binPathGRASP = '/data/home/njayasinghe/grasp/build/bin/grasp_app'
         savePath=f'/data/home/njayasinghe/LES'
 
