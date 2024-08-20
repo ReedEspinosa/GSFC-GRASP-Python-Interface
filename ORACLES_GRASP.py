@@ -5,6 +5,7 @@
 This code reads Polarimetric data from the Campaigns and runs GRASP. This code was created to Validate the Aerosol retrivals performed using Non Spherical Kernels (Hexahedral from TAMU DUST 2020)
 
 """
+# new comment
 
 # %load_ext autoreload
 # %autoreload 2
@@ -215,6 +216,7 @@ def RSP_Run(Kernel_type,PixNo,ang1,ang2,TelNo,nwl): # fro LES PXno and NWL
 
 LES_file_path = '/data/home/njayasinghe/LES/Data/Test/' #LES file_path
 LES_filename = 'dharma_TCu_001620_SZA40_SPHI30_wvl0.669_NOAERO-3.nc' #LES filename
+# files are written to tmp folder in NYX node
 
 def LES_Run(XPX,YPX,nwl,RT): # for LES px numbers, #wavelengths, 1D/3D RT
         
@@ -222,7 +224,7 @@ def LES_Run(XPX,YPX,nwl,RT): # for LES px numbers, #wavelengths, 1D/3D RT
         #Base YAML template
         fwdModelYAMLpath = '/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/settings_example_polder_inversion.yml'
         binPathGRASP = '/data/home/njayasinghe/grasp/build/bin/grasp_app'
-        savePath=f'/data/home/njayasinghe/LES'
+        #savePath=f'/data/home/njayasinghe/LES/grasp.out'
 
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
         rslt = Read_LES_Data(LES_file_path, LES_filename, XPX, YPX, nwl,RT)
@@ -239,7 +241,7 @@ def LES_Run(XPX,YPX,nwl,RT): # for LES px numbers, #wavelengths, 1D/3D RT
         gDB = graspDB(graspRunObjs=gRuns, maxCPU=maxCPU) # creates GRASP object
 
         #rslts contain all the results form the GRASP inverse run
-        rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=None, krnlPathGRASP=krnlPath) # Runs GRASP
+        rslts, failPix = gDB.processData(binPathGRASP=binPathGRASP, savePath=savePath, krnlPathGRASP=krnlPath) # Runs GRASP
         return rslts
 
 ######################################################## End of the Code #######################################################################################################################
