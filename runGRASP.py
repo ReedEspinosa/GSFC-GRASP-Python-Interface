@@ -338,9 +338,9 @@ class graspDB():
 class graspRun():
     def __init__(self, pathYAML=None, orbHghtKM=None, dirGRASP=None, releaseYAML=False, verbose=True):
         """
-        pathYAML – yaml data: posix path string, graspYAML object or None
+        pathYAML – yaml data: posix path string, graspYAML object or None ('pathYAML' is historical and possibly misleading since it is not always path)
             Note: type(pathYAML)==graspYAML –> create new instance of a graspYAML object, with a duplicated YAML file in dirGRASP (see below)
-        dirGRASP – grasp working directory, None for new temp dir; this needs to point to directory with SDATA file if writeSDATA is not called
+        dirGRASP – grasp working directory, None for new temp dir; this needs to point to directory with SDATA file if writeSDATA is not called (Note this is not the grasp binary!)
         releaseYAML – allow this class to adjust YAML to match SDATA (e.g. change number of wavelengths)
         """
         self.releaseYAML = releaseYAML # allow automated modification of YAML, all index of wavelength involved fields MUST cover every wavelength
@@ -368,13 +368,13 @@ class graspRun():
             else: # we copy YAML file to new directory
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML))
                 self.yamlObj = graspYAML(pathYAML, newPathYAML)
-        elif type(pathYAML)==graspYAML:
+        elif type(pathYAML)==graspYAML: # path YAML is actually a YAML object, not a path
             if pathYAML.dl is not None: pathYAML.writeYAML() # incase there are unsaved changes
             if releaseYAML: # copy so we don't overwrite orginal
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
                 self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
-            elif os.path.dirname(pathYAML.YAMLpath) == self.dirGRASP: # if YAML is in specified working dir:
-                self.yamlObj = pathYAML # path YAML is actually a YAML object, not a path
+            elif os.path.dirname(pathYAML.YAMLpath) == self.dirGRASP: # if YAML is in specified working dir no changes required
+                self.yamlObj = pathYAML
             else: # we copy YAML file to the directory that will have the SDATA file [THIS WILL BREAK RUN WITH JUST YAML!!!]
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
                 self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
@@ -1397,16 +1397,10 @@ class graspYAML():
                     rngBnd = fracOfSpace*(uprBnd - lowBnd)/2
                     meanBnd = (lowBnd + uprBnd)/2
                     if char['type'] in ['imaginary_part_of_refractive_index_spectral_dependent', 'aerosol_concentration']:
-                        try:
-                            newGuess = mf.loguniform(meanBnd-rngBnd, meanBnd+rngBnd) # guess is spectrally flat relative to rng #HACK
-                        except:
-                            print(char['type'])
-                            print(mode)
-                                
-                        mode['initial_guess']['value'] = newGuess
+                        newGuess = mf.loguniform(meanBnd-rngBnd, meanBnd+rngBnd) # guess is spectrally flat relative to rng #HACK 
                     else: # random number in linear space                        
-                        newGuess = np.random.uniform(meanBnd-rngBnd, meanBnd+rngBnd).tolist()
-                        mode['initial_guess']['value'] = newGuess # guess is spectrally flat relative to rng
+                        newGuess = np.random.uniform(meanBnd-rngBnd, meanBnd+rngBnd)
+                    mode['initial_guess']['value'] = list(newGuess) # guess is spectrally flat relative to rng
         self.writeYAML()
 
     def adjustLambda(self, Nlambda):
@@ -1488,8 +1482,9 @@ class graspYAML():
                     # Change the maximum iteration before stopping the retrieval, and LM fit
                     # HACK: this is a hack to change the maximum iteration for the retrieval
                     # FIXME: this needs to be generalized, by having an input in the casestr or ina canonical casemap file
-                    self.dl['retrieval']['inversion']['convergence']['maximum_iterations_for_stopping'] = 50
-                    self.dl['retrieval']['inversion']['convergence']['maximum_iterations_of_Levenberg-Marquardt'] = 50
+                    # WRE: I'm commenting this out because it is unexpected behavior and is called many redundant time for a typical simulation
+#                     self.dl['retrieval']['inversion']['convergence']['maximum_iterations_for_stopping'] = 50
+#                     self.dl['retrieval']['inversion']['convergence']['maximum_iterations_of_Levenberg-Marquardt'] = 50
         if newVal and write2disk: self.writeYAML() # if no change was made no need to re-write the file
         return prsntVal
 
@@ -1520,10 +1515,17 @@ class graspYAML():
         return fldPath
 
     def writeYAML(self):
+        self._valueTypeCheck(self.dl)
         with open(self.YAMLpath, 'w') as outfile:
             yaml.dump(self.dl, outfile, default_flow_style=None, indent=4, width=1000, sort_keys=False)
-            # debug
-            # print('yaml file:%s' %self.YAMLpath)
+            
+    def _valueTypeCheck(self, dl):
+        for v in dl.values():
+            if isinstance(v, dict):
+                self._valueTypeCheck(v)
+            elif isinstance(v, np.ndarray):
+                assert False, 'One or more fields were numpy arrays which are not supported by the yaml module.'
+            
     def loadYAML(self):
         assert self.YAMLpath, 'You must provide a YAML file path to perform a task utilizing a YAML file!'
         if not self.dl:
