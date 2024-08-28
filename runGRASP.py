@@ -1400,7 +1400,8 @@ class graspYAML():
                         newGuess = mf.loguniform(meanBnd-rngBnd, meanBnd+rngBnd) # guess is spectrally flat relative to rng #HACK 
                     else: # random number in linear space                        
                         newGuess = np.random.uniform(meanBnd-rngBnd, meanBnd+rngBnd)
-                    mode['initial_guess']['value'] = list(newGuess) # guess is spectrally flat relative to rng
+                    if isinstance(newGuess, np.ndarray): newGuess = newGuess.tolist()
+                    mode['initial_guess']['value'] = newGuess # guess is spectrally flat relative to rng
         self.writeYAML()
 
     def adjustLambda(self, Nlambda):
@@ -1523,8 +1524,8 @@ class graspYAML():
         for v in dl.values():
             if isinstance(v, dict):
                 self._valueTypeCheck(v)
-            elif isinstance(v, np.ndarray):
-                assert False, 'One or more fields were numpy arrays which are not supported by the yaml module.'
+            elif isinstance(v, np.ndarray) or (isinstance(v, list) and isinstance(v, np.generic)): # check if ndarray or list of numpy types
+                assert False, 'One or more fields contained numpy types which are not supported by the yaml module.'
             
     def loadYAML(self):
         assert self.YAMLpath, 'You must provide a YAML file path to perform a task utilizing a YAML file!'
