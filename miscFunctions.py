@@ -43,6 +43,8 @@ def slope4RRI(RRI, wavelengths, slope=0.01):
 def loguniform(lo,hi):
     '''
     Definition to create the random number that is uniformly spaced between 2 values
+    Output can be of many types depending on argument (float, list, np.array)
+        If lo & hi are arrays or list loguniform(lo,hi).list() will always return a list
     '''
     if isinstance(lo,(list,np.ndarray)):
         if len(lo) > 1:
