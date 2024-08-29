@@ -669,7 +669,7 @@ class graspRun():
                 varNm = 'ROD'
                 varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (λName))
                 varHnds[varNm].units = 'none'
-                varHnds[varNm][:] = seaLevelROD(varHnds[λName][:])
+                varHnds[varNm][:] = mf.seaLevelROD(varHnds[λName][:])
                 varHnds[varNm].long_name = 'Rayleigh Optical Depth'
                 varNm = 'rayleigh_depol'
                 varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (λName))

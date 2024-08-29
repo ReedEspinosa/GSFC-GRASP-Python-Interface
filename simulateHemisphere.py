@@ -49,6 +49,7 @@ for wvl in wvls: nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv_g, phi_g, meas)
 
 # setup "graspRun" object and run GRASP binary
 print('Using settings file at %s' % fwdModelYAMLpath)
+# TODO: We could merge in the portions of simulateFullHemisphere.py here to automate YAML config (nowPix seems to be built here...)
 gr = graspRun(pathYAML=fwdModelYAMLpath, releaseYAML=True, verbose=True) # setup instance of graspRun class, add the above pixel, run grasp and read the output to gr.invRslt[0] (dict)
 gr.addPix(nowPix) # add the pixel we created above
 gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPathGRASP) # run grasp binary (output read to gr.invRslt[0] [dict])
