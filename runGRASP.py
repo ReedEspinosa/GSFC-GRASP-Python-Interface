@@ -342,10 +342,11 @@ class graspRun():
             Note: type(pathYAML)==graspYAML –> create new instance of a graspYAML object, with a duplicated YAML file in dirGRASP (see below)
         dirGRASP – grasp working directory, None for new temp dir; this needs to point to directory with SDATA file if writeSDATA is not called (Note this is not the grasp binary!)
         releaseYAML – allow this class to adjust YAML to match SDATA (e.g. change number of wavelengths)
+        verbose - True or 2 will print everything, 1 prints this script but not GRASP SAYS, False or 0 prints nothing
         """
         self.releaseYAML = releaseYAML # allow automated modification of YAML, all index of wavelength involved fields MUST cover every wavelength
         self.pathSDATA = False
-        self.verbose = verbose        
+        self.verbose = 2*verbose if type(verbose)==bool else verbose
         self.pixels = []
         self.pObj = False
         self.invRslt = dict()
@@ -426,7 +427,7 @@ class graspRun():
             print('Running GRASP...')
 #            self.pObj.wait()
             output = self.pObj.communicate() # This seems to keep things from hanging if there is a lot of output...
-            if len(output)>0 and self.verbose: print('>>> GRASP SAYS:\n %s' % output[0].decode("utf-8"))
+            if len(output)>0 and self.verbose>1: print('>>> GRASP SAYS:\n %s' % output[0].decode("utf-8"))
             # if self.pObj.returncode > 0: self._printError()
             self.pObj.stdout.close()
             self.invRslt = self.readOutput() # Why store rsltDict only if not parallel? I guess to keep it from being stored twice in memory in graspDB case?
