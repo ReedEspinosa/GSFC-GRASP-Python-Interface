@@ -1,4 +1,5 @@
 from matplotlib import pyplot as plt
+import scipy.ndimage as ndimage
 import os
 import sys
 if os.uname()[1]=='uranus': plt.switch_backend('agg')
@@ -11,7 +12,9 @@ from canonicalCaseMap import setupConCaseYAML
 
 
 # Path to the YAML file you want to use for the aerosol and surface definition
-baseYAML = '/Users/wrespino/Synced/Local_Code_MacBook/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_POLAR_1lambda.yml'
+# baseYAML = '/Users/wrespino/Synced/Local_Code_MacBook/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_POLAR_1lambda.yml'
+baseYAML = ['/Users/wrespino/Synced/Local_Code_MacBook/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_POLAR_1lambda.yml',
+            '/Users/wrespino/Synced/Local_Code_MacBook/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_FWD_IQU_POLAR_1lambda-mod.yml']
 
 # paths to GRASP binary and kernels
 binPathGRASP = '/Users/wrespino/Synced/Local_Code_MacBook/grasp_open/build/bin/grasp'
@@ -22,23 +25,27 @@ krnlPathGRASP = '/Users/wrespino/Synced/Local_Code_MacBook/grasp_open/src/retrie
 figSavePath = None
 
 # wvls = [0.36, 0.38, 0.41, 0.55, 0.67, 0.87, 1.55, 1.65] # wavelengths in μm
-wvls = [0.55] # wavelengths in μm
-caseStrs = ['plltdmrn+smoke', 'smoke']
+wvls = [0.67] # wavelengths in μm
+caseStrs = ['lwcloud', 'lwcloud-mod']
 tauFactor = 1.0 # applies to all cases currently
 
 sza = 30 # solar zenith angle
 msTyp = [41, 42, 43] # grasp measurements types (I, Q, U) [must be in ascending order]
-azmthΑng = np.r_[0:180:10] # azimuth angles to simulate (0,10,...,175)
-vza = np.r_[0:75:5] # viewing zenith angles to simulate [in GRASP cord. sys.]
+# azmthΑng = np.r_[0:180:5] # azimuth angles to simulate (0,10,...,175)
+# vza = np.r_[0:75:5] # viewing zenith angles to simulate [in GRASP cord. sys.]
+azmthΑng = np.r_[0:40:10,40:80:2,80:180:10] # azimuth angles to simulate (0,10,...,175)
+vza = np.r_[0:17:1,17:25:2,25:75:5] # viewing zenith angles to simulate [in GRASP cord. sys.]
 upwardLooking = False # False -> downward looking imagers, True -> upward looking
 
 clrMapReg = plt.cm.jet # color map for base value plots
 clrMapDiff = plt.cm.seismic # color map for difference plots
-logOfReflectance = True # Plot the base 10 log of reflectance instead of actual value
+logOfReflectance = False # Plot the base 10 log of reflectance instead of actual value
 resolveQU = True
+blurrSigma = [0, 0, 0] # sigma coefs for Gaussian blur in plots-only [I, Q/DoLP, U]; all zeros for now blur 
+# blurrSigma = [0.7, 0.55, 0.6] # sigma coefs for Gaussian blur in plots-only [I, Q/DoLP, U]; all zeros for now blur 
 ttlStr = None # Top Title as string or None to skip
 wvFrmt =  '($%4.2f\\mu m$)' # Format of Y-axis labels 
-
+graspVerboseLev = 2
 
 ######## END INPUTS ########
 
@@ -59,10 +66,11 @@ for wvl in wvls: nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv_g, phi_g, meas)
 
 # setup "graspRun" object and run GRASP binary
 invRslt = []
-for caseStr in caseStrs:
+if isinstance(baseYAML, str): baseYAML = [baseYAML for _ in range(caseStrs)]
+for yamlNow, caseStr in zip(baseYAML, caseStrs):
     print('Running forward model for %s case' % caseStr)
-    fwdYAMLPath = setupConCaseYAML(caseStr, nowPix, baseYAML, caseLoadFctr=tauFactor)
-    gObjFwd = graspRun(fwdYAMLPath, verbose=1)
+    fwdYAMLPath = setupConCaseYAML(caseStr, nowPix, yamlNow, caseLoadFctr=tauFactor)
+    gObjFwd = graspRun(fwdYAMLPath, verbose=graspVerboseLev)
     gObjFwd.addPix(nowPix)
     gObjFwd.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPathGRASP)
     invRslt.append(np.take(gObjFwd.readOutput(),0)) # we need take because readOutput returns list, even if just one element
@@ -100,19 +108,22 @@ for i in range(Ncol): # loop over reflectance (i=0) and DoLP (i=1)
             lbl = (wvFrmt % wvls[wvInd]) if spectralCompare else '(%s)' % caseStrs[pxInd]
             labels.append(lbl)
             clrMin = data[-1].min()
-            clrMax = data[-1].max()
+            clrMax = 0.1 if data[-1].max()==clrMin else data[-1].max() # U in single scat has max=min
             clrMap = clrMapReg
         else: # this is a difference plot  
             data.append(data[l-Nwvl+1] - data[0])
             labels.append(labels[l-Nwvl+1] + " – " + labels[0])
             clrMax = np.abs(data[-1]).max()
+            if clrMax==0: clrMax=0.1
             clrMin = -clrMax
             clrMap = clrMapDiff
         v = np.linspace(clrMin, clrMax, 255, endpoint=True)
         ticks = np.linspace(clrMin, clrMax, 3, endpoint=True)
         data2D = data[-1].reshape(Nazimth, Nvza)
-        dataFullHemisphere = np.vstack([data2D, np.flipud(data2D)]) # mirror symmetric about principle plane
-        c = ax[l,i].contourf(theta, r, dataFullHemisphere, v, cmap=clrMap)
+        dataFullHemi = np.vstack([data2D, np.flipud(data2D)]) # mirror symmetric about principle plane
+        if np.any(blurrSigma)>0: 
+            dataFullHemi = ndimage.gaussian_filter(dataFullHemi, sigma=blurrSigma[i], order=0)
+        c = ax[l,i].contourf(theta, r, dataFullHemi, v, cmap=clrMap)
         if upwardLooking: ax[l,i].plot(np.pi, sza, '.',  color=[1,1,0], markersize=10) # plot sun position (if upward looking observation)
         cb = plt.colorbar(c, orientation='horizontal', ax=ax[l,i], ticks=ticks)
         ax[l,i].set_ylim([0, r.max()])
