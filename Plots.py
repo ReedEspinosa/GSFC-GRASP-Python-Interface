@@ -5,10 +5,9 @@
 
 """ This script is created to plot 2D/1D graphs of retrivals from LES and 1D/3D RT data."""
 
-from cProfile import label
 import numpy as np
 import matplotlib.pyplot as plt
-
+import matplotlib.colors as colors
 
 def FILE_PATH(RT):
     if RT == 1 : file_path = "/data/ESI/User/njayasinghe/LES_Retrievals/1D/"
@@ -39,27 +38,46 @@ def create_2D_Grid(RT,nX=168,nY=168):
 
     return aod,ssa
 
-def Plot2DMaps(var,varName,save_path=None):
+def Plot2D_AOD_Map(var,RT,save_path=None):
 
-    if varName == 'aod' : title ="Retrievd AOD at 0.669 um"
-    if varName == 'ssa' : title ="Retrievd SSA at 0.669 um"
+    title ="Retrievd AOD at 0.669 um for "+str(RT)+"D RT"
 
-    vmin = np.min(var)
-    vmax = np.max(var)*0.9
-
-    plt.figure(figsize=(6, 8), dpi = 300)
+    plt.figure(figsize=(10, 12), dpi = 200)
     ax = plt.axes()
-    c = ax.pcolormesh(var, vmin= vmin, vmax= vmax, antialiased=False)
-    ax.set_title(title, pad =2)
-    plt.colorbar(c, cmap = 'jet', orientation="horizontal")
+    c = ax.pcolormesh(var, norm=colors.LogNorm(vmin = np.nanmin(var), vmax = np.nanmax(var)))
+    ax.set_title('\n'+title+'\n',fontsize=15)
+    ax.set_ylabel("nX",fontsize=15)
+    ax.set_xlabel("nY",fontsize=15)
+    ax.grid()
+    plt.colorbar(c, cmap = 'jet', extend = 'both', orientation="horizontal", pad = 0.1, label='Log(AOD)')
     if save_path:
-        plt.savefig(save_path+varName+".png", dpi = 300)
-    plt.close()
+        plt.savefig(save_path+"AOD.png", dpi = 300)
+        plt.close()
+
+def Plot2D_SSA_Maps(var,RT,save_path=None):
+
+    title ="Retrievd SSA at 0.669 um for "+str(RT)+"D RT"
+    
+    plt.figure(figsize=(12, 12), dpi = 300)
+    ax = plt.axes()
+    c = ax.pcolormesh(var, vmin = np.nanmin(var), vmax = np.nanmax(var))
+    ax.set_title('\n'+title+'\n',fontsize=15)   
+    ax.set_ylabel("nX",fontsize=15)
+    ax.set_xlabel("nY",fontsize=15)
+    ax.grid()
+    plt.colorbar(c, cmap = 'hot', extend = 'both', orientation="horizontal", pad = 0.1, label='SSA')
+    if save_path:
+        plt.savefig(save_path+"SSA.png", dpi = 300)
+        plt.close()
 
 
 def PlotSinglePX(XP,YP,RT,save_path=None):
 
-    file_path = FILE_PATH(RT)+"LES_XP_"+str(XP)+"_YP_"+str(YP)
+    #file_path = FILE_PATH(RT)+"LES_XP_"+str(XP)+"_YP_"+str(YP)
+    #file_path = '/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_All_only_30_ang_XPX_'+str(XP)+'_YP_'+str(YP)
+    #file_path = '/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_All_only_30_ang_XPX_'+str(XP)+'_YP_'+str(YP)+'FWD'
+    file_path=f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_All_principal_30_ang_XPX_'+str(XP)+'_YP_'+str(YP)+'FWD'
+
 
     try:
         data = np.load(file_path, allow_pickle=True)
@@ -100,7 +118,7 @@ def PlotSinglePX(XP,YP,RT,save_path=None):
 
     axs[1].plot(sca_ang,meas_QoI, '.', label= 'LES Data')
     axs[1].plot(sca_ang,fit_QoI, '-', label= 'GRASP fit')
-    axs[1].grid
+    axs[1].grid()
     axs[1].set_ylabel("Q/I",fontsize=15)
 
     axs[2].plot(sca_ang,meas_UoI, '.', label= 'LES Data')
@@ -116,7 +134,98 @@ def PlotSinglePX(XP,YP,RT,save_path=None):
 
     if save_path:
         plt.savefig(save_path+"LES_XP_"+str(XP)+"_YP_"+str(YP)+".png", dpi = 300)
-    plt.close()
+        plt.close()
+
+def Plot_I(XP,YP,RT,save_path=None):
+
+    #file_path = '/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/I_only_30ang'+str(XP)+'_YP_'+str(YP)
+    file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_I_only_30_ang_XPX_'+str(XP)+'_YP_'+str(YP)
+    #file_path = FILE_PATH(RT)+"LES_XP_"+str(XP)+"_YP_"+str(YP)
+    #file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/LESWithCorrection_XP_'+str(XPX)+'_YP_'+str(YPX)
+    #file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/LESNoCorrection_XP_'+str(XPX)+'_YP_'+str(YPX)
+
+
+    try:
+        data = np.load(file_path, allow_pickle=True)
+        #var_names = data[0].keys()
+        meas_I = data[0]['meas_I'][:,0]
+        fit_I= data[0]['fit_I'][:,0]
+        
+        sca_ang = data[0]['sca_ang'][:,0]
+
+        aod = data[0]['aod'][0]
+        ssa = data[0]['ssa'][0]
+        #sph = data[0]['sph'][0]
+        RRI = data[0]['n'][0]
+        IRI = data[0]['k'][0]
+        #brdf = data[0]['brdf']
+        wl = data[0]['lambda'][0]
+
+
+    except:
+        print("File cannnot be found!")
+
+
+    fig, axs = plt.subplots(1,1, figsize=(4,5),constrained_layout=True, dpi = 300)
+    fig.suptitle("\n Xpx = "+ str(XP)+"; Ypx = "+str(YP)+"; wl = "+str(wl)+" um \n AOD = "+str(aod)+
+        "; SSA = "+str(ssa)+"\n RRI = "+str(RRI)+"; IRI = "+str(IRI)+"\n",fontsize=15)
+
+    axs.plot(sca_ang,meas_I, '.', label= 'LES Data')
+    axs.plot(sca_ang,fit_I, '-', label= 'GRASP fit')
+    axs.grid()
+    axs.set_ylabel("I",fontsize=15)
+    axs.set_xlabel("Scattering Angle")
+    axs.legend()
+
+    if save_path:
+        plt.savefig(save_path+"LES_XP_"+str(XP)+"_YP_"+str(YP)+".png", dpi = 300)
+        plt.close()
+
+
+def Plot_DOLP(XPX,YPX,RT,save_path=None):
+
+    file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_DOLP_only_30_ang_XPX_'+str(XPX)+'_YP_'+str(YPX)
+    #file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_DOLP_only_30_ang_XPX_'+str(XPX)+'_YP_'+str(YPX)
+    #file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/LESNoCorrection_XP_'+str(XPX)+'_YP_'+str(YPX)
+
+
+    try:
+        data = np.load(file_path, allow_pickle=True)
+        #var_names = data[0].keys()
+        meas_P_rel = data[0]['meas_P_rel'][:,0]
+        fit_P_rel= data[0]['fit_P_rel'][:,0]
+        
+        sca_ang = data[0]['sca_ang'][:,0]
+
+        aod = data[0]['aod'][0]
+        ssa = data[0]['ssa'][0]
+        #sph = data[0]['sph'][0]
+        RRI = data[0]['n'][0]
+        IRI = data[0]['k'][0]
+        #brdf = data[0]['brdf']
+        wl = data[0]['lambda'][0]
+
+
+    except:
+        print("File cannnot be found!")
+
+
+    fig, axs = plt.subplots(1,1, figsize=(4,5),constrained_layout=True, dpi = 300)
+    fig.suptitle("\n Xpx = "+ str(XPX)+"; Ypx = "+str(YPX)+"; wl = "+str(wl)+" um \n AOD = "+str(aod)+
+        "; SSA = "+str(ssa)+"; RRI = "+str(RRI)+"; IRI = "+str(IRI)+"\n",fontsize=15)
+
+    axs.plot(sca_ang,meas_P_rel, '.', label= 'LES Data')
+    axs.plot(sca_ang,fit_P_rel, '-', label= 'GRASP fit')
+    axs.grid()
+    axs.set_ylabel("DOLP",fontsize=15)
+    axs.set_xlabel("Scattering Angle")
+    axs.legend()
+
+    if save_path:
+        plt.savefig(save_path+"LES_XP_"+str(XP)+"_YP_"+str(YP)+".png", dpi = 300)
+        plt.close()
+
+
 
 
 

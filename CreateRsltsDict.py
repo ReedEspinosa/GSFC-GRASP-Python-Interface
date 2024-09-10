@@ -209,7 +209,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
 # Reading LES Data into rslt dict to create SDATA
 # Last Edited: Aug 6th 2024
 
-def Read_LES_Data(file_path, filename, XPX, YPX, nwl,RT):
+def Read_LES_Data(file_path, filename, XPX, YPX, nwl,RT,ang=10):
 
     #Reading Data
     Data = Dataset(file_path+filename, 'r')
@@ -227,39 +227,76 @@ def Read_LES_Data(file_path, filename, XPX, YPX, nwl,RT):
     Lat = 41.5600 #dummy value 
     Lon = -5.2500 #dummy value
 
-    #Assuming angles for LES data are defined similar to GRASP definition.
-    #view zenith angle
-    vza = data["View_Zenith_Angle"].data
-    #scatteting angle
-    scat_ang = data["scat_ang"].data
-    #solar zenith angle
-    sza = data["Solar_Zenith_Angle"].data
-    #solar azimuth angle
-    saa = data["Solar_Azimuth_Angle"].data
-    #view azimuth angle
-    vaa = data["View_Azimuth_Angle"].data
+    if (ang > 1):
+        #Assuming angles for LES data are defined similar to GRASP definition.
+        #view zenith angle
+        vza = data["View_Zenith_Angle"].data[::ang]
+        #scatteting angle
+        scat_ang = data["scat_ang"].data[::ang]
+        #solar zenith angle
+        sza = data["Solar_Zenith_Angle"].data[::ang]
+        #solar azimuth angle
+        saa = data["Solar_Azimuth_Angle"].data[::ang]
+        #view azimuth angle
+        vaa = data["View_Azimuth_Angle"].data[::ang]
 
-    #converting angles to radians to calculate relative azimuth angles
-    SZA = np.radians(sza)
-    VZA = np.radians(vza)
-    SAA = np.radians(saa)
-    VAA = np.radians(vaa)
+        #converting angles to radians to calculate relative azimuth angles
+        SZA = np.radians(sza)
+        VZA = np.radians(vza)
+        SAA = np.radians(saa)
+        VAA = np.radians(vaa)
 
-    Rel_Azimuth = (180/np.pi)*(np.arccos((np.cos((scat_ang *np.pi)/180) + np.cos(SZA)*np.cos(VZA))/(- np.sin(SZA)*np.sin(VZA))))
+        Rel_Azimuth = (180/np.pi)*(np.arccos((np.cos((scat_ang *np.pi)/180) + np.cos(SZA)*np.cos(VZA))/(- np.sin(SZA)*np.sin(VZA))))
 
-    if (RT==1):
-        # Dimentions:[nVZA,nwl,SZA,Stoke,nX,nY]
-        meas_I = data["RT_1D_Reflectance"].data[:,:nwl,0,0,XPX:XPX+1,YPX:YPX+1]
-        meas_Q = data["RT_1D_Reflectance"].data[:,:nwl,0,1,XPX:XPX+1,YPX:YPX+1]
-        meas_U = data["RT_1D_Reflectance"].data[:,:nwl,0,2,XPX:XPX+1,YPX:YPX+1]
-        DOLP = np.sqrt(meas_Q*meas_Q+meas_U*meas_U)/meas_I
+        if (RT==1):
+            # Dimentions:[nVZA,nwl,SZA,Stoke,nX,nY]
+            meas_I = data["RT_1D_Reflectance"].data[::ang,:nwl,0,0,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            meas_Q = data["RT_1D_Reflectance"].data[::ang,:nwl,0,1,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            meas_U = data["RT_1D_Reflectance"].data[::ang,:nwl,0,2,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            DOLP = np.sqrt(meas_Q*meas_Q+meas_U*meas_U)/meas_I
 
-    if (RT==3):
-        # Dimentions:[nVZA,nwl,SZA,Stoke,nX,nY]
-        meas_I = data["RT_3D_Reflectance"].data[:,:nwl,0,0,XPX:XPX+1,YPX:YPX+1]
-        meas_Q = data["RT_3D_Reflectance"].data[:,:nwl,0,1,XPX:XPX+1,YPX:YPX+1]
-        meas_U = data["RT_3D_Reflectance"].data[:,:nwl,0,2,XPX:XPX+1,YPX:YPX+1]
-        DOLP = np.sqrt(meas_Q*meas_Q+meas_U*meas_U)/meas_I
+        if (RT==3):
+            # Dimentions:[nVZA,nwl,SZA,Stoke,nX,nY]
+            meas_I = data["RT_3D_Reflectance"].data[::ang,:nwl,0,0,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            meas_Q = data["RT_3D_Reflectance"].data[::ang,:nwl,0,1,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            meas_U = data["RT_3D_Reflectance"].data[::ang,:nwl,0,2,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            DOLP = np.sqrt(meas_Q*meas_Q+meas_U*meas_U)/meas_I
+    
+    else:
+
+        #Assuming angles for LES data are defined similar to GRASP definition.
+        #view zenith angle
+        vza = data["View_Zenith_Angle"].data
+        #scatteting angle
+        scat_ang = data["scat_ang"].data
+        #solar zenith angle
+        sza = data["Solar_Zenith_Angle"].data
+        #solar azimuth angle
+        saa = data["Solar_Azimuth_Angle"].data
+        #view azimuth angle
+        vaa = data["View_Azimuth_Angle"].data
+
+        #converting angles to radians to calculate relative azimuth angles
+        SZA = np.radians(sza)
+        VZA = np.radians(vza)
+        SAA = np.radians(saa)
+        VAA = np.radians(vaa)
+
+        Rel_Azimuth = (180/np.pi)*(np.arccos((np.cos((scat_ang *np.pi)/180) + np.cos(SZA)*np.cos(VZA))/(- np.sin(SZA)*np.sin(VZA))))
+
+        if (RT==1):
+            # Dimentions:[nVZA,nwl,SZA,Stoke,nX,nY]
+            meas_I = data["RT_1D_Reflectance"].data[:,:nwl,0,0,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            meas_Q = data["RT_1D_Reflectance"].data[:,:nwl,0,1,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            meas_U = data["RT_1D_Reflectance"].data[:,:nwl,0,2,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            DOLP = np.sqrt(meas_Q*meas_Q+meas_U*meas_U)/meas_I
+
+        if (RT==3):
+            # Dimentions:[nVZA,nwl,SZA,Stoke,nX,nY]
+            meas_I = data["RT_3D_Reflectance"].data[:,:nwl,0,0,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            meas_Q = data["RT_3D_Reflectance"].data[:,:nwl,0,1,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            meas_U = data["RT_3D_Reflectance"].data[:,:nwl,0,2,XPX:XPX+1,YPX:YPX+1]*np.cos(np.radians(sza))
+            DOLP = np.sqrt(meas_Q*meas_Q+meas_U*meas_U)/meas_I
 
     #creating Results Dictionary for GRASP
 
@@ -269,11 +306,12 @@ def Read_LES_Data(file_path, filename, XPX, YPX, nwl,RT):
     rslt['longitude'] = Lon
     rslt['latitude'] = Lat
     rslt['meas_I'] = meas_I
-    rslt['meas_Q'] = meas_Q
-    rslt['meas_U'] = meas_U
+    #rslt['meas_Q'] = meas_Q
+    #rslt['meas_U'] = meas_U
     rslt['meas_P'] = DOLP
+    #plt.plot(DOLP)
 
-    yy = 2024 ; mm = 8 ; dd = 8 ; hh = 12 ; mi = 00 ; s = 00; ms = 00
+    yy = 2024 ; mm = 8 ; dd = 8 ; hh = 12 ; mi = 00 ; s = 00; ms = 00 #dummy values
     rslt['datetime'] = dt.datetime(yy,mm,dd,hh,mi,s,ms)
   
     # All the geometry arrays should be 2D, (angle, wl) --> solar zenith angle, wavelength
@@ -285,9 +323,27 @@ def Read_LES_Data(file_path, filename, XPX, YPX, nwl,RT):
 
     rslt['OBS_hght'] = data['Sensor_Position'].data*1000 #sensor position is 20 km for LES data
 
+    print(rslt.keys())
+
     return rslt
 
-    ########################################## END of LES DATA READING ##########################################
+########################################## END of LES DATA READING ##########################################
+
+########################################## Reading HARP CubeSat Data ##########################################
+# Project: Aerosol Retrievals using Multi-Angular Polarimeters in the Twilight Zone 
+# Author: Nirandi Jayasinghe
+# Reading HARP CubeSat Data into rslt dict to create SDATA
+# Last Edited: Sep 3th 2024
+"""
+ang: (1,nwl) shaped variable which give angle ranges for each wavelength if necessary
+CMask: give path to CMASK array for corresponding HARP CubeSat data file. 
+       This variable will later be converted as Cloud Masking command
+"""
+#def Read_HARP_CubeSat(file_path,file_name,XPX, YPX, nwl, ang=None, CMask=None):
+
+
+########################################## END of HARP CubeSat DATA READING ##########################################
+
 
 def Read_Data_HSRL_Oracles(file_path,file_name,PixNo):
 

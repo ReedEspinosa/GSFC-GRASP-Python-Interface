@@ -19,24 +19,32 @@ import yaml
 
 # Runing GRASP for LES Data
 LES_file_path = '/data/home/njayasinghe/LES/Data/Test/' #LES file_path
-LES_filename = 'dharma_TCu_001620_SZA40_SPHI30_wvl0.669_NOAERO-3.nc' #LES filename
+LES_filename = 'dharma_TCu_001620_SZA40_SPHI30_wvl0.669_NOAERO-4.nc' #LES filename
+
+#YML file path
+invModelYAMLpath = '/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/settings_LES_inversion.yml'
+fwdModelYAMLpath = '/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/settings_LES_forward.yml'
+YMLpath = invModelYAMLpath #fwdModelYAMLpath
 # files are written to tmp folder in NYX node
 
-def LES_Run(LES_file_path,LES_filename,XPX,YPX,nwl,RT): # for LES px numbers, #wavelengths, 1D/3D RT
+def LES_Run(LES_file_path,LES_filename,YMLpath,XPX,YPX,nwl,RT,ang=10,savePath=None): # for LES px numbers, #wavelengths, 1D/3D RT
         
     krnlPath='/data/home/njayasinghe/grasp/src/retrieval/internal_files'
-    #Base YAML template
-    fwdModelYAMLpath = '/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/settings_LES_inversion.yml'
     binPathGRASP = '/data/home/njayasinghe/grasp/build/bin/grasp_app'
-    savePath=f'/data/ESI/User/njayasinghe/LES_Retrievals/'+str(RT)+'D/LES_XP_'+str(XPX)+'_YP_'+str(YPX)
+
+    if savePath == None: 
+        #savePath=f'/data/ESI/User/njayasinghe/LES_Retrievals/'+str(RT)+'D/LES_XP_'+str(XPX)+'_YP_'+str(YPX)
+        #savePath=f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_I_only_30_ang_XPX_'+str(XPX)+'_YP_'+str(YPX)
+        savePath=f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_All_principal_30_ang_XPX_'+str(XPX)+'_YP_'+str(YPX)+'FWD'   
 
     #rslt is the GRASP rslt dictionary or contains GRASP Objects
-    rslt = Read_LES_Data(LES_file_path, LES_filename, XPX, YPX, nwl,RT)
+    rslt = Read_LES_Data(LES_file_path, LES_filename, XPX, YPX, nwl,RT,ang)
+    print(rslt.keys())
     #print(rslt['OBS_hght'])
 
     maxCPU = 3 #maximum CPU allocated to run GRASP on server
     gRuns = []
-    yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
+    yamlObj = graspYAML(baseYAMLpath=YMLpath)
     #eventually have to adjust code for height, this works only for one pixel (single height value)
     gRuns.append(graspRun(pathYAML=yamlObj, releaseYAML=True )) # This should copy to new YAML object
     pix = pixel() # taking the px class from runGrasp.
@@ -50,7 +58,7 @@ def LES_Run(LES_file_path,LES_filename,XPX,YPX,nwl,RT): # for LES px numbers, #w
 
 
 def Run_retrievals(nwl,RT):
-    for xp in range(0,168,1):
+    for xp in range(75,76,1):
         for yp in range(0,168,1):
 
             LES_Run(LES_file_path,LES_filename,xp,yp,nwl,RT)

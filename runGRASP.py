@@ -1219,6 +1219,8 @@ class pixel():
         if 'land_prct' in rslt: self.set_land_prct(rslt['land_prct'])
         if 'masl' in rslt: self.masl = rslt['masl']
         if 'OBS_hght' in rslt: self.obsHght = rslt['OBS_hght'] # rslt['OBS_hght'] should be in meters (not km)!
+
+        #print(msDct['measurements'])
         
 
     def formatMeas(self, newMeas, lowThresh=1e-10):
