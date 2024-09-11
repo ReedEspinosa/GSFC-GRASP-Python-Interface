@@ -167,9 +167,9 @@ rslt_RSP = Read_Data_RSP_Oracles(file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, 
 
 rslt =  Combine_MAPandLidar_Rsltdict(rslt_RSP,rslt_HSRL, HSRLPixNo)
 
-FineSize = np.linspace(0.01, 0.1, 10)
-DustSize = np.linspace(0.1, 5, 15)[::-1]
-SphFrac = np.linspace(0.0001, 0.999, 3)
+FineSize = np.linspace(0.01, 0.1, 5)
+# DustSize = np.linspace(0.1, 5, 15)[::-1]
+# SphFrac = np.linspace(0.0001, 0.999, 3)
 
 RRI = np.linspace(1.45, 1.6, 3)
 
@@ -177,6 +177,9 @@ RRI = np.linspace(1.45, 1.6, 3)
 
 ChangeVariable = FineSize
 ChangeVariable2 = RRI
+
+
+
 
 
 UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
@@ -202,7 +205,12 @@ for Itr2 in range(len(ChangeVariable2)):
                 data['retrieval']['constraints'][f'characteristic[3]'][f'mode[{noMd}]']['initial_guess']['min'][0] = float(0.9999*ChangeVariable[Itr])
                 data['retrieval']['constraints'][f'characteristic[3]'][f'mode[{noMd}]']['initial_guess']['max'][0] = float(1.001*ChangeVariable[Itr])
                 data['retrieval']['constraints'][f'characteristic[3]'][f'mode[{noMd}]']['initial_guess']['value'][0] = float(ChangeVariable[Itr])  #changing the value 
-
+                
+                #Changing the volume concentration to keep the AOD constant.
+                data['retrieval']['constraints'][f'characteristic[2]'][f'mode[{noMd}]']['initial_guess']['min'][0] = float(0.9999*ConcForConstAOD[Itr2,Itr])
+                data['retrieval']['constraints'][f'characteristic[2]'][f'mode[{noMd}]']['initial_guess']['max'][0] = float(1.001*ConcForConstAOD[Itr2,Itr])
+                data['retrieval']['constraints'][f'characteristic[2]'][f'mode[{noMd}]']['initial_guess']['value'][0] = float(ConcForConstAOD[Itr2,Itr])
+                
                 # data['retrieval']['constraints'][f'characteristic[7]'][f'mode[{noMd}]']['initial_guess']['min'] = float(0.9999*SphFrac[Itr])
                 # data['retrieval']['constraints'][f'characteristic[7]'][f'mode[{noMd}]']['initial_guess']['max'] = float(1.001*SphFrac[Itr])
                 # data['retrieval']['constraints'][f'characteristic[7]'][f'mode[{noMd}]']['initial_guess']['value'] = float(SphFrac[Itr])  #changing the value 
@@ -245,52 +253,6 @@ for Itr2 in range(len(ChangeVariable2)):
 
 
 
-    # colors = [
-    #     "#FF5733",  # Bright Orange
-
-    #     "#3357FF",  # Bright Blue
-    #     "#FF33A1",  # Pink
-    #     "#A133FF",  # Purple
-    #     "#FF8C33",  # Dark Orange
-    #     "#33FFC5",  # Aqua
-    #     "#8C33FF",  # Violet
-    #     "#FFC533",  # Yellow
-
-    #     "#5733FF",  # Indigo
-    #     "#FF33C5",  # Magenta
-    #     "#33C5FF",  # Cyan
-
-    #     "#FF5733",  # Bright Red
-    #     "#33FFAA",  # Turquoise
-    #     "#AA33FF",  # Deep Violet
-    #     "#FF3333",  # Red
-
-    #     "#3333FF",  # Blue
-    # ]
-
-
-    # colors = [
-    #     "#FF4500",  # Orange Red
-    #     "#FF6347",  # Tomato
-    
-    #     "#FF8C00",  # Dark Orange
-    #     "#FFA500",  # Orange
-    #     "#FFD700",  # Gold
-
-    #     "#FF6F61",  # Peach
-
-    #     "#FF4500",  # Red-Orange
-    #     "#1E90FF",  # Dodger Blue
-    #     "#4682B4",  # Steel Blue
-    #     "#5F9EA0",  # Cadet Blue
-    #     "#6495ED",  # Cornflower Blue
-    #     "#00BFFF",  # Deep Sky Blue
-    #     "#4169E1",  # Royal Blue
-    #     "#1E3A8A",  # Deep Blue
-    #     "#00CED1",  # Dark Turquoise
-    #     "#87CEFA",  # Light Sky Blue
-    #     "#6A5ACD",  # Slate Blue
-    # ]
 
     colors = [
         "#FFD700",  # Gold
@@ -421,7 +383,15 @@ for Itr2 in range(len(ChangeVariable2)):
     print(Itr2)
 
 
+ConcForConstAOD = np.ones((len(ChangeVariable2),len(ChangeVariable)))
+checkrv = np.ones((len(ChangeVariable2),len(ChangeVariable)))
 
+for j in range(len(ChangeVariable)):
+    for i in range(len(ChangeVariable2)):
+        MeasAOD = abs(np.trapz(Full_dict[i][j]['meas_VExt'][:,0], Full_dict[i][j]['range'][0,:]))
+        print(Full_dict[i][j]['vol'][0]*Full_dict[i][j]['aodMode'][0][0]* MeasAOD)
+        ConcForConstAOD[i,j] = Full_dict[i][j]['vol'][0]*Full_dict[i][j]['aodMode'][0][0]* MeasAOD
+        checkrv[i,j] = Full_dict[i][j]['rv'][0]
 
 
 
