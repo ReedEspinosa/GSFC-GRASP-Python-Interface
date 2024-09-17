@@ -167,16 +167,36 @@ rslt_RSP = Read_Data_RSP_Oracles(file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, 
 
 rslt =  Combine_MAPandLidar_Rsltdict(rslt_RSP,rslt_HSRL, HSRLPixNo)
 
-FineSize = np.linspace(0.01, 0.1, 5)
+
+#These are th retrieved values form combined retrievals.
+rv_fix = 0.032088
+Cv_fix = 0.2448 
+
+
+FineSize = np.append(np.linspace(0.02, 0.15, 15),rv_fix)[::-1]
+FineSize = [rv_fix]
+
+# FactorAOD =volFac
+# FactorAOD = np.append(1,(FineSize/rv_fix)/1.1) 
+
+FactorAOD = np.repeat(1,len(FineSize)) 
+
+
+# FineSize = rv_fix
+# FactorAOD =  1
 # DustSize = np.linspace(0.1, 5, 15)[::-1]
-# SphFrac = np.linspace(0.0001, 0.999, 3)
-
-RRI = np.linspace(1.45, 1.6, 3)
+SphFrac = np.linspace(0.0001, 0.999, 10)
 
 
 
-ChangeVariable = FineSize
-ChangeVariable2 = RRI
+# RRI = np.repeat(1.48, 6)
+RRI = np.linspace(1.45, 1.6, 1)
+# IRI = np.linspace(1.45, 1.6, 10)
+
+
+
+ChangeVariable = SphFrac
+ChangeVariable2 = FineSize
 
 
 
@@ -185,16 +205,15 @@ ChangeVariable2 = RRI
 UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
 Full_dict= []
 
+with open(fwdModelYAMLpath, 'r') as f:  
+        data = yaml.safe_load(f)
 
 for Itr2 in range(len(ChangeVariable2)):
     DictRslt =[]
 
-
-
     for Itr in range(len(ChangeVariable)):
         #Updating the normalization values in the settings file. 
-        with open(fwdModelYAMLpath, 'r') as f:  
-            data = yaml.safe_load(f)
+        
 
         for noMd in range(4): #loop over the aerosol modes (i.e 2 for fine and coarse)
 
@@ -202,27 +221,30 @@ for Itr2 in range(len(ChangeVariable2)):
                 #State Varibles from yaml file: 
             if noMd ==1:
                 data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  rslt['VertProf_Mode1'].tolist()
-                data['retrieval']['constraints'][f'characteristic[3]'][f'mode[{noMd}]']['initial_guess']['min'][0] = float(0.9999*ChangeVariable[Itr])
-                data['retrieval']['constraints'][f'characteristic[3]'][f'mode[{noMd}]']['initial_guess']['max'][0] = float(1.001*ChangeVariable[Itr])
-                data['retrieval']['constraints'][f'characteristic[3]'][f'mode[{noMd}]']['initial_guess']['value'][0] = float(ChangeVariable[Itr])  #changing the value 
+               
+                # data['retrieval']['constraints'][f'characteristic[3]'][f'mode[{noMd}]']['initial_guess']['min'][0] = float(0.9999*ChangeVariable[Itr])
+                # data['retrieval']['constraints'][f'characteristic[3]'][f'mode[{noMd}]']['initial_guess']['max'][0] = float(1.001*ChangeVariable[Itr])
+                # data['retrieval']['constraints'][f'characteristic[3]'][f'mode[{noMd}]']['initial_guess']['value'][0] = float(ChangeVariable[Itr])  #changing the value 
                 
                 #Changing the volume concentration to keep the AOD constant.
-                data['retrieval']['constraints'][f'characteristic[2]'][f'mode[{noMd}]']['initial_guess']['min'][0] = float(0.9999*ConcForConstAOD[Itr2,Itr])
-                data['retrieval']['constraints'][f'characteristic[2]'][f'mode[{noMd}]']['initial_guess']['max'][0] = float(1.001*ConcForConstAOD[Itr2,Itr])
-                data['retrieval']['constraints'][f'characteristic[2]'][f'mode[{noMd}]']['initial_guess']['value'][0] = float(ConcForConstAOD[Itr2,Itr])
+                vol = data['retrieval']['constraints'][f'characteristic[2]'][f'mode[{noMd}]']['initial_guess']['value'][0]
+                data['retrieval']['constraints'][f'characteristic[2]'][f'mode[{noMd}]']['initial_guess']['min'][0] = float(0.9999*0.2448*FactorAOD[Itr2])
+                data['retrieval']['constraints'][f'characteristic[2]'][f'mode[{noMd}]']['initial_guess']['max'][0] = float(1.001*0.2448*FactorAOD[Itr2])
+                data['retrieval']['constraints'][f'characteristic[2]'][f'mode[{noMd}]']['initial_guess']['value'][0] = float(0.2448*FactorAOD[Itr2])
                 
-                # data['retrieval']['constraints'][f'characteristic[7]'][f'mode[{noMd}]']['initial_guess']['min'] = float(0.9999*SphFrac[Itr])
-                # data['retrieval']['constraints'][f'characteristic[7]'][f'mode[{noMd}]']['initial_guess']['max'] = float(1.001*SphFrac[Itr])
-                # data['retrieval']['constraints'][f'characteristic[7]'][f'mode[{noMd}]']['initial_guess']['value'] = float(SphFrac[Itr])  #changing the value 
+                data['retrieval']['constraints'][f'characteristic[7]'][f'mode[{noMd}]']['initial_guess']['min'][0,3,7] = float(0.9999*SphFrac[Itr])
+                data['retrieval']['constraints'][f'characteristic[7]'][f'mode[{noMd}]']['initial_guess']['max'] = float(1.001*SphFrac[Itr])
+                data['retrieval']['constraints'][f'characteristic[7]'][f'mode[{noMd}]']['initial_guess']['value'] = float(SphFrac[Itr])  #changing the value 
 
 
-                data['retrieval']['constraints'][f'characteristic[4]'][f'mode[{noMd}]']['initial_guess']['min'] = float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2])
-                data['retrieval']['constraints'][f'characteristic[4]'][f'mode[{noMd}]']['initial_guess']['max'] = float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2])
-                data['retrieval']['constraints'][f'characteristic[4]'][f'mode[{noMd}]']['initial_guess']['value'] =float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2])
-
-
-
-            
+                # data['retrieval']['constraints'][f'characteristic[4]'][f'mode[{noMd}]']['initial_guess']['min'][0,3,7] = float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2]),float(0.9999*ChangeVariable2[Itr2])
+                # data['retrieval']['constraints'][f'characteristic[4]'][f'mode[{noMd}]']['initial_guess']['max'][0,3,7] = float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2]),float(1.001*ChangeVariable2[Itr2])
+                # data['retrieval']['constraints'][f'characteristic[4]'][f'mode[{noMd}]']['initial_guess']['value'][0,3,7] =float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2]),float(ChangeVariable2[Itr2])
+                # for wlIdx in range(8):
+                #     data['retrieval']['constraints'][f'characteristic[4]'][f'mode[{noMd}]']['initial_guess']['min'][wlIdx] = float(0.9999*ChangeVariable[Itr])
+                #     data['retrieval']['constraints'][f'characteristic[4]'][f'mode[{noMd}]']['initial_guess']['max'][wlIdx] = float(1.001*ChangeVariable[Itr])
+                #     data['retrieval']['constraints'][f'characteristic[4]'][f'mode[{noMd}]']['initial_guess']['value'][wlIdx] =float(ChangeVariable[Itr])
+                
             if noMd ==2:
                 data['retrieval']['constraints'][f'characteristic[1]'][f'mode[{noMd}]']['initial_guess']['value'] =  rslt['VertProf_Mode2'].tolist()
 
@@ -252,9 +274,10 @@ for Itr2 in range(len(ChangeVariable2)):
         DictRslt.append(gr.invRslt[0])
 
 
-
+    Full_dict.append(DictRslt)
 
     colors = [
+        'y',
         "#FFD700",  # Gold
         "#FFA500",  # Orange
         "#FF8C00",  # Dark Orange
@@ -283,7 +306,7 @@ for Itr2 in range(len(ChangeVariable2)):
 
     sort_MAP = np.array([1, 2, 4, 5, 6])
 
-    fig,ax = plt.subplots(2,5, figsize = (32,10), sharex = True)
+    fig,ax = plt.subplots(2,5, figsize = (35,10), sharex = True)
     for Itr in range(len(ChangeVariable)):
         
         for i in range(5):
@@ -306,6 +329,7 @@ for Itr2 in range(len(ChangeVariable2)):
 
     # Create a common legend for all subplots, positioned to the right of the figure
     ax[0,4].legend(loc='center left', bbox_to_anchor=(1.11, -0.25), fancybox=True)
+    plt.savefig("I_sensitivity_rv.png", dpi = 120)
 
 
 
@@ -314,6 +338,7 @@ for Itr2 in range(len(ChangeVariable2)):
     sort_Lidar = np.array([0, 3, 7])
     fig,ax = plt.subplots(3,3, figsize = (18,18), sharey = True)
     for Itr in range(len(ChangeVariable)):
+
         
         for i in range(3):
             if Itr == 0: ax[0,i].plot(DictRslt[Itr]['meas_VExt'][:,sort_Lidar[i]]*1000,DictRslt[Itr]['range'][i,:],color ='k', lw = 3, label ='meas')
@@ -340,6 +365,7 @@ for Itr2 in range(len(ChangeVariable2)):
     for i in range(3):ax[0,i].set_title(f"{DictRslt[Itr]['lambda'][sort_Lidar][i]} $\mu$m")
 
 
+    plt.savefig("Lidar_sensitivity_rv.png", dpi = 120)
 
 
 
@@ -359,6 +385,8 @@ for Itr2 in range(len(ChangeVariable2)):
 
             
     plt.tight_layout()
+    plt.savefig("Lidar_sensitivity_rv_data2.png", dpi = 120)
+
 
 
     fig,ax = plt.subplots(1,4, figsize = (10,8))
@@ -371,6 +399,7 @@ for Itr2 in range(len(ChangeVariable2)):
         ax[3].scatter(Itr, DictRslt[Itr][ 'costVal'])
 
         ax[0].set_xscale('log')
+    
 
 
 
@@ -378,10 +407,28 @@ for Itr2 in range(len(ChangeVariable2)):
 
             
     plt.tight_layout()
+    plt.savefig("Lidar_sensitivity_rv_data.png", dpi = 120)
 
-    Full_dict.append(DictRslt)
+
+    
     print(Itr2)
 
+
+
+
+
+
+volFac=[]
+for j in range(len(ChangeVariable)):
+    for i in range(len(ChangeVariable2)):
+
+        volFac.append(0.19895/Full_dict[i][j]['aodMode'][0][0])
+
+
+
+
+
+volFac= 0.19895/Full_dict[i][j]['aodMode'][0][0]
 
 ConcForConstAOD = np.ones((len(ChangeVariable2),len(ChangeVariable)))
 checkrv = np.ones((len(ChangeVariable2),len(ChangeVariable)))
@@ -396,6 +443,127 @@ for j in range(len(ChangeVariable)):
 
 
 
+
+
+
+
+
+#FActors for refractive index : 
+
+volFracRRI = [0.60675836, 0.56471757, 0.52692216, 0.49279203, 0.46197608, 0.43407588, 0.40873138, 0.38562928, 0.36453085, 0.34519554]
+
+
+
+plt.rcParams['font.size'] = '17'
+
+sort_MAP = np.array([1, 2, 4, 5, 6])
+
+fig,ax = plt.subplots(2,5, figsize = (35,10), sharex = True)
+for Itr in range(len(ChangeVariable2)):
+    
+    for i in range(5):
+        if Itr == 0: ax[0,i].plot(Full_dict[Itr][0]['sca_ang'][:,sort_MAP[i]],Full_dict[Itr][0]['meas_I'][:,sort_MAP[i]], color ='k',lw = 3,marker = '.', label ='meas')
+        
+        ax[0,i].plot(Full_dict[Itr][0]['sca_ang'][:,sort_MAP[i]],Full_dict[Itr][0]['fit_I'][:,sort_MAP[i]], color = colors[Itr] ,label = np.round(ChangeVariable2[Itr],3))
+        # ax[0,i].scatter(DictRslt[Itr]['sca_ang'][:,sort_MAP[i]],DictRslt[Itr]['fit_I'][:,sort_MAP[i]], color = colors[Itr] ,label = np.round(ChangeVariable[Itr],3))
+
+        if Itr == 0: ax[1,i].plot(Full_dict[Itr][0]['sca_ang'][:,sort_MAP[i]],Full_dict[Itr][0]['meas_P_rel'][:,sort_MAP[i]],color ='k',lw = 3,  label ='meas')
+        
+        ax[1,i].plot(Full_dict[Itr][0]['sca_ang'][:,sort_MAP[i]],Full_dict[Itr][0]['fit_P_rel'][:,sort_MAP[i]], color = colors[Itr], label = np.round(ChangeVariable2[Itr],3))
+
+    ax[0,0].set_ylabel("I")
+    ax[1,0].set_ylabel("DoLP")
+
+for i in range(5):ax[0,i].set_title(f"{Full_dict[Itr][0]['lambda'][sort_MAP][i]} $\mu$m")
+for i in range(5):ax[1,i].set_xlabel(r"$\theta_{s}$")
+# plt.tight_layout()
+plt.subplots_adjust(right=0.7)
+
+# Create a common legend for all subplots, positioned to the right of the figure
+ax[0,4].legend(loc='center left', bbox_to_anchor=(1.11, -0.25), fancybox=True)
+plt.savefig("I_sensitivity_rv.png", dpi = 120)
+
+
+
+
+
+sort_Lidar = np.array([0, 3, 7])
+fig,ax = plt.subplots(3,3, figsize = (18,18), sharey = True)
+for Itr in range(len(ChangeVariable2)):
+    
+    
+    for i in range(3):
+        if Itr == 0: ax[0,i].plot(Full_dict[Itr][0]['meas_VExt'][:,sort_Lidar[i]]*1000,Full_dict[Itr][0]['range'][i,:],color ='k', lw = 3, label ='meas')
+        
+        ax[0,i].plot(Full_dict[Itr][0]['fit_VExt'][:,sort_Lidar[i]]*1000,Full_dict[Itr][0]['range'][i,:], color = colors[Itr], label =np.round(ChangeVariable2[Itr],3))
+        
+        if Itr == 0: ax[1,i].plot(Full_dict[Itr][0]['meas_VBS'][:,sort_Lidar[i]],Full_dict[Itr][0]['range'][i,:],color ='k',lw = 3,  label ='meas')
+        
+        ax[1,i].plot(Full_dict[Itr][0]['fit_VBS'][:,sort_Lidar[i]],Full_dict[Itr][0]['range'][i,:], color = colors[Itr], label = np.round(ChangeVariable2[Itr],3))
+
+        if Itr == 0: ax[2,i].plot(Full_dict[Itr][0]['meas_DP'][:,sort_Lidar[i]],Full_dict[Itr][0]['range'][i,:],color ='k',lw = 3,  label ='meas')
+        
+        ax[2,i].plot(Full_dict[Itr][0]['fit_DP'][:,sort_Lidar[i]],Full_dict[Itr][0]['range'][i,:], color = colors[Itr], label =np.round(ChangeVariable2[Itr],3))
+
+plt.subplots_adjust(right=0.8)
+
+# Create a common legend for all subplots, positioned to the right of the figure
+ax[0,2].legend(loc='center left', bbox_to_anchor=(1.2, -0.25), fancybox=True)
+
+ax[0,0].set_ylabel("Height")
+for i in range(2):ax[0,i].set_xlabel(r"$\alpha$")
+for i in range(3):ax[1,i].set_xlabel(r"$\beta$")
+for i in range(3):ax[2,i].set_xlabel(r"$\delta$ %")
+for i in range(3):ax[0,i].set_title(f"{DictRslt[Itr]['lambda'][sort_Lidar][i]} $\mu$m")
+
+
+plt.savefig("Lidar_sensitivity_rv.png", dpi = 120)
+
+
+
+
+fig,ax = plt.subplots(5,3, figsize = (12,12))
+for Itr in range(len(ChangeVariable2)):
+    for i in range(3):
+        # ax[i].plot(DictRslt[Itr]['sca_ang'][:,i],DictRslt[0]['meas_I'][:,i])
+        ax[0,i].plot(Full_dict[Itr][0]['r'][i],Full_dict[Itr][0][ 'dVdlnr'][i], color = colors[Itr])
+        ax[0,i].set_xscale('log')
+
+
+        ax[1,i].plot(Full_dict[Itr][0]['lambda'],Full_dict[Itr][0][ 'n'][i], color = colors[Itr])
+        ax[2,i].plot(Full_dict[Itr][0]['lambda'],Full_dict[Itr][0][ 'k'][i], color = colors[Itr])
+        ax[3,i].plot(Full_dict[Itr][0]['lambda'],Full_dict[Itr][0][ 'ssaMode'][i], color = colors[Itr])
+        ax[4,i].plot(Full_dict[Itr][0]['lambda'],Full_dict[Itr][0][ 'aodMode'][i], color = colors[Itr])
+
+        
+plt.tight_layout()
+plt.savefig("Lidar_sensitivity_rv_data2.png", dpi = 120)
+
+
+
+fig,ax = plt.subplots(1,4, figsize = (10,8))
+
+txt_title = 'n = '+ str(DictRslt[Itr]['n'])+ ' \n k = '+ str(DictRslt[Itr]['k'])+ r'\n $\sigma$ = '+ str(DictRslt[Itr]['sigma'])+ '\n r = '+ str(DictRslt[Itr]['rv'])+ '\n sph = '+ str(DictRslt[Itr][ 'sph'])
+for Itr in range(len(FineSize)):
+    ax[0].plot(DictRslt[Itr]['r'][0],DictRslt[Itr][ 'dVdlnr'][0], color = colors[Itr])
+    ax[1].plot(DictRslt[Itr]['lambda'],DictRslt[Itr][ 'ssaMode'][0], color = colors[Itr])
+    ax[2].plot(DictRslt[Itr]['lambda'],DictRslt[Itr][ 'aodMode'][0], color = colors[Itr])
+    ax[3].scatter(Itr, DictRslt[Itr][ 'costVal'])
+
+    ax[0].set_xscale('log')
+
+
+
+
+plt.suptitle(txt_title)
+
+        
+plt.tight_layout()
+plt.savefig("Lidar_sensitivity_rv_data.png", dpi = 120)
+
+
+
+print
 
 
 
