@@ -23,6 +23,7 @@ import math
 from netCDF4 import Dataset
 import matplotlib.patches as mpatches
 from matplotlib.ticker import ScalarFormatter
+from scipy.interpolate import interp1d
 
 
 
@@ -61,30 +62,30 @@ from matplotlib.ticker import ScalarFormatter
 
 
 # # # # ###Case 4: 24th Sept 2018, ORACLES
-file_path = '/home/gregmi/ORACLES/Sept24/'
-file_name ='RSP1-P3_L1C-RSPCOL-CollocatedRadiances_20180924T090316Z_V003-20210421T233034Z.h5'
-HSRLfile_path = '/home/gregmi/ORACLES/Sept24/'
-HSRLfile_name =  "HSRL2_P3_20180924_R2.h5"
-RSP_PixNo = 382
-TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
-nwl = 5 # first  nwl wavelengths
-ang1 = 10
-ang2 = 135
+# file_path = '/home/gregmi/ORACLES/Sept24/'
+# file_name ='RSP1-P3_L1C-RSPCOL-CollocatedRadiances_20180924T090316Z_V003-20210421T233034Z.h5'
+# HSRLfile_path = '/home/gregmi/ORACLES/Sept24/'
+# HSRLfile_name =  "HSRL2_P3_20180924_R2.h5"
+# RSP_PixNo = 382
+# TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
+# nwl = 5 # first  nwl wavelengths
+# ang1 = 10
+# ang2 = 135
 
 
 
 # # '''##Case 5: 22nd sept 2018, ORACLES
 # # # # #RSP'''
-# file_path = "/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03/"  #Path to the ORACLE data file
-# file_name =  "/RSP1-P3_L1C-RSPCOL-CollocatedRadiances_20180922T151106Z_V003-20210421T233946Z.h5" #Name of the ORACLES file
-# #HSRL
-# HSRLfile_path = "/home/gregmi/ORACLES/HSRL" #Path to the ORACLE data file 
-# HSRLfile_name =  "/HSRL2_P3_20180922_R2.h5" #Name of the ORACLES file
-# RSP_PixNo = 13201
-# TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
-# nwl = 5 # first  nwl wavelengths
-# ang1 = 10
-# ang2 = 120 # :ang angles  #Remove
+file_path = "/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03/"  #Path to the ORACLE data file
+file_name =  "/RSP1-P3_L1C-RSPCOL-CollocatedRadiances_20180922T151106Z_V003-20210421T233946Z.h5" #Name of the ORACLES file
+#HSRL
+HSRLfile_path = "/home/gregmi/ORACLES/HSRL" #Path to the ORACLE data file 
+HSRLfile_name =  "/HSRL2_P3_20180922_R2.h5" #Name of the ORACLES file
+RSP_PixNo = 13201
+TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
+nwl = 5 # first  nwl wavelengths
+ang1 = 10
+ang2 = 120 # :ang angles  #Remove
 
 #Uncertainity values for error bars, Take from AOS 
 # UNCERT ={}
@@ -169,7 +170,7 @@ for i in range(1):
 #     HSRLPixNo = HSRLPixNo+1
 #     RSP only retrieval
  
-# # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
+# # # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
     rslts_Sph = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
 #     # rslts_Sph2 = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
     rslts_Tamu = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
@@ -184,11 +185,11 @@ for i in range(1):
 
 # # # #    #HSRL2 only retrieval
     
-#     HSRL_sphrodT = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
-#     # plot_HSRL(HSRL_sphrodT[0][0],HSRL_sphrodT[0][0], UNCERT,forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrodT[2]) 
-#     HSRL_TamuT = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
-#     # # plot_HSRL(HSRL_Tamu[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_Tamu[2])    
-#     plot_HSRL(HSRL_sphrodT[0][0],HSRL_TamuT[0][0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
+    HSRL_sphrodT = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
+    # plot_HSRL(HSRL_sphrodT[0][0],HSRL_sphrodT[0][0], UNCERT,forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrodT[2]) 
+    HSRL_TamuT = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
+    # # plot_HSRL(HSRL_Tamu[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_Tamu[2])    
+    plot_HSRL(HSRL_sphrodT[0][0],HSRL_TamuT[0][0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
 
 #     # # SphHSRL.append(HSRL_sphrodT)
     # TAMUHSRL.append(HSRL_TamuT)
@@ -196,7 +197,7 @@ for i in range(1):
 
 # #    # joint RSP + HSRL2  retrieval 
   # # # PlotRandomGuess('gregmi/git/GSFC-GRASP-Python-Interface/try.npy', 2,0)
-    LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
+    # LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
     
     LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
     
@@ -205,7 +206,7 @@ for i in range(1):
 
     CombinedLidarPolPlot(LidarPolSph[0],LidarPolTAMU[0],RSP_PixNo,UNCERT)
     plot_HSRL(LidarPolSph[0][0],LidarPolTAMU[0][0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
-    RSP_plot(LidarPolTAMU[0],LidarPolTAMU[0],RSP_PixNo,UNCERT,LIDARPOL=True)
+    RSP_plot(LidarPolSph[0],LidarPolTAMU[0],RSP_PixNo,UNCERT,LIDARPOL=True)
 
 
 
@@ -272,6 +273,59 @@ for i in range(1):
 
 
 
+
+def CombineHSRLandRSPrslt(BckHSRL,BckRSP,CharName=None):
+
+    '''Combines the retrievals from HSRL and RSP'''
+
+    if CharName == None:
+        CharName = ['n','k','aodMode', 'ssaMode']
+        WlIndepChar = ['rv', 'sigma', 'sph', 'vol']
+
+    CombRetrievalDict ={}
+   
+
+
+    HSRLwl = BckHSRL['lambda']  #Wl for HSRL
+    RSPwl = BckRSP['lambda']   #Wl for RSP
+
+    #Combining the wavelengths
+    Combinedwl = np.concatenate((HSRLwl,RSPwl))
+
+    #Sorting the wavelength in ascending order.
+    Combinedsortwl = Combinedwl[np.argsort(Combinedwl) ]
+
+    #Index of each instrument in the 
+    HSRLIdx = np.where(np.isin( Combinedsortwl, HSRLwl))
+    RSPIdx = np.where(np.isin( Combinedsortwl, RSPwl))
+
+    CombRetrievalDict['lambda'] = Combinedsortwl
+
+    for Char in CharName:
+        CombRetrievalDict[f'{Char}'] = np.zeros(( (len(BckHSRL['rv'])),len(Combinedsortwl),))
+        
+        for mode in range(len(BckHSRL['rv'])):  #mode = No of aerosol modes. 
+            CombRetrievalDict[f'{Char}'] [mode][HSRLIdx] = BckHSRL[f'{Char}'] [mode]
+            CombRetrievalDict[f'{Char}'] [mode][RSPIdx] = BckRSP[f'{Char}'] [mode]
+        
+    for Wlindep in  WlIndepChar: 
+        CombRetrievalDict[f'HSRL_{Wlindep}'] = BckHSRL[f'{Wlindep}']
+        CombRetrievalDict[f'RSP_{Wlindep}'] = BckRSP[f'{Wlindep}']
+
+
+    return CombRetrievalDict
+
+
+
+ 
+
+
+
+    
+   
+
+
+    
 
 
 
@@ -1037,7 +1091,7 @@ def PlotcombEachMode(rslts_Sph2,rslts_Tamu2,HSRL_sphrodT,HSRL_TamuT,LidarPolSph,
                       
                         if scp2 ==0:
                             if a ==1 and b ==1:
-                                axs2[a,b].legend(bbox_to_anchor=(0.5, 1.3),loc='upper center', prop = { "size": 45 },ncol=2)
+                                axs2[a,b].legend(loc='best', prop = { "size": 45 },ncol=1)
                                 # axs2[a,b].legend(prop = { "size": 21 },loc='upper center', bbox_to_anchor=(0.5, -0.4), shadow=True, ncol=2)
                    
 
@@ -1233,7 +1287,7 @@ def PlotcombEachMode(rslts_Sph2,rslts_Tamu2,HSRL_sphrodT,HSRL_TamuT,LidarPolSph,
 
     plt.show()
         
-    plt.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/AllRetrieval{RepMode}_case1.png', dpi = 300,  transparent=True)
+    fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/AllRetrieval{RepMode}_case1.png', dpi = 200,  transparent=True)
     
     # plt.suptitle(f'RSP Aerosol Retrieval \n  Lat:{lat_t} Lon :{lon_t}   Date: {dt_t}')
     # if RepMode ==2:
@@ -2085,6 +2139,7 @@ for i in range(len(MeasKeys )):
 NTotalHSRL = 8* len(Rsltdic[f'meas_{MeasKeys[i]}'][:,0])  
 costValCal['HSRL_sph'] = sum(value for value in chiHSrl.values() if not math.isnan(value))/NTotalHSRL 
 
+
 chiHSrl_hex ={}
 Rsltdic = HSRL_TamuT[0][0]
 for i in range(len(MeasKeys )):
@@ -2331,5 +2386,30 @@ def compareWithHiGEAR(NoMeas,SavImgName ):
 
 
 
+def Interpolate(HSRLRslt, RSPwl, NoMode = None):
+
+    if NoMode == None:
+        NoMode = 3
+    RSPn, RSPk = np.ones((NoMode,len(RSPwl))),np.ones((NoMode,len(RSPwl)))
+    HSRLn,HSRLk, HSRLwl =HSRLRslt['n'],HSRLRslt['k'], HSRLRslt['lambda']
+
+    for mode in range(len(HSRLn)): #loop for each mode
+        
+        fn = interp1d( HSRLwl,HSRLn[mode], kind='linear',fill_value="extrapolate")
+        fk = interp1d( HSRLwl,HSRLk[mode], kind='linear',fill_value="extrapolate")
+        RSPn[mode] = fn(RSPwl)
+        RSPk[mode] = fk(RSPwl)
+
+        plt.plot(HSRLwl, HSRLn[mode],'-',marker = 'o', label='HSRL')
+        plt.plot(RSPwl,RSPn[mode], '-',marker = 'o', label='RSP')
+        plt.legend()
+        plt.show()
+
+
+    return RSPn, RSPk
+
+
+        
+def UpdateRSPfromHSRL():
 
 
