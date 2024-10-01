@@ -17,13 +17,13 @@ from ORACLES_GRASP import FindPix, RSP_Run,  HSLR_run, LidarAndMAP, plot_HSRL,RS
 import yaml
 %matplotlib inline
 from runGRASP import graspRun, pixel
-
 import math
 
 from netCDF4 import Dataset
 import matplotlib.patches as mpatches
 from matplotlib.ticker import ScalarFormatter
 from scipy.interpolate import interp1d
+import re
 
 
 
@@ -272,8 +272,6 @@ for i in range(1):
 
 
 
-
-
 def CombineHSRLandRSPrslt(BckHSRL,BckRSP,CharName=None):
 
     '''Combines the retrievals from HSRL and RSP'''
@@ -284,8 +282,6 @@ def CombineHSRLandRSPrslt(BckHSRL,BckRSP,CharName=None):
 
     CombRetrievalDict ={}
    
-
-
     HSRLwl = BckHSRL['lambda']  #Wl for HSRL
     RSPwl = BckRSP['lambda']   #Wl for RSP
 
@@ -316,22 +312,228 @@ def CombineHSRLandRSPrslt(BckHSRL,BckRSP,CharName=None):
     return CombRetrievalDict
 
 
-
- 
-
-
-
+def update_HSRLyaml(ymlPath,UpKerFile, YamlFileName: str, noMod: int, Kernel_type: str,  
+                    a=1, ConsType= None, YamlChar=None, maxr=None, minr=None, 
+                    NewVarDict: dict = None, DataIdxtoUpdate=None): 
+    """
+    Update the YAML file for HSRL with initial conditions from polarimeter retrievals.
     
-   
+    Arguments:
+    YamlFileName: str         -- Path to the YAML file to be updated.
+    noMod: int                -- Number of aerosol modes to iterate over.
+    Kernel_type: str          -- Type of kernel ('spheroid' or 'hex').
+    ConsType: str             -- Constraint type ('strict' to fix retrieval).
+    YamlChar: list or None    -- Characteristics in the YAML file (optional).
+    maxr: float               -- Factor for maximum values.
+    minr: float               -- Factor for minimum values.
+    NewVarDict: dict          -- New variables to update the YAML with.
+    RSP_rslt: dict            -- RSP results containing aerosol properties.
+    LagrangianOnly: bool      -- Whether to only update Lagrangian multipliers.
+    RSPUpdate: bool           -- Whether to update initial conditions from RSP retrievals.
+    DataIdxtoUpdate: list     -- Index of data to update (optional).
+    AprioriLagrange: float    -- Lagrange multiplier for a priori estimates.
+    a: int                    -- Offset for characteristic indices (default: 0).
+    ymlPath: str              -- Path to save the updated YAML file (default: '').
+    UpKerFile: str            -- Filename for the updated YAML file (default: '').
 
-
+    Returns:
+    None -- Writes the updated YAML data to a new file.
+    """
     
+    if maxr is None: 
+        maxr = 1
+
+    if minr is None: 
+        minr = 1
+
+    # Load the YAML file
+    with open(YamlFileName, 'r') as f:  
+        data = yaml.safe_load(f)
+    
+    if Kernel_type =='spheroid':
+        data['retrieval']['forward_model']['phase_matrix']['kernels_folder'] = 'KERNELS_BASE'
+    if Kernel_type =='hex':
+        data['retrieval']['forward_model']['phase_matrix']['kernels_folder'] = 'Ver_sph'
+
+    if YamlChar is None:
+        # Find the number of characteristics in the settings (Yaml) file
+        NoChar = []  # No of characteristics in the YAML file
+        for key, value in data['retrieval']['constraints'].items():
+            # Match the strings with "characteristics"
+            match = re.match(r'characteristic\[\d+\]', key)
+            if match:
+                # Extract the number 
+                numbers = re.findall(r'\d+', match.group())
+                NoChar.append(int(numbers[0]))
+
+        # All the characteristics in the settings file
+        YamlChar = [data['retrieval']['constraints'][f'characteristic[{i}]']['type'] for i in NoChar]
+
+    assert NewVarDict is not None, "NewVarDict must not be None"
+
+    for i, char_type in enumerate(YamlChar):
+        for noMd in range(noMod):
+           
+            initCond = data['retrieval']['constraints'][f'characteristic[{i + a}]'][f'mode[{noMd + a}]']['initial_guess']
+            
+            if char_type == 'size_distribution_lognormal':
+                try:
+                    if len(NewVarDict['rv']) != 0 and len(NewVarDict['sigma']) != 0:
+                        # Check if noMd is within range
+                        if noMd < len(NewVarDict['rv']) and noMd < len(NewVarDict['sigma']):
+                            initCond['value'] = (float(NewVarDict['rv'][noMd]), float(NewVarDict['sigma'][noMd]))
+                            initCond['max'] = (float(NewVarDict['rv'][noMd] * maxr), float(NewVarDict['sigma'][noMd] * maxr))
+                            initCond['min'] = (float(NewVarDict['rv'][noMd] * minr), float(NewVarDict['sigma'][noMd] * minr))
+                        else:
+                            print("Error: noMd index out of range for rv or sigma.")
+                    else:
+                        print("Warning: rv or sigma lists are empty.")
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+                    continue
+
+                if ConsType == 'strict':
+                    data['retrieval']['constraints'][f'characteristic[{i + a}]']['retrieved'] = 'false'
+            
+            elif char_type == 'real_part_of_refractive_index_spectral_dependent':
+                
+                try:
+                    if len(NewVarDict['n'])!=0:
+
+                        if DataIdxtoUpdate is None:
+                            DataIdxtoUpdate = [i for i in range(len(NewVarDict['lambda']))]
+
+                        initCond['value'] = [float(NewVarDict['n'][noMd][i]) for i in DataIdxtoUpdate]
+                        initCond['max'] = [float(NewVarDict['n'][noMd][i] * maxr) for i in DataIdxtoUpdate]
+                        initCond['min'] = [float(NewVarDict['n'][noMd][i] * minr) for i in DataIdxtoUpdate]
+                        initCond['index_of_wavelength_involved'] = [i for i in range(len(NewVarDict['lambda']))]
+
+                    if ConsType == 'strict':
+                        data['retrieval']['constraints'][f'characteristic[{i + a}]']['retrieved'] = 'false'
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+                    continue
+            elif char_type == 'imaginary_part_of_refractive_index_spectral_dependent':
+                try:
+                    if len(NewVarDict['k'])!=0:
+
+                        if DataIdxtoUpdate is None:
+                            DataIdxtoUpdate = [i for i in range(len(NewVarDict['lambda']))]
+
+                        initCond['value'] = [float(NewVarDict['k'][noMd][i]) for i in DataIdxtoUpdate]
+                        initCond['max'] = [float(NewVarDict['k'][noMd][i] * maxr) for i in DataIdxtoUpdate]
+                        initCond['min'] = [float(NewVarDict['k'][noMd][i] * minr) for i in DataIdxtoUpdate]
+                        initCond['index_of_wavelength_involved'] = [i for i in range(len(NewVarDict['lambda']))]
+
+                    if ConsType == 'strict':
+                        data['retrieval']['constraints'][f'characteristic[{i + a}]']['retrieved'] = 'false'
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+                    continue
+            elif char_type == 'sphere_fraction':
+
+                try:
+                    if len(NewVarDict['sph'])!=0:
+
+                        initCond['value'] = float(NewVarDict['sph'][noMd] / 100)
+                        initCond['max'] = float(NewVarDict['sph'][noMd] * maxr / 100)
+                        initCond['min'] = float(NewVarDict['sph'][noMd] * minr / 100)
+
+                        if ConsType == 'strict':
+                            data['retrieval']['constraints'][f'characteristic[{i + a}]']['retrieved'] = 'false'
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+                    continue
+    # Save the updated YAML file
+    with open(ymlPath + UpKerFile, 'w') as f:
+        yaml.safe_dump(data, f)
+
+    print(f"YAML file updated and saved as {UpKerFile}")
+
+    return UpKerFile
 
 
+def RunGRASPwUpdateYaml(Shape: str, ymlPath: str, fwdModelYAMLpath: str, UpKerFile: str, binPathGRASP: str, krnlPath: str, UpdateDict, rsltDict,  Plot = False):
+    """
+    Updates the YAML file, runs GRASP simulation, and appends the results to SaveRsltDict.
+    
+    Parameters:
+        ymlPath (str): The base path for the YAML files.
+        fwdModelYAMLpath (str): Path to the forward model YAML file.
+        UpKerFile (str): The name of the updated kernel file.
+        rsltDict: rsltdict to populate the pixel.
+        binPathGRASP (str): Path to the GRASP binary.
+        krnlPath (str): Path to the GRASP kernel.
+        UpdateDictHex (dict): Dictionary of new variables to update the kernel.
+        SaveRsltDict (list): List to store the results.
+
+    Returns:
+        None
+    """
+    
+    # Update the YAML with the provided parameters in UpdateDictHex
+    update_HSRLyaml(ymlPath, UpKerFile, YamlFileName=fwdModelYAMLpath, 
+                    minr=0.995, maxr=1.015, noMod=3, Kernel_type = Shape, 
+                    NewVarDict=UpdateDict, a=1)
+    
+    # Define updated YAML path
+    Updatedyaml = ymlPath + UpKerFile
+    
+    # Create and populate a pixel from HSRL result
+    pix = pixel()
+    pix.populateFromRslt(rsltDict, radianceNoiseFun=None, dataStage='meas', verbose=False)
+    
+    # Set up graspRun class, add pixel, and run GRASP
+    gr = graspRun(pathYAML=Updatedyaml, releaseYAML=True, verbose=True)
+    gr.addPix(pix)  # Add pixel to the graspRun instance
+    gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath)  # Run GRASP
+    
+    # Print AOD at last wavelength
+    print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1], gr.invRslt[0]['aod'][-1]))
+     
+    if Plot == True:
+        plot_HSRL(gr.invRslt[0],gr.invRslt[0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
+    
+    return gr.invRslt[0]
 
 
+def Interpolate(HSRLRslt, RSPwl, NoMode = None):
+
+    IntpDict = {}
+
+    if NoMode == None:
+        NoMode = 3
+    RSPn, RSPk = np.ones((NoMode,len(RSPwl))),np.ones((NoMode,len(RSPwl)))
+    HSRLn,HSRLk, HSRLwl =HSRLRslt['n'],HSRLRslt['k'], HSRLRslt['lambda']
+
+    for mode in range(len(HSRLn)): #loop for each mode
+        
+        fn = interp1d( HSRLwl,HSRLn[mode], kind='linear',fill_value="extrapolate")
+        fk = interp1d( HSRLwl,HSRLk[mode], kind='linear',fill_value="extrapolate")
+        RSPn[mode] = fn(RSPwl)
+        RSPk[mode] = fk(RSPwl)
+
+        plt.plot(HSRLwl, HSRLn[mode],'-',marker = 'o', label='HSRL')
+        plt.plot(RSPwl,RSPn[mode], '-',marker = 'o', label='RSP')
+        plt.legend()
+        plt.show()
+
+    IntpDict['n'] =  RSPn
+    IntpDict['k'] =  RSPk
+
+    return IntpDict
 
 
+# All_cases ={}
+# fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_3modes_HexShape_ORACLE_case2.yml'
+
+# Shape = 'spheroid'
+# rsltDict = rslt_RSP
+# UpdateDict = {'rv': HSRL_sphrodT[0][0]['rv'],'sigma': HSRL_sphrodT[0][0]['sigma'] }
+
+# Sph_HSRLsizetoRSP= RunGRASPwUpdateYaml(Shape, ymlPath, fwdModelYAMLpath, UpKerFile, binPathGRASP, krnlPath, UpdateDict, rsltDict,  Plot = False)
+
+# All_cases['Sph_HSRLsizetoRSP'].append(Sph_HSRLsizetoRSP)
 
 
 

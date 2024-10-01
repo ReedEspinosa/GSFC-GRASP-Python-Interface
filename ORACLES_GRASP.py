@@ -20,7 +20,6 @@ from CreateRsltsDict import Read_Data_HSRL_Oracles,Read_Data_HSRL_Oracles_Height
 import netCDF4 as nc
 from runGRASP import graspDB, graspRun, pixel, graspYAML
 from matplotlib import pyplot as plt
-
 import os
 if os.uname()[1]=='uranus': plt.switch_backend('agg')
 import numpy as np
@@ -35,12 +34,13 @@ import matplotlib.patches as mpatches
 from matplotlib.ticker import ScalarFormatter
 # from Plot_ORACLES import PltGRASPoutput, PlotRetrievals
 import yaml
-
 import pickle
-
 import datetime
-
 from netCDF4 import Dataset
+
+
+
+#Div
 
 
 
@@ -583,9 +583,12 @@ def AeroProfNorm_FMF(DictHsrl):
 
 
 def AeroClassAOD(DictHsrl):
-    "seperates the cintribution of dust, fine and marine aerosols and caculates the AOD contribtuion form each aerosol type"
-    rslt = DictHsrl[0]
-    Wl = [355,532]
+
+    "To provide the a priori constrain to GRASP. "
+
+    "seperates the contribution of dust, fine and marine aerosols and caculates the AOD contribtuion form each aerosol type"
+    rslt = DictHsrl[0] # Read the result dictionary with information on the DP at 1064, angstrong exponent
+    Wl = [355,532] #Wavelengths 
     Aod_Classified = {}
     for rep in range(2):
         
@@ -709,6 +712,7 @@ def AeroProfNorm_sc2(DictHsrl):
     DMR1 = DictHsrl[2]
     indxMaxDMR = (np.max(np.where(DMR1==0)[0])) 
     DMR1[DMR1==0] = 0.05
+    DMR1[hgt[np.where(hgt>4000)][0]] = 1
     
     # DMR1[DMR1==0] = np.linspace(indxMaxDMR,0,lnDMR)
 
@@ -760,7 +764,175 @@ def AeroProfNorm_sc2(DictHsrl):
     
 
     # Vextfine = np.concatenate((aboveBL, np.ones(len(belowBL))*10**-6))
-    VextSea = Vextoth -Vextfine
+    VextSea = Vextoth - Vextfine
+    VextSea[:BLH_indx[0]] = 1e-20
+
+
+    VextDst[np.where(VextDst<=0)[0]] = 1e-10
+    Vextfine[np.where(Vextfine<=0)[0]] = 1e-10
+    VextSea[np.where(VextSea<=0)[0]] = 1e-10
+    VextSea[:BLH_indx[0]] = 1e-10
+
+
+    Aod_Classified = {}  #stores aerosol contribution for each mode based on the classification. 
+    # Plot the various line plots on the secondary x-axis
+    Aod_Classified['Aod_dst'] = np.trapz(VextDst[::-1],hgt[::-1])
+    Aod_Classified['Aod_sea'] = np.trapz(VextSea[::-1],hgt[::-1])
+    Aod_Classified['Aod_fine'] = np.trapz(Vextfine[::-1],hgt[::-1])
+    Aod_Classified['Aod_T'] = np.trapz(Vext1[::-1], hgt[::-1])
+
+    Aod_Classified['Aod_below_BLH'] = np.trapz(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
+    Aod_Classified['Aod_above_BLH'] = np.trapz(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
+    
+    #Aerosol classification for 355
+    # Vext355 = rslt['meas_VExt'][:,0]
+
+
+
+
+    # print(hgt[BLH_indx[0]:], 'below the boundary layer')
+
+
+    # Added = Aod_Classified['Aod_dst']+Aod_Classified['Aod_sea']+Aod_Classified['Aod_fine']
+
+    # print('Aod_dst %:', round(100*(Aod_Classified['Aod_dst']/Aod_Classified['Aod_T']),3),'Aod_sea %:',round(100*(Aod_Classified['Aod_sea']/Aod_Classified['Aod_T']),3),'Aod_fine%:',round(100*(Aod_Classified['Aod_fine']/Aod_Classified['Aod_T']),3) )
+    
+   
+    # VextDst[0] = 1e-10
+    # Vextfine[0] = 1e-10
+    # VextSea[0] = 1e-10
+
+    # VBack = 0.00002*Vextoth
+    # Voth = 0.999998*Vextoth
+    # VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
+    # Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
+
+    DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
+    FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
+    SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+    # Temp = DictHsrl[5]
+
+    fig = plt.figure()
+
+    # Define the vmin and vmax for the color scale
+    vmin = 290
+    vmax = 300
+
+    # Create subplots
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6), sharey = True)
+
+    # Plot the first contour plot on the first subplot
+   
+    # Overlay the second contour plot on the second subplot
+    # contour2 = ax[1].contourf(Temp[HSRLPixNo-300:HSRLPixNo+300, :].T, 
+    #                         aspect='auto', origin='lower', 
+    #                         cmap='rainbow', alpha=1, 
+    #                         vmin=vmin, vmax=vmax, 
+    #                         levels=np.linspace(vmin, vmax, 20))
+    # fig.colorbar(contour2, ax=ax[1], orientation='vertical')
+    
+
+
+
+    plt.plot(VextDst,hgt, color = '#067084',label='Dust')
+    plt.plot(VextSea,hgt,color ='#6e526b',label='Salt')
+    plt.plot(Vextfine,hgt,color ='y',label='fine')
+    plt.plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
+    plt.plot(Vext1[BLH_indx],hgt[BLH_indx],color='#660000',marker = 'x',label='BLH')
+    plt.legend()
+
+    fig = plt.figure()
+    plt.plot(FineProf,hgt,color ='y',label='fine')
+    plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
+    plt.plot(DstProf,hgt, color = '#067084',label='Dust')
+    plt.legend()
+
+
+    return FineProf,DstProf,SeaProf,Aod_Classified
+
+def ModAeroProfNorm_sc2(DictHsrl):
+
+    """Modified to make DMR 1 at top of the profile. This sceme is more simple as just based on DMR from HSRL data products"""
+
+    rslt = DictHsrl[0]
+    Idx1064 = np.where(rslt['lambda'] == 1064/1000)[0][0]
+    Idx532 = np.where(rslt['lambda'] == 532/1000)[0][0]
+    # print(Idx1064,Idx532 )
+
+
+    max_alt = rslt['OBS_hght']
+    # Vext1 = (rslt['meas_VExt'][:,0]+rslt['meas_VExt'][:,1])/2
+    Vext1 = rslt['meas_VExt'][:,0]
+    Vext1[np.where(Vext1<=0)] = 1e-10
+
+    
+    hgt =  rslt['RangeLidar'][:,0][:]
+    DP1064= rslt['meas_DP'][:,Idx1064][:]
+
+    # Calculating the boundary layer height
+    BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
+    BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
+    #altitude of the aircraft99
+    AerID = DictHsrl[5]
+
+    DMR1 = DictHsrl[2]
+    indxMaxDMR = (np.max(np.where(DMR1==0)[0])) 
+    DMR1[DMR1==0] = 0.05
+    DMR1[hgt[np.where(hgt>4000)]] = 1
+    
+    # DMR1[DMR1==0] = np.linspace(indxMaxDMR,0,lnDMR)
+
+
+   
+    #Some values of DMR are >1,  in such cases we recaculate the values. Otherwise, use the values reported in the HSRL products
+    if np.any(DMR1 > 1) or np.any(AerID == 8 ) : #If there is any pure dust event
+
+        warnings.warn('DMR > 1, Recaculating', UserWarning)
+        DP1064= rslt['meas_DP'][:,Idx1064][:]  #Depol at 1064 nm
+        aDP= DictHsrl[3] #Particle depol ratio at 532
+        maxDP =  np.nanmax(aDP)
+        DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
+        # DMR1[DMR1==0] = 0.0001
+    else:
+        # maxDP =  0.35 #From the paper
+        # aDP= DictHsrl[3]
+        DMR1 = DictHsrl[2]
+        # maxDP =  np.nanmax(aDP)
+        # print('No pure dustEvent')
+
+    Vext1[np.where(Vext1<=0)] = 1e-10
+    Vextoth = (1-DMR1)*Vext1
+    VextDst = Vext1 - Vextoth 
+    FMF1 = DictHsrl[4]
+
+    
+    #Filtering
+    FMF1[np.where(FMF1<0)[0] ]= 0.00001
+    FMF1[np.where(FMF1>=1)[0]]= 0.99
+    # print(FMF)
+    
+    #Spearating the contribution from fine mode 
+    VextFMF = FMF1* Vextoth
+    aboveBL = Vextoth[:BLH_indx[0]]
+
+    belowBL = Vextoth[BLH_indx[0]:]
+
+    print(BLH_indx)
+
+    if BLH< 1000: #if the boundary layer is low then assume the fine mode aerosol to be well mixed
+        Vextfine = np.concatenate((aboveBL, np.ones(len(belowBL))*10**-5))
+    else:
+        belowBL = VextFMF[BLH_indx[0]:]
+        Vextfine = np.concatenate((aboveBL,belowBL))
+
+    # belowBL = VextFMF[BLH_indx[0]:] #Fine mode fractuon below BLH calchuateing using aeVoth/aesph
+    # Vextfine = np.concatenate((aboveBL,belowBL))
+    
+
+    # Vextfine = np.concatenate((aboveBL, np.ones(len(belowBL))*10**-6))
+    VextSea = Vextoth - Vextfine
+    VextSea[:BLH_indx[0]] = 1e-20
+
 
     VextDst[np.where(VextDst<=0)[0]] = 1e-10
     Vextfine[np.where(Vextfine<=0)[0]] = 1e-10
@@ -1086,7 +1258,10 @@ def PlotRandomGuess(filename_npy, NoItr):
 
 
 def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn, ModeNo=None, updateYaml= None, RandinitGuess =None , NoItr=None,fnGuessRslt = None):
+    
     failedmeas = 0 #Count of number of meas that failed
+
+    #Path to the Kernel Files
     krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
 
     if Kernel_type == "sphro":  #If spheriod model
@@ -1107,7 +1282,7 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
         savePath=f"/home/gregmi/ORACLES/HSRL1_P3_20180922_R03_{Kernel_type}"
         fnGuessRslt ='sphRandnew.npy'
     
-    if Kernel_type == "TAMU":
+    if Kernel_type == "TAMU": #Using Hexhderal shape kernel.
         if ModeNo == None or ModeNo == 2:
             fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_V.1.2_TAMU.yml'
         if ModeNo == 3:
@@ -1150,6 +1325,8 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
     HSRLkeys = ['RangeLidar','meas_VExt','meas_VBS','meas_DP']
     GenKeys= ['datetime','longitude', 'latitude', 'land_prct'] # Shape of these variables is not N wavelength
     
+
+
     #MAP measurement variables 
 
     RSP_var = np.ones((rslt_RSP['meas_I'].shape[0],rslt['lambda'].shape[0])) * np.nan
@@ -1843,7 +2020,6 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
 
     return
 
-
 def CombinedLidarPolPlot(LidarPolSph,LidarPolTAMU,RSP_PixNo, UNCERT): #should be updated to 
     plt.rcParams['font.size'] = '14'
     fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (15,6))
@@ -1943,21 +2119,12 @@ def RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT,rslts_Sph2=None,rslts_Tamu2=N
     
     Spheriod,Hex = rslts_Sph[0],rslts_Tamu[0]
 
-    cm_sp = ['#4459AA','#14411b', '#87C1FF']
-    cm_t = ["#14411b",'#adbf4b', '#9BB54C']
-
-
-    cm_sp2 = ['b','#BFBF2A', '#844772']
-    cm_t2 = ["#14411b",'#936ecf', '#FFA500']
-
-
-    j_sp = ['#757565','#5F381A', '#4BCBE2']
-    j_t = ["#882255",'#D44B15', '#1E346D']
-
-
-
+    cm_sp = ['k','#8B4000', '#87C1FF']
+    cm_t = ["#BC106F",'#E35335', 'b']
+    
+    # color_sph = "#025043"
     color_sph = '#0c7683'
-    color_tamu = "#BC106F"
+    color_tamu = "#d24787"
 
     fig, axs2 = plt.subplots(nrows= 3, ncols=2, figsize=(35, 20))
     fig, axsErr = plt.subplots(nrows= 3, ncols=2, figsize=(20, 15))
@@ -2163,14 +2330,6 @@ def Ext2Vconc(botLayer,topLayer,Nlayers,wl, Shape, AeroType = None, ):
     "Run GRASP forward model"
 
     dict_of_dicts = {}
-
-
-#To simulate the coefficient to convert Vext to vconc
- 
-    # botLayer = 2000
-    # topLayer = 4000
-    # Nlayers = 3
-    
     
     krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
     binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
@@ -2180,7 +2339,7 @@ def Ext2Vconc(botLayer,topLayer,Nlayers,wl, Shape, AeroType = None, ):
     fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_dust_Vext_conc.yml'
     
     #
-    #all values are set for 0.532 nm
+    #all values are set for 0.532 nm values in the ymal file.
     if 'dust' in AeroType.lower():
         rv,sigma, n, k, sf = 2, 0.5, 1.55, 0.004, 1e-6
     if 'seasalt' in AeroType.lower():
@@ -2542,7 +2701,7 @@ def errPlots(rslts_Sph,rslts_Tamu):
 
     #This fucntion the error between the measuremtn and the fit from RSP for all wl and all scattering angles.
     wl = rslts_Sph[0]['lambda']
-    colorwl = ['#70369d','#4682B4','#01452c','#FF7F7F','#d4af37','#4c0000']
+    colorwl = ['#70369d','#4682B4','#01452c','#FF7F7F','#d4af37','#4c0000','c','k']
     
     fig, axs = plt.subplots(nrows= 1, ncols=2, figsize=(16, 9), sharey =True)
     for i in range(len(wl)):
@@ -2588,6 +2747,9 @@ def errPlots(rslts_Sph,rslts_Tamu):
     axs[0].set_xlabel(r'${\theta_s}$')
     axs[1].set_xlabel(r'${\theta_s}$')
     plt.suptitle("RSP-Only Case 1")
+
+
+
 
 def PlotSingle(rslts_Sph,HSRL_sphrodT):
 
@@ -3163,7 +3325,6 @@ def ComparePhaseFunct(rv,sigma):
     """
     rv: lsit of volume equivalent radius
 
-    
     """
 
     "Run GRASP forward model for different shapes"
@@ -3319,6 +3480,9 @@ def ComparePhaseFunct(rv,sigma):
 
 def PlotShapeDict(Dict_shape, name =None):
 
+
+    """ PlotShapeDict(DictAll['0'], name =None)"""
+
     "Plots the phase function for different shape models for comparision"
 
     plt.rcParams['font.size'] = '18'
@@ -3329,7 +3493,7 @@ def PlotShapeDict(Dict_shape, name =None):
 
     color = ['#614C0E','#E09428','#B1DBFF','#B1DBFF'] #Color blind friendly scheme for different retrieval techniques< :rsponlt, hsrl only and combined
     WlIdx =  [0,4] #Index of the wavelength 
-
+    # WlIdx =  [4] #Index of the wavelength 
     # color = ['']
 
     markerIdx= np.arange(0,181,30)
@@ -3353,10 +3517,10 @@ def PlotShapeDict(Dict_shape, name =None):
         for ii in range(len(wl)):
 
 
-            axs[0,a].plot(np.arange(181),(100*abs(Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii] - Dict_shape[f'{shapeNamekeys[j+1]}']['p11'][:,0,ii])/Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii]), lw =3, color = color_instrument[ii], label =wl[ii])
+            axs[0,a].plot(np.arange(181),(100*(Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii] - Dict_shape[f'{shapeNamekeys[j+1]}']['p11'][:,0,ii])/Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii]), lw =3, color = color_instrument[ii], label =wl[ii])
                 # axs[1,i].set_yscale('log')
             axs[0,a].set_ylabel(r'Diff P11 %')
-            axs[1,a].plot(np.arange(181),abs((-Dict_shape[f'{shapeNamekeys[0]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii])-(-Dict_shape[f'{shapeNamekeys[j+1]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[j+1]}']['p11'][:,0,ii])),lw =3, color = color_instrument[ii], label = wl[ii])
+            axs[1,a].plot(np.arange(181),((-Dict_shape[f'{shapeNamekeys[0]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii])-(-Dict_shape[f'{shapeNamekeys[j+1]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[j+1]}']['p11'][:,0,ii])),lw =3, color = color_instrument[ii], label = wl[ii])
             axs[1,a].set_ylabel(r'Abs Diff -P12/P11')
             
             axs[1,a].set_xlabel(r'$\theta_{s}$')
@@ -3407,23 +3571,25 @@ def PlotShapeDict(Dict_shape, name =None):
     plt.savefig(f'Phasefunction_{name}.png', dpi = 200)
     fig.tight_layout()
 
-  
-
-# PlotShapeDict(DictSH)
-
-# def ErrHeatMap(rslt1, rslt2):
-
 def Values(rv_sph,sigma,psi_sph,psi_hex):
+
+    """T
+    his function converts the give volume equivant radius of spheroid to hexahedra (assuming that they are same in the equivanet radius space)and runs GRASP's forward model
+    The output is saved in a dictionary
+    
+    """
 
     # rv_sph = np.linspace(0.5,5,10)
     Dict_sph_rv =ComparePhaseFunct(rv_sph,sigma) 
 
+    #DONT USE THIS!!
 
-    #TODO have to manually change the kernel name in the settings file. 
+
+    #TODO have to manually change the kernel name in the settings file.  so cant run this as a function. 
 
     Dict_hex_rv =  ComparePhaseFunct(rv_sph,sigma) 
 
-    rv_hex = VolEqSph_to_VolEqHex(rv_sph ,psi_sph= 0.8521, psi_hex = 0.7 ) 
+    rv_hex = VolEqSph_to_VolEqHex(rv_sph ,psi_sph, psi_hex )   #[psi = 0.8521, 0.7]
     Dict_hex_rv_convert =  ComparePhaseFunct(rv_hex,sigma)     
 
 
@@ -3432,9 +3598,17 @@ def Values(rv_sph,sigma,psi_sph,psi_hex):
     DictAll ={}
     for i in range(len(Dict_hex_rv_convert.keys())):
         DictAll[f'{i}'] = {}
-        DictAll[f'{i}']['hex_rv_eff'] = Dict_hex_rv_convert[f'{list[Dict_hex_rv_convert.keys()][i]}']
-        DictAll[f'{i}']['sph_rv'] = Dict_sph_rv[f'{list[Dict_sph_rv.keys()][i]}']
-        DictAll[f'{i}']['hex_rv'] = Dict_hex_rv [f'{list[Dict_hex_rv.keys()][i]}']
+
+        if isinstance(rv, (list, tuple, np.ndarray)):
+            DictAll[f'{i}']['hex_rv_eff'] = Dict_hex_rv_convert[f'{list(Dict_hex_rv_convert.keys())[i]}']
+            DictAll[f'{i}']['sph_rv'] = Dict_sph_rv[f'{list(Dict_sph_rv.keys())[i]}']
+            DictAll[f'{i}']['hex_rv'] = Dict_hex_rv [f'{list(Dict_hex_rv.keys())[i]}']
+
+        else:
+            DictAll[f'{i}']['hex_rv_eff'] = Dict_hex_rv_convert[f'{list(Dict_hex_rv_convert.keys())[0]}']
+            DictAll[f'{i}']['sph_rv'] = Dict_sph_rv[f'{list(Dict_sph_rv.keys())[0]}']
+            DictAll[f'{i}']['hex_rv'] = Dict_hex_rv [f'{list(Dict_hex_rv.keys())[0]}']
+
 
     DictAll['rv'] = rv_sph
     DictAll['Mod_rv_reff'] =rv_hex 
@@ -3442,14 +3616,14 @@ def Values(rv_sph,sigma,psi_sph,psi_hex):
     DictAll['sphericity_hex'] = psi_hex
 
 
-    f = open('dict.txt','w')
-    f.write(str(dic))
-    f.close()
+    with open(f'dict_{rv_sph}.txt', 'wb') as handle:
+        pickle.dump(DictAll, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+    handle.close()
 
 
     return DictAll 
-
-
 def Read_HiGear(file_name, Idx):
 
     plt.rcParams['font.size'] = '12'
@@ -3487,6 +3661,106 @@ def Read_HiGear(file_name, Idx):
 
     return DvDlnr, r 
 
+
+
+def CheatPlotShapeDict(Dict_shape, name =None):
+
+
+    """ PlotShapeDict(DictAll['0'], name =None)"""
+
+    "Plots the phase function for different shape models for comparision"
+
+    plt.rcParams['font.size'] = '25'
+
+    color_instrument = ['#800080','#CDEDFF','#404790','#CE357D','#FBD381','#A78236','#711E1E','k']
+          
+    wl = [0.35, 0.41, 0.46, 0.53, 0.55 , 0.67  , 0.86, 1.06]
+
+    color = ['#614C0E','#E09428','#B1DBFF','#B1DBFF'] #Color blind friendly scheme for different retrieval techniques< :rsponlt, hsrl only and combined
+    WlIdx =  [4] #Index of the wavelength 
+    # WlIdx =  [4] #Index of the wavelength 
+    # color = ['']
+
+    markerIdx= np.arange(0,181,30)
+    marker = ["$0$", 'D', 'o','.']
+    # label = ['Spheroid', "Hex", "sph",'']
+
+
+    "Plots comparing the phase function and dolp for different shape models from Dict_shape['sphCoarseKernel']= ComparePhaseFunct(Shape='sph')"
+    fig,axs = plt.subplots(2,3, figsize =(25,15), sharex=True)
+    shapeNamekeys = list(Dict_shape.keys())
+    
+    label = shapeNamekeys
+
+    # if shapeNamekeys
+
+    a = len(WlIdx)
+
+    
+
+    for ii in range(len(wl)):
+
+        axs[0,1].plot(np.arange(181),(100*(Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii] - Dict_shape[f'{shapeNamekeys[1]}']['p11'][:,0,ii])/Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii]), lw =3, color = color_instrument[ii], label =wl[ii])
+            # axs[1,i].set_yscale('log')
+        axs[0,1].set_ylabel(r'Diff P11 %')
+        axs[1,1].plot(np.arange(181),((-Dict_shape[f'{shapeNamekeys[0]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[0]}']['p11'][:,0,ii])-(-Dict_shape[f'{shapeNamekeys[1]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[1]}']['p11'][:,0,ii])),lw =3, color = color_instrument[ii], label = wl[ii])
+        axs[1,1].set_ylabel(r'Diff -P12/P11')
+        
+        axs[1,1].set_xlabel(r'$\theta_{s}$')
+        axs[0,1].set_title(f'{shapeNamekeys[0]} - {shapeNamekeys[1]}')
+    axs[0,1].plot(np.arange(181),np.zeros(181),lw =0.85, color= 'k' , ls ='--')
+    axs[1,1].plot(np.arange(181),np.zeros(181),lw =0.85, color= 'k' , ls ='--')
+        
+    for ii in range(len(wl)):
+        axs[0,2].plot(np.arange(181),(100*(Dict_shape[f'{shapeNamekeys[2]}']['p11'][:,0,ii] - Dict_shape[f'{shapeNamekeys[1]}']['p11'][:,0,ii])/Dict_shape[f'{shapeNamekeys[2]}']['p11'][:,0,ii]), lw =3, color = color_instrument[ii], label =wl[ii])
+            # axs[1,i].set_yscale('log')
+        # axs[0,4].set_ylabel(r'Diff P11 %')
+        axs[1,2].plot(np.arange(181),((-Dict_shape[f'{shapeNamekeys[2]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[2]}']['p11'][:,0,ii])-(-Dict_shape[f'{shapeNamekeys[1]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[1]}']['p11'][:,0,ii])),lw =3, color = color_instrument[ii], label = wl[ii])
+        axs[0,2].set_title(f'{shapeNamekeys[2]} - {shapeNamekeys[1]}')
+        axs[1,2].set_xlabel(r'$\theta_{s}$')
+
+
+        axs[1,2].plot(np.arange(181),np.zeros(181),lw =0.85, color= 'k' , ls ='--')
+        axs[0,2].plot(np.arange(181),np.zeros(181),lw =0.85, color= 'k' , ls ='--')
+        
+    axs[0,1].legend(ncol =2, loc='best',prop = '6')
+    for idx, shapeName in enumerate(Dict_shape.keys()):
+        
+    
+        for i in range(len(WlIdx)):
+
+                
+                if idx<3:
+                    axs[0,i].plot(np.arange(181),Dict_shape[shapeName]['p11'][:,0,i], lw =3, color = color[idx])
+                    axs[0,i].scatter(np.arange(181)[markerIdx],Dict_shape[shapeName]['p11'][:,0,i][markerIdx],s = 100,edgecolors='black', linewidths=1, color = color[idx], marker =marker[idx], label = label[idx])
+                    axs[0,i].set_yscale('log')
+                    
+                    axs[1,i].plot(np.arange(181),-Dict_shape[shapeName]['p12'][:,0,i]/Dict_shape[shapeName]['p11'][:,0,i],lw =3, color = color[idx])
+                    axs[1,i].scatter(np.arange(181)[markerIdx],-Dict_shape[shapeName]['p12'][:,0,i][markerIdx]/Dict_shape[shapeName]['p11'][:,0,i][markerIdx],s = 100,edgecolors='black', linewidths=1, color = color[idx], marker =marker[idx],)
+                    
+                    # axs[0,i].set_xlabel(r'$\theta_{s}$')
+                    axs[1,i].set_xlabel(r'$\theta_{s}$')
+
+                    
+
+                    # txtylabel = 'P11 \n' + str(Dict_shape[shapeName]['lambda'][WlIdx[i]])
+                    if i ==0:
+                        axs[0,i].set_ylabel('P11')
+                        axs[1,i].set_ylabel(r'-P12/P11')
+
+                    if i ==0:
+                        axs[0,i].legend()
+                    axs[0,i].set_title(str(Dict_shape[shapeName]['lambda'][WlIdx[i]])+r"$\mu$m")
+                    # axs[i,1].set_title(Dict_shape[shapeName]['lambda'][WlIdx[i]])
+
+    titlelabel = '(rv,σ) : ' + str(Dict_shape[shapeName]['rv'])+',' + str(Dict_shape[shapeName]['sigma'])+ " n: " + str(Dict_shape[shapeName]['n'][WlIdx]) + " , k : " + str(Dict_shape[shapeName]['k'][WlIdx]) 
+    
+
+
+    plt.suptitle(titlelabel )
+
+    plt.savefig(f'Phasefunction_{name}.png', dpi = 200)
+    # fig.tight_layout()
 
 
 # PlotE2C(v_hex_sea,name ='v_hex_sea')
@@ -3690,3 +3964,253 @@ def Read_HiGear(file_name, Idx):
 
 #     plot_HSRL(LidarPolTAMU[0][0],LidarPolTAMU[0][0], forward = False, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/LIDARPOL_Plots_444.pdf")
 # CombinedLidarPolPlot(LidarPolTAMU[0],LidarPolTAMU[0])
+def plot_phase_err():
+
+    #Calculate the difference between pahse functions of two shapes and 
+
+    Dict_shape = DictAll2['0']
+
+    fig, axs = plt.subplots(nrows= 1, ncols=2, figsize=(16, 9), sharey =True)
+
+    ErrSph2 = 100*((rslts_Sph2[0]['meas_I'] - rslts_Sph2[0]['fit_I']))/rslts_Sph2[0]['meas_I']
+    ErrHex2 = 100*((rslts_Tamu2[0]['meas_I'] - rslts_Tamu2[0]['fit_I']))/rslts_Tamu2[0]['meas_I']
+
+
+    wl = rslts_Sph2[0]['lambda']
+    colorwl = ['#70369d','#4682B4','#01452c','#FF7F7F','#d4af37','#4c0000']
+
+    for i in range(len(wl)):
+        axs[0].plot(rslts_Sph2[0]['sca_ang'][:,i], ErrSph2[:,i] ,color = colorwl[i],marker = "$O$",markersize= 10, lw = 0.2,label=f"{np.round(wl[i],2)}")
+        axs[1].plot(rslts_Tamu2[0]['sca_ang'][:,i], ErrHex2[:,i],color = colorwl[i], marker = 'H',markersize= 12, lw = 0.2,label=f"{np.round(wl[i],2)}" )
+    axs[0].set_title('Spheriod')
+    axs[1].set_title('Hexahedral')
+
+    # axs[0].plot(rslts_Sph[0]['sca_ang'][:,0], 100*UNCERT['I']*np.ones(len(ErrSph[:,i])) ,color = 'k',ls = '--', lw = 1,label=f"Meas Uncert")
+    # axs[1].plot(rslts_Sph[0]['sca_ang'][:,0], 100*UNCERT['I']*np.ones(len(ErrSph[:,i])) ,color = 'k',ls = '--', lw = 1,label=f"Meas Uncert")
+
+
+    axs[0].set_ylabel('Error I %')
+    # axs[1].set_ylabel('Error %')
+    plt.legend( ncol=2)
+
+    axs[0].set_xlabel(r'${\theta_s}$')
+    axs[1].set_xlabel(r'${\theta_s}$')
+    plt.suptitle("RSP-Only Case 1")
+    # plt.savefig(f'{file_name[2:]}_{RSP_PixNo}_ErrorI.png', dpi = 300)
+
+    #Absolute err because DOLP are in %
+    ErrSphP2 = (-(rslts_Sph2[0]['meas_P_rel'] - rslts_Sph2[0]['fit_P_rel']))
+    ErrHexP2 = (-(rslts_Tamu2[0]['meas_P_rel'] - rslts_Tamu2[0]['fit_P_rel']))
+
+
+    ax0 =  axs[0].twinx()
+    ax01 =  axs[1].twinx()
+    ax1 =  axs[1].twinx()
+
+        
+    for ii in range(len(wl)):
+
+        # Ang = np.arange(181)[np.where((np.arange(181)>= np.min(rslts_Sph[0]['sca_ang'][:,0])& np.arange(181)<= np.max(rslts_Sph[0]['sca_ang'][:,0]) ))][0]
+
+        # print(Ang)
+        P11_c = (100*(Dict_shape[f'{shapeNamekeys[2]}']['p11'][:,0,ii] - Dict_shape[f'{shapeNamekeys[1]}']['p11'][:,0,ii])/Dict_shape[f'{shapeNamekeys[2]}']['p11'][:,0,ii])
+
+        Dolp_c = ((-Dict_shape[f'{shapeNamekeys[2]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[2]}']['p11'][:,0,ii])-(-Dict_shape[f'{shapeNamekeys[1]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[1]}']['p11'][:,0,ii]))
+
+
+        
+
+        ax0.plot(np.arange(181)[75:],P11_c[75:], lw =3, color = color_instrument[ii], label =wl[ii])
+    
+        ax01.plot(np.arange(181)[75:],P11_c[75:],lw =3, color = color_instrument[ii], label = wl[ii])
+        # axs[0,2].set_title(f'{shapeNamekeys[2]} - {shapeNamekeys[1]}')
+        # axs[1,2].set_xlabel(r'$\theta_{s}$')
+
+        
+
+
+
+    fig, axs = plt.subplots(nrows= 1, ncols=2, figsize=(16, 8), sharey = True)
+
+
+
+    for i in range(len(wl)):
+        axs[0].plot(rslts_Sph2[0]['sca_ang'][:,i], ErrSphP2[:,i] ,color = colorwl[i],marker = "$O$",markersize= 10, lw = 0.2,label=f"{np.round(wl[i],2)}")
+        axs[1].plot(rslts_Tamu2[0]['sca_ang'][:,i], ErrHexP2[:,i],color = colorwl[i], marker = 'H',markersize= 12, lw = 0.2,label=f"{np.round(wl[i],2)}" )
+
+
+    axs[0].set_title('Spheriod')
+    axs[1].set_title('Hexahedral')
+
+    # axs[0].plot(rslts_Sph[0]['sca_ang'][:,0], 100*UNCERT['DoLP']*np.ones(len(ErrSph[:,i])) ,color = 'k',ls = '--', lw = 1,label=f"Meas Uncert")
+    # axs[1].plot(rslts_Sph[0]['sca_ang'][:,0], 100*UNCERT['DoLP']*np.ones(len(ErrSph[:,i])) ,color = 'k',ls = '--', lw = 1,label=f"Meas Uncert")
+
+
+    axs[0].set_ylabel('Error DoLP %')
+    # plt.legend( ncol=2)
+
+    axs[0].set_xlabel(r'${\theta_s}$')
+    axs[1].set_xlabel(r'${\theta_s}$')
+    plt.suptitle("RSP-Only Case 1")
+
+
+    plt.rcParams['font.size'] = '25'
+
+    color_instrument = ['#800080','#CDEDFF','#404790','#CE357D','#FBD381','#A78236','#711E1E','k']
+            
+    wl = [0.35, 0.41, 0.46, 0.53, 0.55 , 0.67  , 0.86, 1.06]
+
+    color = ['#614C0E','#E09428','#B1DBFF','#B1DBFF'] #Color blind friendly scheme for different retrieval techniques< :rsponlt, hsrl only and combined
+    WlIdx =  [4] #Index of the wavelength 
+    # WlIdx =  [4] #Index of the wavelength 
+    # color = ['']
+
+    markerIdx= np.arange(0,181,30)
+    marker = ["$0$", 'D', 'o','.']
+    # label = ['Spheroid', "Hex", "sph",'']
+
+
+    "Plots comparing the phase function and dolp for different shape models from Dict_shape['sphCoarseKernel']= ComparePhaseFunct(Shape='sph')"
+    # fig,axs = plt.subplots(2,3, figsize =(25,15), sharex=True)
+    shapeNamekeys = list(Dict_shape.keys())
+
+    label = shapeNamekeys
+
+
+    a = len(WlIdx)
+    # fig, axs = plt.subplots(nrows= 1, ncols=2, figsize=(10, 5))
+
+    ax0 =  axs[0].twinx()
+
+    ax01 =  axs[1].twinx()
+        
+    for ii in range(len(wl)):
+
+        # print(Ang)
+        # P11_c = (100*(Dict_shape[f'{shapeNamekeys[2]}']['p11'][:,0,ii] - Dict_shape[f'{shapeNamekeys[1]}']['p11'][:,0,ii])/Dict_shape[f'{shapeNamekeys[2]}']['p11'][:,0,ii])
+
+        Dolp_c1 = (-Dict_shape[f'{shapeNamekeys[2]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[2]}']['p11'][:,0,ii])-(-Dict_shape[f'{shapeNamekeys[1]}']['p12'][:,0,ii]/Dict_shape[f'{shapeNamekeys[1]}']['p11'][:,0,ii])
+
+        # ax0.plot(np.arange(181)[30:],P11_c[30:], lw =3, color = color_instrument[ii], label =wl[ii])
+    
+        ax0.plot(np.arange(181)[75:],-Dolp_c1[75:],lw =3, color = color_instrument[ii], label = wl[ii])
+        ax01.plot(np.arange(181)[75:],-Dolp_c1[75:],lw =3, color = color_instrument[ii], label = wl[ii])
+        # # axs[0,2].set_title(f'{shapeNamekeys[2]} - {shapeNamekeys[1]}')
+        # axs[1,2].set_xlabel(r'$\theta_{s}$')
+
+        return
+    
+
+
+
+def InterpolateRIdxfromHSRLforRSP(HSRLrslt, wlRSP):
+
+    #HSRLrslt is the result from GRASP using HSRL2 data
+    #wlRSP is RSP wavelengths
+    wlHSRL = HSRLrslt['lambda']
+    wlRSP
+
+
+
+def RunFwdModel_LIDARandMAP():
+
+
+    dict_of_dicts = {}
+    # sphericalFract = np.arange(1e-5, 0.99,0.01)
+
+    "Designed to characterize the fine mode overestimation in Lidar and MAP"
+
+
+    #Path to GRASP executables and Kernels
+
+    krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
+    binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
+    ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+    UpKerFile =  'settings_dust_Vext_conc_dump.yml'  #Yaml file after updating the state vectors
+    fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_dust_Vext_conc.yml'
+    
+    #
+    #all values are set for 0.532 nm values in the ymal file.
+    if 'dust' in AeroType.lower():
+        rv,sigma, n, k, sf = 2, 0.5, 1.55, 0.004, 1e-6
+    if 'seasalt' in AeroType.lower():
+        rv,sigma, n, k, sf = 1.5 , 0.6, 1.33, 0.0001, 0.999          
+    if 'fine' in AeroType.lower():
+        rv,sigma, n, k, sf = 0.13, 0.49, 1.45, 0.003, 1e-6
+    
+    #Setting the shape model Sphroids and Hexhedral
+    if 'sph' in Shape.lower():
+        Kernel = 'KERNELS_BASE'
+        print(Kernel)
+    if 'hex' in Shape.lower():
+        Kernel = 'Ver_sph'
+        print(Kernel)
+
+    Volume = np.linspace(1e-5,2,20)
+    VConcandExt = np.zeros((len(Volume),2))*np.nan
+
+#Geometry
+    singProf = np.linspace(botLayer, topLayer, Nlayers)[::-1]
+    #Inputs for simulation
+    wvls = [0.532] # wavelengths in μm
+    msTyp = [36] # meas type VEXT
+    sza = 0.01 # we assume vertical lidar
+
+    nbvm = Nlayers*np.ones(len(msTyp), int)
+    thtv = np.tile(singProf, len(msTyp))
+    meas = np.r_[np.repeat(2.372179e-05, nbvm[0])]
+    phi = np.repeat(0, len(thtv)) # currently we assume all observations fall within a plane
+# errStr = [y for y in archName.lower().split('+') if 'lidar09' in y][0]
+    nowPix = pixel(dt.datetime.now(), 1, 1, 0, 0, masl=0, land_prct=0)
+    
+    for wvl in wvls: # This will be expanded for wavelength dependent measurement types/geometry
+        # errModel = functools.partial(addError, errStr, concase=concase, orbit=orbit, lidErrDir=lidErrDir) # this must link to an error model in addError() below
+        nowPix.addMeas(wvl, msTyp, nbvm, sza, thtv, phi, meas,)
+
+
+    for i in range(len(Volume)):
+        try:
+#change the value of concentration in the yaml file
+            with open(fwdModelYAMLpath, 'r') as f:  
+                data = yaml.safe_load(f) 
+                # print(data)
+                data['retrieval']['constraints']['characteristic[2]']['mode[1]']['initial_guess']['value'][0] = float(Volume[i])
+                data['retrieval']['constraints']['characteristic[3]']['mode[1]']['initial_guess']['value'][0],data['retrieval']['constraints']['characteristic[3]']['mode[1]']['initial_guess']['value'][1] = float(rv),float(sigma)
+                data['retrieval']['constraints']['characteristic[4]']['mode[1]']['initial_guess']['value'][0] = float(n)
+                data['retrieval']['constraints']['characteristic[5]']['mode[1]']['initial_guess']['value'][0] = float(k)
+                data['retrieval']['constraints']['characteristic[6]']['mode[1]']['initial_guess']['value'][0] = float(sf)
+                data['retrieval']['forward_model']['phase_matrix']['kernels_folder'] = Kernel
+
+            f.close()
+            
+            with open(ymlPath+UpKerFile, 'w') as f: #write the chnages to new yaml file
+                yaml.safe_dump(data, f)
+            f.close()
+
+#New yaml file after updating state vectors/variables
+            Newyaml = ymlPath+UpKerFile
+            #Running GRASP
+            print('Using settings file at %s' % Newyaml)
+            gr = graspRun(pathYAML= Newyaml, releaseYAML=True, verbose=True) # setup instance of graspRun class, add the above pixel, run grasp and read the output to gr.invRslt[0] (dict)
+            gr.addPix(nowPix) # add the pixel we created above
+            gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath) # run grasp binary (output read to gr.invRslt[0] [dict])
+            print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1],gr.invRslt[0]['aod'][-1])) # 
+
+            #Saving Vext and Volume conc
+            VConcandExt[i,0], VConcandExt[i,1] = gr.invRslt[0]['vol'],gr.invRslt[0]['fit_VExt'][1]
+            
+            #Saving the dictonary as pkl file
+            dict_of_dicts[f'itr{i}'] = gr.invRslt[0]
+            with open(f'/home/gregmi/ORACLES/Case2O/Vext2conc/Vext2conc_{i}_{Shape}.pickle', 'wb') as f:
+                pickle.dump(gr.invRslt[0], f)
+            f.close()
+
+        except Exception as e:
+            print(f"An error occurred for Conc = {Volume[i]}: {e}")
+        continue
+   
+    # Save to file using pickle
+    with open(f'/home/gregmi/ORACLES/Case2O/Vext2conc/Vext2conc_all_{Shape}.pickle', 'wb') as f:
+        pickle.dump(dict_of_dicts, f)
+    gr.invRslt[0]
+
