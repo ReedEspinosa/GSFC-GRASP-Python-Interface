@@ -170,12 +170,12 @@ for i in range(1):
 #     HSRLPixNo = HSRLPixNo+1
 #     RSP only retrieval
  
-# # # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
-    rslts_Sph = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
-#     # rslts_Sph2 = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
-    rslts_Tamu = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
-    # # rslts_Tamu2 = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
-    RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT)
+# # # # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
+#     rslts_Sph = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
+# #     # rslts_Sph2 = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
+#     rslts_Tamu = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
+# #     # # rslts_Tamu2 = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
+#     RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT)
    
 
 # # # #     # SphRSP.append(rslts_Sph)
@@ -197,7 +197,7 @@ for i in range(1):
 
 # #    # joint RSP + HSRL2  retrieval 
   # # # PlotRandomGuess('gregmi/git/GSFC-GRASP-Python-Interface/try.npy', 2,0)
-    # LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
+    LidarPolTAMU = LidarAndMAP('TAMU',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
     
     LidarPolSph = LidarAndMAP('sphro',HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, nwl,GasAbsFn,ModeNo=3, updateYaml= None)
     
@@ -270,7 +270,11 @@ for i in range(1):
    
 # # # # # #Vertical Prof constrained 
 
+def CXmunk(V):
 
+    '''V is the wind speed in m/s'''
+    CxMunk = np.sqrt(0.003+0.00512*V)
+    return CxMunk 
 
 def CombineHSRLandRSPrslt(BckHSRL,BckRSP,CharName=None):
 
@@ -312,14 +316,17 @@ def CombineHSRLandRSPrslt(BckHSRL,BckRSP,CharName=None):
     return CombRetrievalDict
 
 
-def update_HSRLyaml(ymlPath,UpKerFile, YamlFileName: str, noMod: int, Kernel_type: str,  
-                    a=1, ConsType= None, YamlChar=None, maxr=None, minr=None, 
+def update_HSRLyaml(ymlPath, UpKerFile, YamlFileName: str, noMod: int, Kernel_type: str,  
+                    GRASPModel = None, AeroProf =None, ConsType= None, YamlChar=None, maxr=None, minr=None, 
                     NewVarDict: dict = None, DataIdxtoUpdate=None): 
     """
     Update the YAML file for HSRL with initial conditions from polarimeter retrievals.
     
     Arguments:
+    ymlPath: str              -- Path to which new updated setting file will be saved
+    UpKerFile: str            -- Name of the new settings file
     YamlFileName: str         -- Path to the YAML file to be updated.
+
     noMod: int                -- Number of aerosol modes to iterate over.
     Kernel_type: str          -- Type of kernel ('spheroid' or 'hex').
     ConsType: str             -- Constraint type ('strict' to fix retrieval).
@@ -335,11 +342,17 @@ def update_HSRLyaml(ymlPath,UpKerFile, YamlFileName: str, noMod: int, Kernel_typ
     a: int                    -- Offset for characteristic indices (default: 0).
     ymlPath: str              -- Path to save the updated YAML file (default: '').
     UpKerFile: str            -- Filename for the updated YAML file (default: '').
+    GRASPModel: str           -- 'Fwd' for forward model or 'Bck'for inverse
+    AeroProf:list             -- (Apriori) Normalized vertical profile for each aerosol mode (For LIDARS), size = (Vertical grid X no of aerosol modes)
 
     Returns:
     None -- Writes the updated YAML data to a new file.
     """
     
+
+
+
+
     if maxr is None: 
         maxr = 1
 
@@ -349,11 +362,36 @@ def update_HSRLyaml(ymlPath,UpKerFile, YamlFileName: str, noMod: int, Kernel_typ
     # Load the YAML file
     with open(YamlFileName, 'r') as f:  
         data = yaml.safe_load(f)
+
+#.......................................
+#Set the shape model
+#.......................................
     
     if Kernel_type =='spheroid':
         data['retrieval']['forward_model']['phase_matrix']['kernels_folder'] = 'KERNELS_BASE'
     if Kernel_type =='hex':
         data['retrieval']['forward_model']['phase_matrix']['kernels_folder'] = 'Ver_sph'
+
+#.......................................
+#Set GRASP to forward or inverse mode
+#.......................................
+
+
+    if GRASPModel != None:
+        if 'fwd' in GRASPModel.lower(): #If set to forward mode
+            data['retrieval']['mode'] = 'forward'
+            data['output']['segment']['stream'] = 'bench_FWD_IQUandLIDAR_rslts.txt'
+            data['input']['file'] = 'bench.sdat'
+         
+        if 'bck' in GRASPModel.lower(): #If set to inverse mode
+            data['retrieval']['mode'] = 'forward'
+            data['output']['segment']['stream'] = 'bench_inversionRslts.txt'
+            data['input']['file'] = 'inversionBACK.sdat'
+
+#.......................................
+#Set the characteristics
+#.......................................
+
 
     if YamlChar is None:
         # Find the number of characteristics in the settings (Yaml) file
@@ -369,12 +407,38 @@ def update_HSRLyaml(ymlPath,UpKerFile, YamlFileName: str, noMod: int, Kernel_typ
         # All the characteristics in the settings file
         YamlChar = [data['retrieval']['constraints'][f'characteristic[{i}]']['type'] for i in NoChar]
 
+
+
     assert NewVarDict is not None, "NewVarDict must not be None"
 
     for i, char_type in enumerate(YamlChar):
         for noMd in range(noMod):
            
-            initCond = data['retrieval']['constraints'][f'characteristic[{i + a}]'][f'mode[{noMd + a}]']['initial_guess']
+            initCond = data['retrieval']['constraints'][f'characteristic[{i + 1}]'][f'mode[{noMd + 1}]']['initial_guess']
+
+            if char_type == 'vertical_profile_normalized':
+                try:
+                    if AeroProf is not None: 
+                        initCond['value'] =  AeroProf[noMd].tolist()
+                        print(f"{char_type} Updated")
+                except Exception as e:
+                    print(char_type)
+                    print(f"An error occurred: {e} for {char_type} ")
+                    continue
+            if char_type == 'aerosol_concentration':
+                try: 
+                    if len(NewVarDict['vol']) != 0: 
+                        initCond['value'] = (float(NewVarDict['vol'][noMd]))
+                        initCond['max'] = (float(NewVarDict['vol'][noMd] * maxr))
+                        initCond['min'] = (float(NewVarDict['vol'][noMd] * minr))
+
+                        print(f"{char_type} Updated")
+                except Exception as e:
+                    print(f"An error occurred for {char_type}: {e}")
+                    continue
+
+
+               
             
             if char_type == 'size_distribution_lognormal':
                 try:
@@ -384,12 +448,14 @@ def update_HSRLyaml(ymlPath,UpKerFile, YamlFileName: str, noMod: int, Kernel_typ
                             initCond['value'] = (float(NewVarDict['rv'][noMd]), float(NewVarDict['sigma'][noMd]))
                             initCond['max'] = (float(NewVarDict['rv'][noMd] * maxr), float(NewVarDict['sigma'][noMd] * maxr))
                             initCond['min'] = (float(NewVarDict['rv'][noMd] * minr), float(NewVarDict['sigma'][noMd] * minr))
+
+                            print(f"{char_type} Updated")
                         else:
                             print("Error: noMd index out of range for rv or sigma.")
                     else:
                         print("Warning: rv or sigma lists are empty.")
                 except Exception as e:
-                    print(f"An error occurred: {e}")
+                    print(f"An error occurred for {char_type}: {e}")
                     continue
 
                 if ConsType == 'strict':
@@ -408,10 +474,12 @@ def update_HSRLyaml(ymlPath,UpKerFile, YamlFileName: str, noMod: int, Kernel_typ
                         initCond['min'] = [float(NewVarDict['n'][noMd][i] * minr) for i in DataIdxtoUpdate]
                         initCond['index_of_wavelength_involved'] = [i for i in range(len(NewVarDict['lambda']))]
 
+                        print(f"{char_type} Updated")
+
                     if ConsType == 'strict':
                         data['retrieval']['constraints'][f'characteristic[{i + a}]']['retrieved'] = 'false'
                 except Exception as e:
-                    print(f"An error occurred: {e}")
+                    print(f"An error occurred for {char_type}: {e}")
                     continue
             elif char_type == 'imaginary_part_of_refractive_index_spectral_dependent':
                 try:
@@ -425,10 +493,12 @@ def update_HSRLyaml(ymlPath,UpKerFile, YamlFileName: str, noMod: int, Kernel_typ
                         initCond['min'] = [float(NewVarDict['k'][noMd][i] * minr) for i in DataIdxtoUpdate]
                         initCond['index_of_wavelength_involved'] = [i for i in range(len(NewVarDict['lambda']))]
 
+                        print(f"{char_type} Updated")
+
                     if ConsType == 'strict':
                         data['retrieval']['constraints'][f'characteristic[{i + a}]']['retrieved'] = 'false'
                 except Exception as e:
-                    print(f"An error occurred: {e}")
+                    print(f"An error occurred for {char_type}: {e}")
                     continue
             elif char_type == 'sphere_fraction':
 
@@ -438,19 +508,24 @@ def update_HSRLyaml(ymlPath,UpKerFile, YamlFileName: str, noMod: int, Kernel_typ
                         initCond['value'] = float(NewVarDict['sph'][noMd] / 100)
                         initCond['max'] = float(NewVarDict['sph'][noMd] * maxr / 100)
                         initCond['min'] = float(NewVarDict['sph'][noMd] * minr / 100)
+                        print(f"{char_type} Updated")
 
                         if ConsType == 'strict':
                             data['retrieval']['constraints'][f'characteristic[{i + a}]']['retrieved'] = 'false'
                 except Exception as e:
-                    print(f"An error occurred: {e}")
+                    print(f"An error occurred for {char_type}: {e}")
                     continue
+
+
+#.......................................
     # Save the updated YAML file
+#.......................................
     with open(ymlPath + UpKerFile, 'w') as f:
         yaml.safe_dump(data, f)
 
-    print(f"YAML file updated and saved as {UpKerFile}")
+    print(f"YAML file updated and saved as {ymlPath + UpKerFile}")
 
-    return UpKerFile
+    return ymlPath + UpKerFile
 
 
 def RunGRASPwUpdateYaml(Shape: str, ymlPath: str, fwdModelYAMLpath: str, UpKerFile: str, binPathGRASP: str, krnlPath: str, UpdateDict, rsltDict,  Plot = False):
@@ -473,7 +548,7 @@ def RunGRASPwUpdateYaml(Shape: str, ymlPath: str, fwdModelYAMLpath: str, UpKerFi
     
     # Update the YAML with the provided parameters in UpdateDictHex
     update_HSRLyaml(ymlPath, UpKerFile, YamlFileName=fwdModelYAMLpath, 
-                    minr=0.995, maxr=1.015, noMod=3, Kernel_type = Shape, 
+                    minr=1, maxr=1, noMod=3, Kernel_type = Shape, 
                     NewVarDict=UpdateDict, a=1)
     
     # Define updated YAML path
@@ -497,7 +572,7 @@ def RunGRASPwUpdateYaml(Shape: str, ymlPath: str, fwdModelYAMLpath: str, UpKerFi
     return gr.invRslt[0]
 
 
-def Interpolate(HSRLRslt, RSPwl, NoMode = None):
+def Interpolate(HSRLRslt, RSPwl, NoMode = None, Plot=False):
 
     IntpDict = {}
 
@@ -512,16 +587,23 @@ def Interpolate(HSRLRslt, RSPwl, NoMode = None):
         fk = interp1d( HSRLwl,HSRLk[mode], kind='linear',fill_value="extrapolate")
         RSPn[mode] = fn(RSPwl)
         RSPk[mode] = fk(RSPwl)
+    
+        if Plot == True:
 
-        plt.plot(HSRLwl, HSRLn[mode],'-',marker = 'o', label='HSRL')
-        plt.plot(RSPwl,RSPn[mode], '-',marker = 'o', label='RSP')
-        plt.legend()
-        plt.show()
+            plt.plot(HSRLwl, HSRLn[mode],'-',marker = 'o', label='HSRL')
+            plt.plot(RSPwl,RSPn[mode], '-',marker = 'o', label='RSP')
+            plt.legend()
+            plt.show()
 
     IntpDict['n'] =  RSPn
     IntpDict['k'] =  RSPk
 
     return IntpDict
+
+
+
+
+
 
 
 # All_cases ={}
@@ -530,10 +612,14 @@ def Interpolate(HSRLRslt, RSPwl, NoMode = None):
 # Shape = 'spheroid'
 # rsltDict = rslt_RSP
 # UpdateDict = {'rv': HSRL_sphrodT[0][0]['rv'],'sigma': HSRL_sphrodT[0][0]['sigma'] }
-
+# UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
+# ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
 # Sph_HSRLsizetoRSP= RunGRASPwUpdateYaml(Shape, ymlPath, fwdModelYAMLpath, UpKerFile, binPathGRASP, krnlPath, UpdateDict, rsltDict,  Plot = False)
-
 # All_cases['Sph_HSRLsizetoRSP'].append(Sph_HSRLsizetoRSP)
+
+# update_HSRLyaml(ymlPath = ymlPath, UpKerFile=UpKerFile , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = Kernel_type, AeroProf=AeroProf, NewVarDict = UpdateDict, GRASPModel = 'fwd')
+   
+
 
 
 
