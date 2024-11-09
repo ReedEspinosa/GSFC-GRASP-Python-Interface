@@ -37,8 +37,17 @@ import yaml
 import pickle
 import datetime
 from netCDF4 import Dataset
+from scipy.optimize import curve_fit
+import re
 
 
+
+
+"""Code contains the tools to read and run GRASP for Poalrimter (designed for RSP) and Lidar (HSRL2) from an aircraft measuments
+
+
+
+"""
 
 #Div
 
@@ -394,7 +403,7 @@ def AeroProfNorm_FMF(DictHsrl):
     
     #Separating the contribution of dust to total extinction
     VextDst = DMR1 * Vext1
-    VextDst [np.where(VextDst <=0)[0]]= 1e-6
+    VextDst [np.where(VextDst <=0)[0]]= 1e-8
     Vextoth = (1-DMR1)* Vext1
 
     print(DMR1)
@@ -425,8 +434,8 @@ def AeroProfNorm_FMF(DictHsrl):
     #Spearating the contribution from fine mode 
     Vextfine = FMF1* Vextoth
 
-    Vextfine[np.where(Vextfine <=0)[0]]= 1e-6
-    Vextfine[np.where(hgt<BLH)[0]]= 1e-6
+    Vextfine[np.where(Vextfine <=0)[0]]= 1e-8
+    Vextfine[np.where(hgt<BLH)[0]]= 1e-8
 
     # Vextfine[np.where(hgt>=BLH)[0]] = Vextoth[np.where(hgt>=BLH)[0]]
     
@@ -439,7 +448,7 @@ def AeroProfNorm_FMF(DictHsrl):
     VextSea = Vextoth - Vextfine
     # VextSea[np.where(hgt<BLH)[0]] = Vextoth[np.where(hgt<BLH)[0]]
     VextSea[np.where(hgt>=BLH)[0]] = 1e-10
-    VextSea[np.where(VextSea <=0)[0]]= 1e-6 
+    VextSea[np.where(VextSea <=0)[0]]= 1e-8
 
     # VextDst[0] = 1e-9
     # Vextfine[0] = 1e-9
@@ -467,111 +476,6 @@ def AeroProfNorm_FMF(DictHsrl):
     plt.legend()
     plt.savefig('Vert.png', dpi = 300)
     
-
-    # print(Vextoth[BLH_indx])
-    
-    # if BLH<1000: #asuming that if the boundary layer is shallower then thr fine mode is realtively well mixed #TODO confirm
-    #     Vextfine[np.where(hgt<BLH)[0]] =0.0000002*Vextoth[np.where(hgt<BLH)[0]] 
-
-    # VextSea = np.ones(len(hgt)) *1e-10
-    # print(Vextfine, np.where(Vextfine <=0)[0]) 
-    # Vextfine[np.where(hgt<=BLH)[0]]= 1e-6
-
-    # Vextfine = Vextoth - VextSea
-    # Vextfine[np.where(hgt>=BLH)[0]] = Vextoth[np.where(hgt>=BLH)[0]]
-    # Vextfine[np.where(Vextfine <=0)[0]]= 1e-18 
-    # DMR1 = DictHsrl[2]
-    # print(DMR1)
-    # DMR1[0][np.where(np.isnan(DMR1[0]))] = 0
-
-    # hex_dust = {'Hexdm': 24456.650, 'Hexdc': -4.906e-06}
-    # sph_dust = {'Sphdm': 19421.576, 'Sphdc': 6.52e-06}
-    # hex_fine = {'Hexfm':10093.924,'Hexfc': 6.966e-06}
-    # sph_fine = {'Sphfm':10698.098,'Sphfc': 3.603e-06}
-    # hex_sea = {'HexSm': 8749.598,'HexSc': 1.807e-5} #TODO correct this value of HexSc
-    # sph_sea = {'SphSm': 8749.598,'SphSc':1.807e-5}
-
-    #Converting Vext to Conc caculated using the grasp formward model
-
-    # hex_dust = {'Hexdm': 24385.083, 'Hexdc': 2.594e-6}
-    # sph_dust = {'Sphdm': 19291.567, 'Sphdc': 9.810e-7}
-    # hex_fine = {'Hexfm':4837.431,'Hexfc': 4.766e-06}
-    # sph_fine = {'Sphfm':5168.1777,'Sphfc':-7.9823e-07}
-    # hex_sea = {'HexSm': 13521.506,'HexSc': -4.765e-7} #TODO correct this value of HexSc
-    # sph_sea = {'SphSm': 13897.093,'SphSc':-3.858e-7}
-
-
-    # if Kernel_type == "TAMU" :
-    #     Concfine = hex_fine['Hexfm'] * Vextfine + hex_fine['Hexfc']
-    #     Concfine[np.where(Concfine<0)[0]] = 1e-8
-    #     Concdust = hex_dust['Hexdm'] * VextDst + hex_dust['Hexdc']
-    #     Concdust[np.where(Concdust<0)[0]] = 1e-8
-    #     Concsea = hex_sea['HexSm'] * VextSea + hex_sea['HexSc']
-    #     Concsea[np.where(Concsea<0)[0]] = 1e-8
-    
-    # if Kernel_type == "sphro" :
-    #     Concfine = sph_fine['Sphfm'] * Vextfine + sph_fine['Sphfc']
-    #     Concfine[np.where(Concfine<0)[0]] = 1e-8
-    #     Concdust = sph_dust['Sphdm'] * VextDst + sph_dust['Sphdc']
-    #     Concdust[np.where(Concdust<0)[0]] = 1e-8
-    #     Concsea = sph_sea['SphSm'] * VextSea + sph_sea['SphSc']
-    #     Concsea[np.where(Concsea<0)[0]] = 1e-8
-
-    # DstProf =Concdust/ np.trapz(Concdust[::-1],hgt[::-1])
-    # FineProf = Concfine/np.trapz(Concfine[::-1],hgt[::-1])
-    # SeaProf = Concsea/ np.trapz(Concsea[::-1],hgt[::-1])
-
-    
-    # Vext1 = rslt['meas_VExt'][:,0]
-    # hgt =  rslt['RangeLidar'][:,0][:]
-    # DP1064= rslt['meas_DP'][:,2][:]
-
-    # #Boundary layer height
-    # BLH_indx = np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))[0]
-    # BLH = hgt[np.where(np.gradient(DP1064,hgt) == np.max(np.gradient(DP1064,hgt)))]
-    #  #altitude of the aircraft
-    # # print(rslt['OBS_hght'])
-    
-    # DMR1 = DictHsrl[2]
-    # # print(DMR1)
-    # # DMR1[0][np.where(np.isnan(DMR1[0]))] = 0
-    # if np.any(DMR1 > 1):
-    #     warnings.warn('DMR > 1, renormalizing', UserWarning)
-    #     DMR = DMR1/np.nanmax(DMR1)
-    # else: 
-    #     DMR= DMR1 
-
-    # # else:
-    # #     DMR = DMR1
-    #     #Renormalize.
-    # Vext1[np.where(Vext1<=0)] = 1e-6
-    # Vextoth = abs(1-0.99999*DMR)*Vext1
-    
-    # VextDst = Vext1 - Vextoth 
-    # # VextDst[np.where(VextDst<=0)] = 1e-6
-    # # DMR[DMR>1] = 1  # ratios must be 1
-    # # VextDst = 0.99999*DMR*Vext1
-
-    # aboveBL = Vextoth[:BLH_indx[0]]
-    # mean = np.nanmean(aboveBL[:50])
-    # belowBL = Vextoth[BLH_indx[0]:]
-
-    # Vextfine = np.concatenate((0.99999*aboveBL, np.ones(len(belowBL))*10**-8))
-    # VextSea = Vextoth -Vextfine
-
-    # # VBack = 0.00002*Vextoth
-    # # Voth = 0.999998*Vextoth
-    # # VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
-    # # Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
-
-    # ax[1].plot(Concdust,hgt, color = '#067084',label='Dust')
-    # ax[1].plot(Concsea,hgt,color ='#6e526b',label='Salt')
-    # ax[1].plot(Concfine,hgt,color ='y',label='fine')
-    # # ax[1].plot(Vext1,hgt,color='#8a9042',ls = '--',label='Total Ext')
-
-    # plt.plot(FineProf,hgt,color ='y',label='fine')
-    # plt.plot(SeaProf,hgt,color ='#6e526b',label='Salt')
-    # plt.plot(DstProf,hgt, color = '#067084',label='Dust')
 
     fig = plt.figure()
     plt.scatter(FineProfext,hgt,color ='y',label='fine')
@@ -686,7 +590,10 @@ def AeroClassAOD(DictHsrl):
 
 def AeroProfNorm_sc2(DictHsrl):
 
-    """This sceme is more simple as just based on DMR from HSRL data products"""
+    """
+    
+    Calculates the vertical distribution of different aerosol types. 
+    This sceme is more simple as it just based on DMR from HSRL data products"""
 
     rslt = DictHsrl[0]
     Idx1064 = np.where(rslt['lambda'] == 1064/1000)[0][0]
@@ -694,9 +601,8 @@ def AeroProfNorm_sc2(DictHsrl):
     # print(Idx1064,Idx532 )
 
 
-    max_alt = rslt['OBS_hght']
     # Vext1 = (rslt['meas_VExt'][:,0]+rslt['meas_VExt'][:,1])/2
-    Vext1 = rslt['meas_VExt'][:,0]
+    Vext1 = rslt['meas_VExt'][:,1]   #Extinvtion at 355
     Vext1[np.where(Vext1<=0)] = 1e-10
 
     
@@ -711,11 +617,11 @@ def AeroProfNorm_sc2(DictHsrl):
 
     DMR1 = DictHsrl[2]
     indxMaxDMR = (np.max(np.where(DMR1==0)[0])) 
-    DMR1[DMR1==0] = 0.05
-    DMR1[hgt[np.where(hgt>4000)][0]] = 1
-    
-    # DMR1[DMR1==0] = np.linspace(indxMaxDMR,0,lnDMR)
+    DMR1[DMR1==0] = 0.0001
 
+
+
+    # DMR1[hgt[np.where(hgt>4000)][0]] = 1
 
    
     #Some values of DMR are >1,  in such cases we recaculate the values. Otherwise, use the values reported in the HSRL products
@@ -742,7 +648,11 @@ def AeroProfNorm_sc2(DictHsrl):
     
     #Filtering
     FMF1[np.where(FMF1<0)[0] ]= 0.00001
-    FMF1[np.where(FMF1>=1)[0]]= 0.99
+    FMF1[np.where(FMF1>=1)[0]]= 0.99999
+
+    FMF1[BLH_indx[0]:] = 0.00001  # No fine mode below the boundary layer height 
+
+
     # print(FMF)
     
     #Spearating the contribution from fine mode 
@@ -1032,6 +942,8 @@ def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,M
             
              # binPathGRASP ='/home/shared/GRASP_GSFC/build_RSP_v112/bin/grasp_app' 
             binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
+
+            # binPathGRASP ='/home/gregmi/GRASPV112/build_hexahedral/bin/grasp_app'
            
             savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
         
@@ -1042,12 +954,15 @@ def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,M
                 fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_3modes_HexShape_ORACLE.yml'
                 fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_3modes_HexShape_ORACLE_case2.yml'
             binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app' #GRASP Executable
+
+            # binPathGRASP ='/home/gregmi/GRASPV112/build_hexahedral/bin/grasp_app'
             # binPathGRASP ='/home/shared/GRASP_GSFC/build_HexV112_4Modes/bin/grasp_app'
             savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
 
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
         rslt = Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsFn)
         print(rslt['OBS_hght'])
+        # rslt['OBS_hght'] = 38000
         maxCPU = 10 #maximum CPU allocated to run GRASP on server
         gRuns = []
         yamlObj = graspYAML(baseYAMLpath=fwdModelYAMLpath)
@@ -1064,6 +979,15 @@ def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,M
 
 #Running the GRASP for spherical or hexahedral shape model for HSRL data
 def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= None,ConsType = None,releaseYAML =True, ModeNo=None,VertProfConstrain =None,Simplestcase =None,rslts_Sph=None,RSP_rslt = None, LagrangianOnly = None, RSPUpdate= None, AprioriLagrange =None):
+        """Run GRASP for HSRL data
+        
+        
+        
+        
+        
+        """
+        
+        
         #Path to the kernel files
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
         if Kernel_type == "sphro":  #If spheroid model
@@ -1091,6 +1015,7 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
             
             # binPathGRASP = path toGRASP Executable for spheriod model
             binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
+            # binPathGRASP ='/home/gregmi/GRASPV112/build/bin/grasp_app'
             # binPathGRASP ='/home/shared/GRASP_GSFC/build_t/bin/grasp_app'
             # binPathGRASP ='/home/shared/GRASP_GSFC/build-tmu/bin/grasp_app' #GRASP Executable
             # binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
@@ -1123,6 +1048,8 @@ def HSLR_run(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo, nwl,updateYaml= 
             info = VariableNoise(fwdModelYAMLpath,nwl)
             # binPathGRASP ='/home/shared/GRASP_GSFC/build-tmu/bin/grasp_app' #GRASP Executable
             binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
+
+            # binPathGRASP ='/home/gregmi/GRASPV112/build_hexahedral/bin/grasp_app'
             # binPathGRASP ='/home/shared/GRASP_GSFC/build_HexV112_4Modes/bin/grasp_app'
             #Path to save output plot
             savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
@@ -1355,6 +1282,8 @@ def LidarAndMAP(Kernel_type,HSRLfile_path,HSRLfile_name,HSRLPixNo,file_path,file
         rslt[keys] = rslt_RSP[keys]  #Adding the information about lat, lon, datetime and so on from RSP
     
     rslt['OBS_hght'] = rslt_RSP['OBS_hght'] #adding the aircraft altitude 
+
+    # rslt['OBS_hght'] =  12000   #Delete this immediately!!!!!!
     rslt['lambda'] = rslt['lambda'][sort]
 
     #TODO improve this code to work when only mol deopl or gasabs are provided and not both
@@ -4213,4 +4142,525 @@ def RunFwdModel_LIDARandMAP():
     with open(f'/home/gregmi/ORACLES/Case2O/Vext2conc/Vext2conc_all_{Shape}.pickle', 'wb') as f:
         pickle.dump(dict_of_dicts, f)
     gr.invRslt[0]
+
+
+
+
+
+# Codes for foward model run: 
+
+
+
+
+def update_HSRLyaml(UpdatedymlPath, YamlFileName: str, noMod: int, Kernel_type: str,  
+                    GRASPModel = None, AeroProf =None, ConsType= None, YamlChar=None, maxr=None, minr=None, 
+                    NewVarDict: dict = None, DataIdxtoUpdate=None): 
+    """
+    Update the YAML file for HSRL with initial conditions from polarimeter retrievals.
+    
+    Arguments:
+    ymlPath: str              -- Path to which new updated setting file will be saved
+    UpdatedymlPath: str            -- path of the new settings file
+    YamlFileName: str         -- Path to the YAML file to be updated.
+
+    noMod: int                -- Number of aerosol modes to iterate over.
+    Kernel_type: str          -- Type of kernel ('spheroid' or 'hex').
+    ConsType: str             -- Constraint type ('strict' to fix retrieval).
+    YamlChar: list or None    -- Characteristics in the YAML file (optional).
+    maxr: float               -- Factor for maximum values.
+    minr: float               -- Factor for minimum values.
+    NewVarDict: dict          -- New variables to update the YAML with.
+    RSP_rslt: dict            -- RSP results containing aerosol properties.
+    LagrangianOnly: bool      -- Whether to only update Lagrangian multipliers.
+    RSPUpdate: bool           -- Whether to update initial conditions from RSP retrievals.
+    DataIdxtoUpdate: list     -- Index of data to update (optional).
+    AprioriLagrange: float    -- Lagrange multiplier for a priori estimates.
+    a: int                    -- Offset for characteristic indices (default: 0).
+    ymlPath: str              -- Path to save the updated YAML file (default: '').
+    UpKerFile: str            -- Filename for the updated YAML file (default: '').
+    GRASPModel: str           -- 'Fwd' for forward model or 'Bck'for inverse
+    AeroProf:list             -- (Apriori) Normalized vertical profile for each aerosol mode (For LIDARS), size = (Vertical grid X no of aerosol modes)
+
+    Returns:
+    None -- Writes the updated YAML data to a new file.
+    """
+    
+
+
+
+
+    if maxr is None: 
+        maxr = 1
+
+    if minr is None: 
+        minr = 1
+
+    # Load the YAML file
+    with open(YamlFileName, 'r') as f:  
+        data = yaml.safe_load(f)
+
+#.......................................
+#Set the shape model
+#.......................................
+    
+    if Kernel_type =='spheroid':
+        data['retrieval']['forward_model']['phase_matrix']['kernels_folder'] = 'KERNELS_BASE'
+    if Kernel_type =='hex':
+        data['retrieval']['forward_model']['phase_matrix']['kernels_folder'] = 'Ver_sph'
+
+#.......................................
+#Set GRASP to forward or inverse mode
+#.......................................
+
+
+    if GRASPModel != None:
+        if 'fwd' in GRASPModel.lower(): #If set to forward mode
+            data['retrieval']['mode'] = 'forward'
+            data['output']['segment']['stream'] = 'bench_FWD_IQUandLIDAR_rslts.txt'
+            data['input']['file'] = 'bench.sdat'
+         
+        if 'bck' in GRASPModel.lower(): #If set to inverse mode
+            data['retrieval']['mode'] = 'inversion'
+            data['output']['segment']['stream'] = 'bench_inversionRslts.txt'
+            data['input']['file'] = 'inversionBACK.sdat'
+
+#.......................................
+#Set the characteristics
+#.......................................
+
+
+    if YamlChar is None:
+        # Find the number of characteristics in the settings (Yaml) file
+        NoChar = []  # No of characteristics in the YAML file
+        for key, value in data['retrieval']['constraints'].items():
+            # Match the strings with "characteristics"
+            match = re.match(r'characteristic\[\d+\]', key)
+            if match:
+                # Extract the number 
+                numbers = re.findall(r'\d+', match.group())
+                NoChar.append(int(numbers[0]))
+
+        # All the characteristics in the settings file
+        YamlChar = [data['retrieval']['constraints'][f'characteristic[{i}]']['type'] for i in NoChar]
+
+
+
+    assert NewVarDict is not None, "NewVarDict must not be None"
+
+    for i, char_type in enumerate(YamlChar):
+        for noMd in range(noMod):
+           
+            initCond = data['retrieval']['constraints'][f'characteristic[{i + 1}]'][f'mode[{noMd + 1}]']['initial_guess']
+
+            if char_type == 'vertical_profile_normalized':
+                try:
+                    if AeroProf is not None: 
+                        initCond['value'] =  AeroProf[noMd].tolist()
+                        print(f"{char_type} Updated")
+                except Exception as e:
+                    print(char_type)
+                    print(f"An error occurred: {e} for {char_type} ")
+                    continue
+            if char_type == 'aerosol_concentration':
+                try: 
+                    if len(NewVarDict['vol']) != 0: 
+                        initCond['value'] = (float(NewVarDict['vol'][noMd]))
+                        initCond['max'] = (float(NewVarDict['vol'][noMd] * maxr))
+                        initCond['min'] = (float(NewVarDict['vol'][noMd] * minr))
+
+                        print(f"{char_type} Updated")
+                except Exception as e:
+                    print(f"An error occurred for {char_type}: {e}")
+                    continue
+
+
+               
+            
+            if char_type == 'size_distribution_lognormal':
+                try:
+                    if len(NewVarDict['rv']) != 0 and len(NewVarDict['sigma']) != 0:
+                        # Check if noMd is within range
+                        if noMd < len(NewVarDict['rv']) and noMd < len(NewVarDict['sigma']):
+                            initCond['value'] = (float(NewVarDict['rv'][noMd]), float(NewVarDict['sigma'][noMd]))
+                            initCond['max'] = (float(NewVarDict['rv'][noMd] * maxr), float(NewVarDict['sigma'][noMd] * maxr))
+                            initCond['min'] = (float(NewVarDict['rv'][noMd] * minr), float(NewVarDict['sigma'][noMd] * minr))
+
+                            print(f"{char_type} Updated")
+                        else:
+                            print("Error: noMd index out of range for rv or sigma.")
+                    else:
+                        print("Warning: rv or sigma lists are empty.")
+                except Exception as e:
+                    print(f"An error occurred for {char_type}: {e}")
+                    continue
+
+                if ConsType == 'strict':
+                    data['retrieval']['constraints'][f'characteristic[{i + a}]']['retrieved'] = 'false'
+            
+            elif char_type == 'real_part_of_refractive_index_spectral_dependent':
+                
+                try:
+                    if len(NewVarDict['n'])!=0:
+
+                        if DataIdxtoUpdate is None:
+                            DataIdxtoUpdate = [i for i in range(len(NewVarDict['lambda']))]
+
+                        initCond['value'] = [float(NewVarDict['n'][noMd][i]) for i in DataIdxtoUpdate]
+                        initCond['max'] = [float(NewVarDict['n'][noMd][i] * maxr) for i in DataIdxtoUpdate]
+                        initCond['min'] = [float(NewVarDict['n'][noMd][i] * minr) for i in DataIdxtoUpdate]
+                        initCond['index_of_wavelength_involved'] = [i for i in range(len(NewVarDict['lambda']))]
+
+                        print(f"{char_type} Updated")
+
+                    if ConsType == 'strict':
+                        data['retrieval']['constraints'][f'characteristic[{i + a}]']['retrieved'] = 'false'
+                except Exception as e:
+                    print(f"An error occurred for {char_type}: {e}")
+                    continue
+            elif char_type == 'imaginary_part_of_refractive_index_spectral_dependent':
+                try:
+                    if len(NewVarDict['k'])!=0:
+
+                        if DataIdxtoUpdate is None:
+                            DataIdxtoUpdate = [i for i in range(len(NewVarDict['lambda']))]
+
+                        initCond['value'] = [float(NewVarDict['k'][noMd][i]) for i in DataIdxtoUpdate]
+                        initCond['max'] = [float(NewVarDict['k'][noMd][i] * maxr) for i in DataIdxtoUpdate]
+                        initCond['min'] = [float(NewVarDict['k'][noMd][i] * minr) for i in DataIdxtoUpdate]
+                        initCond['index_of_wavelength_involved'] = [i for i in range(len(NewVarDict['lambda']))]
+
+                        print(f"{char_type} Updated")
+
+                    if ConsType == 'strict':
+                        data['retrieval']['constraints'][f'characteristic[{i + a}]']['retrieved'] = 'false'
+                except Exception as e:
+                    print(f"An error occurred for {char_type}: {e}")
+                    continue
+
+            elif char_type == 'sphere_fraction':
+
+                try:
+                    if len(NewVarDict['sph'])!=0:
+
+                        initCond['value'] = float(NewVarDict['sph'][noMd] / 100)
+                        initCond['max'] = float(NewVarDict['sph'][noMd] * maxr / 100)
+                        initCond['min'] = float(NewVarDict['sph'][noMd] * minr / 100)
+                        print(f"{char_type} Updated")
+
+                        if ConsType == 'strict':
+                            data['retrieval']['constraints'][f'characteristic[{i + a}]']['retrieved'] = 'false'
+                except Exception as e:
+                    print(f"An error occurred for {char_type}: {e}")
+                    continue
+
+            elif char_type =='vertical_profile_parameter_standard_deviation':
+
+                try:
+                    if len(NewVarDict['heightStd'])!=0:
+                        initCond['value'] = float(NewVarDict['heightStd'][noMd])
+                        initCond['max'] = float(NewVarDict['heightStd'][noMd] * maxr)
+                        initCond['min'] = float(NewVarDict['heightStd'][noMd] * minr)
+
+                        print(f"{char_type} Updated")
+                        
+                except Exception as e:
+                    print(f"An error occurred for {char_type}: {e}")
+                    continue
+            
+            elif char_type =='vertical_profile_parameter_height':
+
+                try:
+                    if len(NewVarDict['height'])!=0:
+                        initCond['value'] = float(NewVarDict['height'][noMd])
+                        initCond['max'] = float(NewVarDict['height'][noMd] * maxr)
+                        initCond['min'] = float(NewVarDict['height'][noMd] * minr)
+
+                        print(f"{char_type} Updated")
+                        
+                except Exception as e:
+                    print(f"An error occurred for {char_type}: {e}")
+                    continue
+
+            elif char_type == 'surface_water_cox_munk_iso':
+                try:
+                    if len(NewVarDict['height'])!=0:
+                        initCond['value'] = float(NewVarDict['height'][noMd])
+                        initCond['max'] = float(NewVarDict['height'][noMd] * maxr)
+                        initCond['min'] = float(NewVarDict['height'][noMd] * minr)
+                except Exception as e:
+                    print(f"An error occurred for {char_type}: {e}")
+                    continue
+
+
+
+
+
+        #.......................................
+            # Save the updated YAML file
+        #.......................................
+    with open(UpdatedymlPath, 'w') as f:
+        yaml.safe_dump(data, f)
+
+        print(f"YAML file updated and saved as {UpdatedymlPath}")
+
+
+
+        #..............HOW TO RUN..........................................
+
+        # fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_Hex_Case2.yml'
+        # HSRL_data = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo)
+
+        # # Kernel_type = 'hex'
+        # # rsltDict = HSRL_data[0]
+        # UpdateDict = HSRL_TamuT[0][0]
+        # UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
+        # ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+
+        # AeroProf= AeroProfNorm_sc2(HSRL_data)
+
+        #Up = update_HSRLyaml(ymlPath = ymlPath, UpKerFile=UpKerFile , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = Kernel_type, AeroProf=AeroProf, NewVarDict = UpdateDict, GRASPModel = 'fwd')
+
+
+
+
+        #From the combined retrieval" 
+
+        # fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_3modes_V.1.2_Simulate.yml'
+        # UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
+        # ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+
+        # UpdateDict = LidarPolTAMU[0][0]
+        # UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
+        # ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+        # Kernel_type = 'hex'
+
+        # Up = update_HSRLyaml(ymlPath = ymlPath, UpKerFile=UpKerFile , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = Kernel_type, NewVarDict = UpdateDict, GRASPModel = 'fwd')
+
+        #.....................................................................
+
+        
+
+    return UpdatedymlPath
+
+
+
+
+
+def Gaussian_fits(heights, aerosol_concentration):
+
+
+    "Plot the Gaussian vertical profile from heignt and std output from Polarimeter"
+    
+    # Define the Gaussian function
+    def gaussian(h, A, h0, sigma):
+        return A * np.exp(-((h - h0) ** 2) / (2 * sigma ** 2))
+
+    # Initial guesses for A, h0, sigma
+    initial_guess = [1, np.mean(heights), np.std(heights)]
+
+    # Fit the Gaussian curve to the data
+    popt, pcov = curve_fit(gaussian, heights, aerosol_concentration, p0=initial_guess)
+
+    # Extract the fitting parameters
+    A_fit, h0_fit, sigma_fit = popt
+    print(f"Fitted mean height (h0): {h0_fit}")
+    print(f"Fitted standard deviation (sigma): {sigma_fit}")
+
+    # Generate data points from the fitted Gaussian for plotting
+    height_fit = np.linspace(min(heights), max(heights), 100)
+    aerosol_fit = gaussian(height_fit, A_fit, h0_fit, sigma_fit)
+
+    # Plot the original data and the Gaussian fit
+    plt.figure(figsize=(8, 6))
+    plt.plot(aerosol_concentration, heights, 'o', label='Original Data')
+    plt.plot(aerosol_fit, height_fit, '-', label='Gaussian Fit')
+    plt.xlabel('Aerosol Concentration')
+    plt.ylabel('Height (km)')
+    plt.title('Gaussian Fit to Aerosol Layer Height Profile')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    return
+
+
+
+def CombineHSRLandRSPrslt(BckHSRL,BckRSP,CharName=None):
+
+    '''Combines the retrievals from HSRL and RSP'''
+
+    if CharName == None:
+        CharName = ['n','k','aodMode', 'ssaMode']
+        WlIndepChar = ['rv', 'sigma', 'sph', 'vol']
+
+    CombRetrievalDict ={}
+   
+    HSRLwl = BckHSRL['lambda']  #Wl for HSRL
+    RSPwl = BckRSP['lambda']   #Wl for RSP
+
+    #Combining the wavelengths
+    Combinedwl = np.concatenate((HSRLwl,RSPwl))
+
+    #Sorting the wavelength in ascending order.
+    Combinedsortwl = Combinedwl[np.argsort(Combinedwl) ]
+
+    #Index of each instrument in the 
+    HSRLIdx = np.where(np.isin( Combinedsortwl, HSRLwl))
+    RSPIdx = np.where(np.isin( Combinedsortwl, RSPwl))
+
+    CombRetrievalDict['lambda'] = Combinedsortwl
+
+    for Char in CharName:
+        CombRetrievalDict[f'{Char}'] = np.zeros(( (len(BckHSRL['rv'])),len(Combinedsortwl),))
+        
+        for mode in range(len(BckHSRL['rv'])):  #mode = No of aerosol modes. 
+            CombRetrievalDict[f'{Char}'] [mode][HSRLIdx] = BckHSRL[f'{Char}'] [mode]
+            CombRetrievalDict[f'{Char}'] [mode][RSPIdx] = BckRSP[f'{Char}'] [mode]
+        
+    for Wlindep in  WlIndepChar: 
+        CombRetrievalDict[f'HSRL_{Wlindep}'] = BckHSRL[f'{Wlindep}']
+        CombRetrievalDict[f'RSP_{Wlindep}'] = BckRSP[f'{Wlindep}']
+
+
+    return CombRetrievalDict
+
+
+
+
+    
+def FactorforConstAOD(fineRRI,FixAOD,DictRslt,mode):
+
+    #Mode: The aerosol mode to change value: For mode 1 - enter 1
+
+
+    #Calculate the volume conc that keeps the AOD constant
+
+    cpDictRslt = DictRslt
+    constVolFactor = np.zeros(len(fineRRI))
+    #New volume concetration to maintain a constant AOD
+    NewVolConc = np.zeros(len(fineRRI))
+
+    for i in range(len(fineRRI)):
+        volFac= FixAOD/cpDictRslt[i]['aodMode'][mode-1][0]  #taking the first wavelength, mode-1 because 0 index
+        constVolFactor[i] = volFac
+        NewVolConc[i] = cpDictRslt[i]['vol'][0]*volFac
+
+
+
+    #...................How to run..................................
+    # cpDictRslt = DictRslt
+    # constVolFactor = np.zeros(len(fineRRI))
+    # FixAOD = 0.19895
+    # NewVol = FactorforConstAOD(fineRRI,FixAOD,DictRslt)[1]
+    #...............................................................
+    
+    return NewVolConc, constVolFactor
+
+
+
+def CXmunk(V):
+
+    '''V is the wind speed in m/s'''
+    CxMunk = np.sqrt(0.003+0.00512*V)
+    return CxMunk 
+
+
+
+
+def Combine_MAPandLidar_Rsltdict(rslt_RSP,rslt_HSRL1, HSRLPixNo):
+
+    """This funtion combines the rslt dict from Lidar and Polarimeter togetehr into a single rslt dictionary
+        
+        The rslt dict for RSP and HSRL are colocated.
+        rslt_RSP = result dict for polarimeter
+        rslt_HSRL = result dict fot Lidar
+        TelNo  =  (Specific to Research Scanning Polarimeter) RSP has two telescopes, we will average the I and DoLP
+    
+    """
+    rslt_HSRL= rslt_HSRL1[0]
+    rslt= {}  # Teh order of the data is  First lidar(number of wl ) and then Polarimter data 
+    rslt['lambda'] = np.concatenate((rslt_HSRL['lambda'],rslt_RSP['lambda']))
+
+    #Sort the index of the wavelength if arranged in ascending order, this is required by GRASP
+    sort = np.argsort(rslt['lambda']) 
+    sort_Lidar, sort_MAP  = np.array([0,3,7]),np.array([1,2,4,5,6])  #TODO Make this more general
+    
+    
+# The shape of the variables in RSPkeys and HSRLkeys should be equal to no of wavelength
+#  Setting np.nan in place of the measurements for wavelengths for which there is no data
+    RSPkeys = ['meas_I', 'meas_P','sza', 'vis', 'sca_ang', 'fis']
+    HSRLkeys = ['RangeLidar','meas_VExt','meas_VBS','meas_DP']
+    GenKeys= ['datetime','longitude', 'latitude', 'land_prct'] # Shape of these variables is not N wavelength
+    
+
+
+    #MAP measurement variables 
+    RSP_var = np.ones((rslt_RSP['meas_I'].shape[0],rslt['lambda'].shape[0])) * np.nan
+    for keys in RSPkeys:
+        #adding values to sort_MAP index positions
+        for a in range(rslt_RSP[keys][:,0].shape[0]):
+            RSP_var[a][sort_MAP] = rslt_RSP[keys][a]
+        rslt[keys] = RSP_var
+        RSP_var = np.ones((rslt_RSP['meas_I'].shape[0],rslt['lambda'].shape[0])) * np.nan
+
+    #Lidar Measurements
+    HSRL_var = np.ones((rslt_HSRL['meas_VExt'].shape[0],rslt['lambda'].shape[0]))* np.nan
+    for keys1 in HSRLkeys:  
+        for a in range(rslt_HSRL[keys1][:,0].shape[0]):
+            
+            HSRL_var[a][sort_Lidar] = rslt_HSRL[keys1][a]
+
+            # 'sza', 'vis','fis'
+        rslt[keys1] = HSRL_var
+        # Refresh the array by Creating numpy nan array with shape of height x wl, Basically deleting all values
+        HSRL_var = np.ones((rslt_HSRL['meas_VExt'].shape[0],rslt['lambda'].shape[0]))* np.nan
+
+    
+    for keys in GenKeys:
+        rslt[keys] = rslt_RSP[keys]  #Adding the information about lat, lon, datetime and so on from RSP
+    
+    rslt['OBS_hght'] = rslt_RSP['OBS_hght'] #adding the aircraft altitude 
+    rslt['lambda'] = rslt['lambda'][sort]
+
+    #TODO improve this code to work when only mol deopl or gasabs are provided and not both
+    if 'gaspar' in  rslt_HSRL:
+        gasparHSRL = np.zeros(len(rslt['lambda']))
+        gasparHSRL[sort_Lidar] = rslt_HSRL['gaspar']
+        
+        rslt['gaspar'] = gasparHSRL
+        # print(rslt['gaspar'])
+
+    if 'gaspar' in  rslt_RSP:
+        gasparRSP = np.zeros(len(rslt['lambda']))
+        gasparRSP[sort_MAP] = rslt_RSP['gaspar']
+
+        rslt['gaspar'] = gasparRSP
+        # print(rslt['gaspar'])
+
+    if 'gaspar' in  rslt_RSP and rslt_HSRL :
+        gasparB = np.zeros(len(rslt['lambda']))
+        gasparB[sort_MAP] = rslt_RSP['gaspar']
+        gasparB[sort_Lidar] = rslt_HSRL['gaspar']
+        rslt['gaspar'] = gasparB
+        # print(rslt['gaspar'])
+
+
+    AeroProf = AeroProfNorm_sc2(rslt_HSRL1)
+    
+    # AeroProf =AeroProfNorm_FMF(rslt_HSRL_1)
+    FineProfext,DstProfext,SeaProfext = AeroProf[0],AeroProf[1],AeroProf[2]
+
+
+
+    rslt['VertProf_Mode1'] = AeroProf[0]  #Fine mode 
+    rslt['VertProf_Mode2'] = AeroProf[1]
+    rslt['VertProf_Mode3'] = AeroProf[2]
+
+
+    return rslt
+
+
+
+
+
 
