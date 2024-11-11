@@ -16,13 +16,52 @@ import datetime as dt
 import yaml
 
 
-file_path = '/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/CubeSat/'
-filename = 'HARP.20200730T112721.L1C.4.4KM.0719.V01h.nc'
-
 # Project: Aerosol Retrievals using Multi-Angular Polarimeters in the Twilight Zone 
 # Author: Nirandi Jayasinghe
 # Reading HARP CubeSat Data into rslt dict to create SDATA
-# Last Edited: Sep 3th 2024
+# Last Edited: Nov 11th 2024
+
+file_path = '/data/home/njayasinghe/HARP_CubeSat/Data/'
+filename = 'HARP.20200730T112721.L1C.4.4KM.0719.V01h.nc'
+
+"""
+data: I measurement for a given band from HARP Data.  np.where(Data.groups[band]['I'][:,:,:].mask == False,Data.groups[band]['I'][:,:,:].data,np.nan))
+land = Data.groups["Coordinates"]["LandMask"]
+instrument: what instrument data is used. This flag is None at the moment since it is only used for CubeSat data.
+"""
+
+def Cmask(data,land,instrument=None):
+    # Get dimensions of the data
+    v, r, c = data.shape
+    # Initialize the mask array with NaN values
+    cMask = np.full((v, r, c),np.nan)
+    p = 75 # percentage of the # of px
+
+    i = 0 
+
+    for i in range(v): #view angle
+
+        oceanData = np.where(land[:,:]== 0,data[i,:,:], np.nan)
+
+        j = 0 
+
+        for j in range(c): #along track
+            # Calculating Threshold values
+            tmp = np.array(oceanData[:,j])
+            tmp2 = tmp[tmp <= np.nanpercentile(oceanData[:,j],p)]
+
+            try:
+                means = np.mean(tmp2)
+                std = np.std(tmp2)
+                cMask[i,:,j] = np.where(oceanData[:,j] >= (means+4*std),np.nan,data[i,:,j])
+            except ValueError:
+                print(f"mean and std cannot be calculated for view angle {i} and track {j}")
+
+
+    return cMask
+
+
+
 """
 ang: (1,nwl) shaped variable which give angle ranges for each wavelength if necessary
 CMask: give path to CMASK array for corresponding HARP CubeSat data file. 
@@ -48,20 +87,20 @@ def Read_HARP_CubeSat(file_path,filename,XPX, YPX, CMask=None):
     for band in bands:
         if (band != 'Coordinates'):
 
-            if CMask != None:
+            if CMask == True:
 
-                VZA.append(np.where((Data.groups[band]['View_Zenith'][:,XPX,YPX].mask == False) & (CMask[band][:,XPX,YPX]==0),Data.groups[band]['View_Zenith'][:,XPX,YPX].data,np.nan))
-                SZA.append(np.where((Data.groups[band]['Solar_Zenith'][:,XPX,YPX].mask == False) & (CMask[band][:,XPX,YPX]==0),Data.groups[band]['Solar_Zenith'][:,XPX,YPX].data,np.nan))
-                SAA.append(np.where((Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].mask == False) & (CMask[band][:,XPX,YPX]==0),Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].data,np.nan))
-                VAA.append(np.where((Data.groups[band]['View_Azimuth'][:,XPX,YPX].mask == False) & (CMask[band][:,XPX,YPX]==0),Data.groups[band]['View_Azimuth'][:,XPX,YPX].data,np.nan))
-                Rel_Azi.append(abs(np.where((Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].mask == False) & (CMask[band][:,XPX,YPX]==0),Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].data,np.nan) 
-                        -np.where((Data.groups[band]['View_Azimuth'][:,XPX,YPX].mask == False) & (CMask[band][:,XPX,YPX]==0),Data.groups[band]['View_Azimuth'][:,XPX,YPX].data,np.nan)))
+                VZA.append(np.where((Data.groups[band]['View_Zenith'][:,XPX,YPX].mask == False) & (CMask[:,XPX,YPX]==0),Data.groups[band]['View_Zenith'][:,XPX,YPX].data,np.nan))
+                SZA.append(np.where((Data.groups[band]['Solar_Zenith'][:,XPX,YPX].mask == False) & (CMask[:,XPX,YPX]==0),Data.groups[band]['Solar_Zenith'][:,XPX,YPX].data,np.nan))
+                SAA.append(np.where((Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].mask == False) & (CMask[:,XPX,YPX]==0),Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].data,np.nan))
+                VAA.append(np.where((Data.groups[band]['View_Azimuth'][:,XPX,YPX].mask == False) & (CMask[:,XPX,YPX]==0),Data.groups[band]['View_Azimuth'][:,XPX,YPX].data,np.nan))
+                Rel_Azi.append(abs(np.where((Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].mask == False) & (CMask[:,XPX,YPX]==0),Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].data,np.nan) 
+                        -np.where((Data.groups[band]['View_Azimuth'][:,XPX,YPX].mask == False) & (CMask[:,XPX,YPX]==0),Data.groups[band]['View_Azimuth'][:,XPX,YPX].data,np.nan)))
                 Scat_Ang.append(np.rad2deg(np.arccos(np.sin(np.radians(VZA[-1]))*np.sin(np.radians(SZA[-1]))*np.cos(np.radians(Rel_Azi[-1]-np.pi))-np.cos(np.radians(VZA[-1]))*np.cos(np.radians(SZA[-1])))))
 
-                I.append(np.where((Data.groups[band]['I'][:,XPX,YPX].mask == False) & (CMask[band][:,XPX,YPX]==0),Data.groups[band]['I'][:,XPX,YPX].data,np.nan))
-                Q.append(np.where((Data.groups[band]['Q'][:,XPX,YPX].mask == False) & (CMask[band][:,XPX,YPX]==0),Data.groups[band]['Q'][:,XPX,YPX].data,np.nan))
-                U.append(np.where((Data.groups[band]['U'][:,XPX,YPX].mask == False) & (CMask[band][:,XPX,YPX]==0),Data.groups[band]['U'][:,XPX,YPX].data,np.nan))
-                DOLP.append(np.where((Data.groups[band]['DOLP'][:,XPX,YPX].mask == False) & (CMask[band][:,XPX,YPX]==0),Data.groups[band]['DOLP'][:,XPX,YPX].data,np.nan))
+                I.append(np.where((Data.groups[band]['I'][:,XPX,YPX].mask == False) & (CMask[:,XPX,YPX]==0),Data.groups[band]['I'][:,XPX,YPX].data,np.nan))
+                Q.append(np.where((Data.groups[band]['Q'][:,XPX,YPX].mask == False) & (CMask[:,XPX,YPX]==0),Data.groups[band]['Q'][:,XPX,YPX].data,np.nan))
+                U.append(np.where((Data.groups[band]['U'][:,XPX,YPX].mask == False) & (CMask[:,XPX,YPX]==0),Data.groups[band]['U'][:,XPX,YPX].data,np.nan))
+                DOLP.append(np.where((Data.groups[band]['DOLP'][:,XPX,YPX].mask == False) & (CMask[:,XPX,YPX]==0),Data.groups[band]['DOLP'][:,XPX,YPX].data,np.nan))
 
             else: 
 

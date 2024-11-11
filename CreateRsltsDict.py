@@ -17,6 +17,7 @@ from numpy import nanmean
 import yaml
 import pandas as pd
 from netCDF4 import Dataset
+from HARP_CubeSat import Cmask
 
 #The function Checks for Fill values or negative values and replaces them with nan. To check for negative values, set negative_check = True 
 def checkFillVals(param , negative_check = None):
@@ -392,23 +393,30 @@ def Read_HARP_CubeSat(file_path,filename,XPX, YPX, CMask=None):
                 meas_U[:len(U[i]),i] = U[i]
                 meas_DOLP[:len(DOLP[i]),i] = DOLP[i]
 
-            else:
+            if CMask == True :
 
-                """CMask = CMask[band][:,XPX,YPX]
+                """CMask = CMask[:,XPX,YPX]
                    CMask == 1 : Cloudy
                    CMask == 0 : Clear
+
+                   cMask data = I[i][:] or I[-1][:]
                 """
 
-                vza[:len(VZA[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,VZA[i][:])
-                sza[:len(SZA[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,SZA[i][:])
-                rel_az[:len(Rel_Azi[i]),i] = abs(np.where(CMask[band][:,XPX,YPX]==1,np.nan,Rel_Azi[i][:]))
-                scat_ang[:len(VZA[i]),i] = np.rad2deg(np.arccos(np.sin(np.radians(vza[:len(VZA[i]),i]))*np.sin(np.radians(sza[:len(SZA[i]),i]))*np.cos(np.radians(rel_az[:len(Rel_Azi[i]),i])-np.pi) - np.cos(np.radians(vza[:len(VZA[i]),i]))*np.cos(np.radians(sza[:len(SZA[i]),i]))))
-                scat_ang[:len(VZA[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,scat_ang[i][:])
+                land = Data.groups["Coordinates"]["LandMask"]
 
-                meas_I[:len(I[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,I[i][:])
-                meas_Q[:len(Q[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,Q[i][:])
-                meas_U[:len(U[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,U[i][:])
-                meas_DOLP[:len(DOLP[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,DOLP[i][:])
+                CMask = Cmask(np.where(Data.groups[band]['I'][:,:,:].mask == False,Data.groups[band]['I'][:,:,:].data,np.nan),land,instrument=None)
+                
+
+                vza[:len(VZA[i]),i] = np.where(CMask[:,XPX,YPX]==1,np.nan,VZA[i][:])
+                sza[:len(SZA[i]),i] = np.where(CMask[:,XPX,YPX]==1,np.nan,SZA[i][:])
+                rel_az[:len(Rel_Azi[i]),i] = abs(np.where(CMask[:,XPX,YPX]==1,np.nan,Rel_Azi[i][:]))
+                scat_ang[:len(VZA[i]),i] = np.rad2deg(np.arccos(np.sin(np.radians(vza[:len(VZA[i]),i]))*np.sin(np.radians(sza[:len(SZA[i]),i]))*np.cos(np.radians(rel_az[:len(Rel_Azi[i]),i])-np.pi) - np.cos(np.radians(vza[:len(VZA[i]),i]))*np.cos(np.radians(sza[:len(SZA[i]),i]))))
+                scat_ang[:len(VZA[i]),i] = np.where(CMask[:,XPX,YPX]==1,np.nan,scat_ang[i][:])
+
+                meas_I[:len(I[i]),i] = np.where(CMask[:,XPX,YPX]==1,np.nan,I[i][:])
+                meas_Q[:len(Q[i]),i] = np.where(CMask[:,XPX,YPX]==1,np.nan,Q[i][:])
+                meas_U[:len(U[i]),i] = np.where(CMask[:,XPX,YPX]==1,np.nan,U[i][:])
+                meas_DOLP[:len(DOLP[i]),i] = np.where(CMask[:,XPX,YPX]==1,np.nan,DOLP[i][:])
 
             i = i+1
     
@@ -441,19 +449,6 @@ def Read_HARP_CubeSat(file_path,filename,XPX, YPX, CMask=None):
 
     return rslt
 
-
-"""
-def Cmask(data,instrument):
-    if (instrument == 'CubeSat'):
-        #cmask for CubeSat
-    if (instrument == 'HARP2'):
-        print("Cmask is not dveleped for "+str(instrument))
-    if (instrument == 'AirHARP2'):
-        print("Cmask is not dveleped for "+str(instrument))
-    
-    return cMask
-
-"""
 
 
 ########################################## END of HARP CubeSat DATA READING ##########################################
