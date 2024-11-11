@@ -136,10 +136,62 @@ def PlotSinglePX(XP,YP,RT,save_path=None):
         plt.savefig(save_path+"LES_XP_"+str(XP)+"_YP_"+str(YP)+".png", dpi = 300)
         plt.close()
 
-def Plot_I(XP,YP,RT,save_path=None):
+def PlotI_DOLP(file_path,XP,YP,title,save_path=None):
+
+    try:
+        data = np.load(file_path, allow_pickle=True)
+        #var_names = data[0].keys()
+        meas_I = data[0]['meas_I'][:,0]
+        meas_P_rel = data[0]['meas_P_rel'][:,0]
+
+        fit_I= data[0]['fit_I'][:,0]
+        fit_P_rel = data[0]['fit_P_rel'][:,0]
+        
+        sca_ang = data[0]['sca_ang'][:,0]
+        aod = data[0]['aod'][0]
+        ssa = data[0]['ssa'][0]
+        #sph = data[0]['sph'][0]
+        RRI = data[0]['n'][0]
+        IRI = data[0]['k'][0]
+        brdf = data[0]['brdf']
+        wtrSurf = data[0]['wtrSurf']
+        wl = data[0]['lambda'][0]
+
+
+
+    except:
+        print("File cannnot be found!")
+
+
+    fig, axs = plt.subplots(2,1, figsize=(8,10),constrained_layout=True, dpi = 300)
+    fig.suptitle("\n"+str(title)+"\n Xpx = "+ str(XP)+"; Ypx = "+str(YP)+"; wl = "+str(wl)+" um;  AOD = "+str(aod)+"; SSA = "+str(ssa)+";\n RRI = "
+                +str(RRI)+"; IRI = "+str(IRI)+"; brdf = "+str(brdf[0,0])+","+str(brdf[1,0])+","+str(brdf[2,0])+"; wtrSurf = "+str(wtrSurf[0,0])+","
+                +str(wtrSurf[1,0])+","+str(wtrSurf[2,0]),fontsize=10)
+
+    axs[0].plot(sca_ang,meas_I, '.', label= 'LES Data')
+    axs[0].plot(sca_ang,fit_I, '--.', label= 'GRASP fit')
+    axs[0].fill_between(sca_ang,fit_I+fit_I*0.03,fit_I-fit_I*0.03, alpha = 0.3, label = 'Noise')
+    axs[0].set_ylim(0,0.08)
+    axs[0].grid()
+    axs[0].set_ylabel("I",fontsize=15)
+    axs[0].legend()
+
+    axs[1].plot(sca_ang,meas_P_rel, '.', label= 'LES Data')
+    axs[1].plot(sca_ang,fit_P_rel, '--.', label= 'GRASP fit')
+    axs[1].fill_between(sca_ang,fit_P_rel+0.005,fit_P_rel-0.005, alpha = 0.3, label = 'Noise')
+    axs[1].set_ylim(0,1)
+    axs[1].grid()
+    axs[1].set_ylabel("DoLP",fontsize=15)
+    axs[1].set_xlabel("Scattering Angle")
+
+    if save_path:
+        plt.savefig(save_path+"LES_XP_"+str(XP)+"_YP_"+str(YP)+".png", dpi = 300)
+        plt.close()
+
+def Plot_I(XP,YP,RT,file_path,save_path=None):
 
     #file_path = '/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/I_only_30ang'+str(XP)+'_YP_'+str(YP)
-    file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_I_only_30_ang_XPX_'+str(XP)+'_YP_'+str(YP)
+    #file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_I_only_30_ang_XPX_'+str(XP)+'_YP_'+str(YP)
     #file_path = FILE_PATH(RT)+"LES_XP_"+str(XP)+"_YP_"+str(YP)
     #file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/LESWithCorrection_XP_'+str(XPX)+'_YP_'+str(YPX)
     #file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/LESNoCorrection_XP_'+str(XPX)+'_YP_'+str(YPX)
@@ -182,9 +234,9 @@ def Plot_I(XP,YP,RT,save_path=None):
         plt.close()
 
 
-def Plot_DOLP(XPX,YPX,RT,save_path=None):
+def Plot_DOLP(XPX,YPX,RT,file_path,save_path=None):
 
-    file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_DOLP_only_30_ang_XPX_'+str(XPX)+'_YP_'+str(YPX)
+    #file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_DOLP_only_30_ang_XPX_'+str(XPX)+'_YP_'+str(YPX)
     #file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/Corrt_DOLP_only_30_ang_XPX_'+str(XPX)+'_YP_'+str(YPX)
     #file_path = f'/data/home/njayasinghe/LES/GSFC-GRASP-Python-Interface/tmp/LESNoCorrection_XP_'+str(XPX)+'_YP_'+str(YPX)
 
@@ -222,7 +274,7 @@ def Plot_DOLP(XPX,YPX,RT,save_path=None):
     axs.legend()
 
     if save_path:
-        plt.savefig(save_path+"LES_XP_"+str(XP)+"_YP_"+str(YP)+".png", dpi = 300)
+        plt.savefig(save_path+"LES_XP_"+str(XPX)+"_YP_"+str(YPX)+".png", dpi = 300)
         plt.close()
 
 

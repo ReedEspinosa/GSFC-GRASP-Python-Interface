@@ -323,7 +323,7 @@ def Read_LES_Data(file_path, filename, XPX, YPX, nwl,RT,ang=10):
 
     rslt['OBS_hght'] = data['Sensor_Position'].data*1000 #sensor position is 20 km for LES data
 
-    print(rslt.keys())
+    #print(rslt.keys())
 
     return rslt
 
@@ -338,8 +338,122 @@ def Read_LES_Data(file_path, filename, XPX, YPX, nwl,RT,ang=10):
 ang: (1,nwl) shaped variable which give angle ranges for each wavelength if necessary
 CMask: give path to CMASK array for corresponding HARP CubeSat data file. 
        This variable will later be converted as Cloud Masking command
+       CMask = CMask[:,XPX,YPX,:nwl] # [all view angles,XPX,YPX,all wl]
 """
-#def Read_HARP_CubeSat(file_path,file_name,XPX, YPX, nwl, ang=None, CMask=None):
+def Read_HARP_CubeSat(file_path,filename,XPX, YPX, CMask=None):
+    
+    #Reading Data
+    Data = Dataset(file_path+filename, 'r')
+
+    start_time = Data.time_coverage_start
+    wl = np.array([Data.groups['blue'].central_wavelength_in_nm/1000, Data.groups['green'].central_wavelength_in_nm/1000, 
+            Data.groups['red'].central_wavelength_in_nm/1000, Data.groups['nir'].central_wavelength_in_nm/1000])
+    nwl = len(wl)
+
+    Lat = Data.groups['Coordinates']['Latitude'][XPX,YPX].data
+    Lon = Data.groups['Coordinates']['Longitude'][XPX,YPX].data
+
+    nviews = len(Data.groups['red']['Views'][:])
+
+    vza = np.full((nviews,nwl),np.nan) #view zenith angle
+    scat_ang = np.full((nviews,nwl),np.nan) #scatteting angle
+    sza = np.full((nviews,nwl),np.nan) #solar zenith angle
+    rel_az = np.full((nviews,nwl),np.nan)
+    meas_I = np.full((nviews,nwl),np.nan)
+    meas_Q = np.full((nviews,nwl),np.nan)
+    meas_U = np.full((nviews,nwl),np.nan)
+    meas_DOLP = np.full((nviews,nwl),np.nan)
+
+    i = 0; VZA = []; SZA = []; SAA = []; VAA = []; Rel_Azi = []
+    I = []; Q = []; U = []; DOLP = []
+    bands = ['blue','green', 'red', 'nir']
+    for band in bands:
+        if (band != 'Coordinates'):
+            VZA.append(np.where(Data.groups[band]['View_Zenith'][:,XPX,YPX].mask == False,Data.groups[band]['View_Zenith'][:,XPX,YPX].data,np.nan))
+            SZA.append(np.where(Data.groups[band]['Solar_Zenith'][:,XPX,YPX].mask == False,Data.groups[band]['Solar_Zenith'][:,XPX,YPX].data,np.nan))
+            SAA.append(np.where(Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].mask == False,Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].data,np.nan))
+            VAA.append(np.where(Data.groups[band]['View_Azimuth'][:,XPX,YPX].mask == False,Data.groups[band]['View_Azimuth'][:,XPX,YPX].data,np.nan))
+            Rel_Azi.append(np.where(Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].mask == False,Data.groups[band]['Solar_Azimuth'][:,XPX,YPX].data,np.nan) 
+                    -np.where(Data.groups[band]['View_Azimuth'][:,XPX,YPX].mask == False,Data.groups[band]['View_Azimuth'][:,XPX,YPX].data,np.nan))
+
+            I.append(np.where(Data.groups[band]['I'][:,XPX,YPX].mask == False,Data.groups[band]['I'][:,XPX,YPX].data,np.nan))
+            Q.append(np.where(Data.groups[band]['Q'][:,XPX,YPX].mask == False,Data.groups[band]['Q'][:,XPX,YPX].data,np.nan))
+            U.append(np.where(Data.groups[band]['U'][:,XPX,YPX].mask == False,Data.groups[band]['U'][:,XPX,YPX].data,np.nan))
+            DOLP.append(np.where(Data.groups[band]['DOLP'][:,XPX,YPX].mask == False,Data.groups[band]['DOLP'][:,XPX,YPX].data,np.nan))
+
+            if CMask==None :
+                vza[:len(VZA[i]),i] = VZA[i]
+                sza[:len(SZA[i]),i] = SZA[i]
+                rel_az[:len(Rel_Azi[i]),i] = abs(Rel_Azi[i])
+                scat_ang[:len(VZA[i]),i] = np.rad2deg(np.arccos(np.sin(np.radians(vza[:len(VZA[i]),i]))*np.sin(np.radians(sza[:len(SZA[i]),i]))*np.cos(np.radians(rel_az[:len(Rel_Azi[i]),i])-np.pi) - np.cos(np.radians(vza[:len(VZA[i]),i]))*np.cos(np.radians(sza[:len(SZA[i]),i]))))
+                
+                meas_I[:len(I[i]),i] = I[i]
+                meas_Q[:len(Q[i]),i] = Q[i]
+                meas_U[:len(U[i]),i] = U[i]
+                meas_DOLP[:len(DOLP[i]),i] = DOLP[i]
+
+            else:
+
+                """CMask = CMask[band][:,XPX,YPX]
+                   CMask == 1 : Cloudy
+                   CMask == 0 : Clear
+                """
+
+                vza[:len(VZA[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,VZA[i][:])
+                sza[:len(SZA[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,SZA[i][:])
+                rel_az[:len(Rel_Azi[i]),i] = abs(np.where(CMask[band][:,XPX,YPX]==1,np.nan,Rel_Azi[i][:]))
+                scat_ang[:len(VZA[i]),i] = np.rad2deg(np.arccos(np.sin(np.radians(vza[:len(VZA[i]),i]))*np.sin(np.radians(sza[:len(SZA[i]),i]))*np.cos(np.radians(rel_az[:len(Rel_Azi[i]),i])-np.pi) - np.cos(np.radians(vza[:len(VZA[i]),i]))*np.cos(np.radians(sza[:len(SZA[i]),i]))))
+                scat_ang[:len(VZA[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,scat_ang[i][:])
+
+                meas_I[:len(I[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,I[i][:])
+                meas_Q[:len(Q[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,Q[i][:])
+                meas_U[:len(U[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,U[i][:])
+                meas_DOLP[:len(DOLP[i]),i] = np.where(CMask[band][:,XPX,YPX]==1,np.nan,DOLP[i][:])
+
+            i = i+1
+    
+    rslt = {}
+        
+
+    rslt['meas_I'] = meas_I.reshape(len(meas_I),nwl)
+    rslt['meas_Q'] = meas_Q.reshape(len(meas_Q),nwl)
+    rslt['meas_U'] = meas_U.reshape(len(meas_U),nwl)
+    #rslt['meas_P'] = meas_DOLP.reshape(len(meas_DOLP[:10,:]),nwl)
+
+    rslt['sza'] = sza.reshape(len(sza),nwl)
+    rslt['vis'] = vza.reshape(len(vza),nwl)
+    rslt['sca_ang'] = scat_ang.reshape(len(scat_ang),nwl)
+    rslt['fis'] = rel_az.reshape(len(rel_az),nwl)
+
+
+    rslt['lambda'] = wl
+    rslt['longitude'] = Lon
+    rslt['latitude'] = Lat
+
+    yy = int(start_time.split('-')[0]); mm = int(start_time.split('-')[1]); dd = int(start_time.split('-')[-1].split(':')[0].split('T')[0])
+    hh = int(start_time.split('-')[-1].split(':')[0].split('T')[-1]); mi = int(start_time.split('-')[-1].split(':')[1]); s = int(start_time.split('-')[-1].split(':')[-1].split('U')[0])
+
+    rslt['datetime'] = dt.datetime(yy,mm,dd,hh,mi,s,00)
+
+    rslt['land_prct'] = 0
+
+    rslt['OBS_hght'] = 20000
+
+    return rslt
+
+
+"""
+def Cmask(data,instrument):
+    if (instrument == 'CubeSat'):
+        #cmask for CubeSat
+    if (instrument == 'HARP2'):
+        print("Cmask is not dveleped for "+str(instrument))
+    if (instrument == 'AirHARP2'):
+        print("Cmask is not dveleped for "+str(instrument))
+    
+    return cMask
+
+"""
 
 
 ########################################## END of HARP CubeSat DATA READING ##########################################
