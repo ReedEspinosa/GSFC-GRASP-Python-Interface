@@ -114,7 +114,7 @@ def Gaspar_MAP(RSP_wl,Airhgt,GasAbsFn,SpecResFnPath):
     #Gas Absorption correction using UNL_VRTM (provided by Richard,UMBC)
     RSP_wlf = [410, 470, 555, 670, 865,960,1590,1880,2250]
 
-    RSP_wlf = [410, 470, 555, 670, 865]
+    # RSP_wlf = [410, 470, 555, 670, 865]
 
     ds = nc.Dataset(GasAbsFn)
     Wl = ds.variables['Lamdas'][:] # wavelength values corresponding to the gas absorption
@@ -387,7 +387,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
         rslt['OBS_hght'] = 0
         print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
     
-    rslt['gaspar'] =Gaspar_MAP(wl,rslt['OBS_hght']/1000,GasAbsFn,SpecResFnPath)[:]
+    rslt['gaspar'] =Gaspar_MAP(wl,rslt['OBS_hght']/1000,GasAbsFn,SpecResFnPath)[:nwl]
     print(rslt['gaspar'])
     f1_MAP.close()
     return rslt
@@ -938,6 +938,8 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
     Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
     Dep[:,1] = df['532_dep'][:]
     Dep[:,2] = df['1064_dep'] [:]
+    
+
     #Unit conversion 
     rslt['meas_VExt'] = Bext / 1000
     rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 to m-1

@@ -408,6 +408,7 @@ def AeroProfNorm_FMF(DictHsrl):
 
     print(DMR1)
 
+
     #Separating the contribution of non-dust
 
     # AEt= DictHsrl[5] #total angstrom exponent
@@ -617,7 +618,7 @@ def AeroProfNorm_sc2(DictHsrl):
 
     DMR1 = DictHsrl[2]
     indxMaxDMR = (np.max(np.where(DMR1==0)[0])) 
-    DMR1[DMR1==0] = 0.0001
+    DMR1[DMR1==0] = 0.000001
 
 
 
@@ -633,12 +634,24 @@ def AeroProfNorm_sc2(DictHsrl):
         maxDP =  np.nanmax(aDP)
         DMR1 = ((1+maxDP) * aDP)/(maxDP*(1+aDP)) #dust mixing ratio from paper
         # DMR1[DMR1==0] = 0.0001
+
+
     else:
         # maxDP =  0.35 #From the paper
         # aDP= DictHsrl[3]
         DMR1 = DictHsrl[2]
         # maxDP =  np.nanmax(aDP)
         # print('No pure dustEvent')
+
+    # TODO Hard coded-> This can be commented out for more general case. Used this as a test to see if the fine mode overestimation can be solved. This should be changed........
+    # DMR1[DMR1>=0.97] = 1
+    # DMR1[0] = 1
+    # TODO This should be changed........ 
+
+
+
+
+    print(DMR1)
 
     Vext1[np.where(Vext1<=0)] = 1e-10
     Vextoth = (1-DMR1)*Vext1
@@ -650,7 +663,7 @@ def AeroProfNorm_sc2(DictHsrl):
     FMF1[np.where(FMF1<0)[0] ]= 0.00001
     FMF1[np.where(FMF1>=1)[0]]= 0.99999
 
-    FMF1[BLH_indx[0]:] = 0.00001  # No fine mode below the boundary layer height 
+    # FMF1[np.where(hgt<BLH)[0]]= 0.00001  # No fine mode below the boundary layer height 
 
 
     # print(FMF)
@@ -788,7 +801,10 @@ def ModAeroProfNorm_sc2(DictHsrl):
     DMR1 = DictHsrl[2]
     indxMaxDMR = (np.max(np.where(DMR1==0)[0])) 
     DMR1[DMR1==0] = 0.05
-    DMR1[hgt[np.where(hgt>4000)]] = 1
+    # DMR1[hgt[np.where(hgt>4000)]] = 1
+
+
+
     
     # DMR1[DMR1==0] = np.linspace(indxMaxDMR,0,lnDMR)
 
@@ -826,6 +842,9 @@ def ModAeroProfNorm_sc2(DictHsrl):
     aboveBL = Vextoth[:BLH_indx[0]]
 
     belowBL = Vextoth[BLH_indx[0]:]
+
+
+    belowBL = 10**-5
 
     print(BLH_indx)
 
@@ -1673,7 +1692,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
 
     Hsph,HTam = HSRL_sphrod,HSRL_Tamu
     font_name = "Times New Roman"
-    plt.rcParams['font.size'] = '14'
+    plt.rcParams['font.size'] = '15'
 
 
     NoMode = HSRL_sphrod['r'].shape[0]
@@ -1728,7 +1747,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (15,6))  #TODO make it more general which adjust the no of rows based in numebr of wl
         plt.subplots_adjust(top=0.78)
         for i in range(3):
-            wave = str(Hsph['lambda'][i]) +"μm"
+            wave = str(Hsph['lambda'][i]) +"(μm)"
             axs[i].errorbar(Hsph['meas_VBS'][:,i],altd,xerr= UNCERT['VBS'],color = "#695E93", capsize=3,capthick =1,alpha =0.4, label =f"{UNCERT['VBS']}")
             
             axs[i].plot(Hsph['meas_VBS'][:,Index1[i]],altd, marker =">",color = "#281C2D", label ="Meas")
@@ -1756,7 +1775,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
 
         # AOD = np.trapz(Hsph['meas_VExt'],altd)
         for i in range(3):
-            wave = str(Hsph['lambda'][i]) +"μm"
+            wave = str(Hsph['lambda'][i]) +"(μm)"
 
             axs[i].errorbar(Hsph['meas_DP'][:,Index1[i]],altd,xerr= UNCERT['DP'],color = '#695E93', capsize=4,capthick =1,alpha =0.6, label =f"{UNCERT['DP']}%")
             
@@ -1768,7 +1787,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
             # axs[i].errorbar(HTam['fit_DP'][:,i],altd,xerr= UNCERT['DP'],fmt='-o',color = "#d24787",ls = "--", label="Hex", marker = "h")
 
 
-            axs[i].set_xlabel('DP %')
+            axs[i].set_xlabel('DP (%)')
             axs[i].set_title(wave)
             if i ==0:
                 axs[0].legend()
@@ -1779,7 +1798,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         fig, axs= plt.subplots(nrows = 1, ncols =2, figsize= (11,6))
         plt.subplots_adjust(top=0.78)
         for i in range(2):
-            wave = str(Hsph['lambda'][i]) +"μm"
+            wave = str(Hsph['lambda'][i]) +"(μm)"
 
             axs[i].errorbar(Hsph['meas_VExt'][:,Index1[i]],altd,xerr= UNCERT['VEXT']*Hsph['meas_VExt'][:,i],color = '#695E93',capsize=4,capthick =1,alpha =0.7, label =f"{UNCERT['VEXT']*100}%")
             
@@ -1863,7 +1882,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
                     #     axs2[a,b].plot(RSP_plot['r'][mode],RSP_plot[Retrival[i]][mode], marker = "H", color = cm_t[mode] ,lw = 5.5, ls = linestyle[mode],label=f"{key2}_{mode_v[mode]}")
                     
 
-                    axs2[0,0].set_xlabel(r'rv $ \mu m$')
+                    axs2[0,0].set_xlabel(r'rv  ($ \mu m$)')
                     axs2[0,0].set_xscale("log")
                 else:
 
@@ -1880,7 +1899,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
                     
                     # axs2[a,b].set_xticks(Spheriod['lambda'])
                     # axs[a,b].set_xticklabels(['0.41', '0.46', '0.55' , '0.67'  , '0.86'])
-                    axs2[a,b].set_xlabel(r'$\lambda \mu m$')
+                    axs2[a,b].set_xlabel(r'$\lambda (\mu m)$')
                     # axs2[a,b].set_ylim(bottom=0)
             
             axs2[a,b].set_ylabel(f'{Retrival[i]}')
@@ -1931,7 +1950,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         
         # pdf_pages.savefig()
         # pdf_pages.close()
-        fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/{dt_t}{NoMode}{key1}_{key2}_HSRL2Retrieval.png', dpi = 400)
+        fig.savefig(f'/home/gregmi/ORACLES/HSRL_RSP/APOLO{dt_t}{NoMode}{key1}_{key2}_HSRL2Retrieval.png', dpi = 400)
         plt.rcParams['font.size'] = '15'
         fig, axs = plt.subplots(nrows= 1, ncols=2, figsize=(10, 5), sharey=True)
         
@@ -1942,7 +1961,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
             axs[1].set_xlabel('βext')
             axs[0].set_title('Spheriod')
             axs[0].set_xlabel('βext')
-            axs[0].set_ylabel('Height km')
+            axs[0].set_ylabel('Height (km)')
             axs[1].set_title('Hexahedral')
         plt.legend()
         plt.tight_layout()
@@ -4305,9 +4324,28 @@ def update_HSRLyaml(UpdatedymlPath, YamlFileName: str, noMod: int, Kernel_type: 
                         if DataIdxtoUpdate is None:
                             DataIdxtoUpdate = [i for i in range(len(NewVarDict['lambda']))]
 
-                        initCond['value'] = [float(NewVarDict['n'][noMd][i]) for i in DataIdxtoUpdate]
-                        initCond['max'] = [float(NewVarDict['n'][noMd][i] * maxr) for i in DataIdxtoUpdate]
-                        initCond['min'] = [float(NewVarDict['n'][noMd][i] * minr) for i in DataIdxtoUpdate]
+                        
+                        InitVal = [float(NewVarDict['n'][noMd][i]) for i in DataIdxtoUpdate]
+                        Init = np.array(InitVal)  # Convert to array for numpy operations
+                        # Init[Init > 1.68] = 1.67  # Apply limit for Max
+                        # Init[Init < 1.33] = 1.34  # Apply limit for Max
+
+
+                        initCond['value'] = Init.tolist()
+
+                        # Setting Max with a cap of 1.7
+                        Max = [float(NewVarDict['n'][noMd][i] * maxr) for i in DataIdxtoUpdate]
+                        Max = np.array(Max)  # Convert to array for numpy operations
+                        # Max[Max > 1.68] = 1.68  # Apply limit for Max
+
+                        # Setting Min with a floor of 1.33
+                        Min = [float(NewVarDict['n'][noMd][i] * minr) for i in DataIdxtoUpdate]
+                        Min = np.array(Min)  # Convert to array for numpy operations
+                        # Min[Min < 1.33] = 1.33  # Apply limit for Min   
+
+                        # Assigning the limits and index values to initCond
+                        initCond['max'] = Max.tolist()  # Convert back to list if needed
+                        initCond['min'] = Min.tolist()  # Convert back to list if needed
                         initCond['index_of_wavelength_involved'] = [i for i in range(len(NewVarDict['lambda']))]
 
                         print(f"{char_type} Updated")
