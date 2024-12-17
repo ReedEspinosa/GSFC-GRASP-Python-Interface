@@ -83,7 +83,7 @@ HSRLfile_path = "/home/gregmi/ORACLES/HSRL" #Path to the ORACLE data file
 HSRLfile_name =  "/HSRL2_P3_20180922_R2.h5" #Name of the ORACLES file
 RSP_PixNo = 13201
 TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
-nwl = 5 # first  nwl wavelengths
+nwl = [0,1,2,3,4,5,6] # first  nwl wavelengths
 ang1 = 10
 ang2 = 120 # :ang angles  #Remove
 
@@ -147,7 +147,7 @@ for i in range(1):
 
     RSP_PixNo = RSP_PixNo +1
     TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
-    nwl = 5 # first  nwl wavelengths
+    nwl = 7 # first  nwl wavelengths
     # ang1 = 20
     # ang2 = 100 # :ang angles  #Remove
 
@@ -171,11 +171,11 @@ for i in range(1):
 #     RSP only retrieval
  
 # # # # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
-#     rslts_Sph = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
-# #     # rslts_Sph2 = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
-#     rslts_Tamu = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
-# #     # # rslts_Tamu2 = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
-#     RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT)
+    rslts_Sph = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
+#     # rslts_Sph2 = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
+    rslts_Tamu = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
+#     # # rslts_Tamu2 = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
+    RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT)
    
 
 # # # #     # SphRSP.append(rslts_Sph)
@@ -185,11 +185,11 @@ for i in range(1):
 
 # # # #    #HSRL2 only retrieval
     
-    HSRL_sphrodT = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
+    # HSRL_sphrodT = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
     # plot_HSRL(HSRL_sphrodT[0][0],HSRL_sphrodT[0][0], UNCERT,forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrodT[2]) 
     HSRL_TamuT = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i])
     # # plot_HSRL(HSRL_Tamu[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_Tamu[2])    
-    plot_HSRL(HSRL_sphrodT[0][0],HSRL_TamuT[0][0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
+    # plot_HSRL(HSRL_sphrodT[0][0],HSRL_TamuT[0][0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
 
 #     # # SphHSRL.append(HSRL_sphrodT)
     # TAMUHSRL.append(HSRL_TamuT)
@@ -275,6 +275,103 @@ def CXmunk(V):
     '''V is the wind speed in m/s'''
     CxMunk = np.sqrt(0.003+0.00512*V)
     return CxMunk 
+
+
+def Combine_MAPandLidar_Rsltdict(rslt_RSP,HSRL_data, HSRLPixNo):
+
+
+    rslt_HSRL  = HSRL_data[0]
+
+    """This funtion combines the rslt dict from Lidar and Polarimeter togetehr into a single rslt dictionary
+        
+        The rslt dict for RSP and HSRL are colocated.
+        rslt_RSP = result dict for polarimeter
+        rslt_HSRL = result dict fot Lidar
+        TelNo  =  (Specific to Research Scanning Polarimeter) RSP has two telescopes, we will average the I and DoLP
+    
+    """
+    
+    rslt= {}  # Teh order of the data is  First lidar(number of wl ) and then Polarimter data 
+    rslt['lambda'] = np.concatenate((rslt_HSRL['lambda'],rslt_RSP['lambda']))
+
+    #Sort the index of the wavelength if arranged in ascending order, this is required by GRASP
+    sort = np.argsort(rslt['lambda']) 
+    sort_Lidar, sort_MAP  = np.array([0,3,7]),np.array([1,2,4,5,6])  #TODO Make this more general
+    
+    
+# The shape of the variables in RSPkeys and HSRLkeys should be equal to no of wavelength
+#  Setting np.nan in place of the measurements for wavelengths for which there is no data
+    RSPkeys = ['meas_I', 'meas_P','sza', 'vis', 'sca_ang', 'fis']
+    HSRLkeys = ['RangeLidar','meas_VExt','meas_VBS','meas_DP']
+    GenKeys= ['datetime','longitude', 'latitude', 'land_prct'] # Shape of these variables is not N wavelength
+    
+
+
+    #MAP measurement variables 
+    RSP_var = np.ones((rslt_RSP['meas_I'].shape[0],rslt['lambda'].shape[0])) * np.nan
+    for keys in RSPkeys:
+        #adding values to sort_MAP index positions
+        for a in range(rslt_RSP[keys][:,0].shape[0]):
+            RSP_var[a][sort_MAP] = rslt_RSP[keys][a]
+        rslt[keys] = RSP_var
+        RSP_var = np.ones((rslt_RSP['meas_I'].shape[0],rslt['lambda'].shape[0])) * np.nan
+
+    #Lidar Measurements
+    HSRL_var = np.ones((rslt_HSRL['meas_VExt'].shape[0],rslt['lambda'].shape[0]))* np.nan
+    for keys1 in HSRLkeys:  
+        for a in range(rslt_HSRL[keys1][:,0].shape[0]):
+            
+            HSRL_var[a][sort_Lidar] = rslt_HSRL[keys1][a]
+
+            # 'sza', 'vis','fis'
+        rslt[keys1] = HSRL_var
+        # Refresh the array by Creating numpy nan array with shape of height x wl, Basically deleting all values
+        HSRL_var = np.ones((rslt_HSRL['meas_VExt'].shape[0],rslt['lambda'].shape[0]))* np.nan
+
+    
+    for keys in GenKeys:
+        rslt[keys] = rslt_RSP[keys]  #Adding the information about lat, lon, datetime and so on from RSP
+    
+    rslt['OBS_hght'] = rslt_RSP['OBS_hght'] #adding the aircraft altitude 
+    rslt['lambda'] = rslt['lambda'][sort]
+
+    #TODO improve this code to work when only mol deopl or gasabs are provided and not both
+    if 'gaspar' in  rslt_HSRL:
+        gasparHSRL = np.zeros(len(rslt['lambda']))
+        gasparHSRL[sort_Lidar] = rslt_HSRL['gaspar']
+        
+        rslt['gaspar'] = gasparHSRL
+        # print(rslt['gaspar'])
+
+    if 'gaspar' in  rslt_RSP:
+        gasparRSP = np.zeros(len(rslt['lambda']))
+        gasparRSP[sort_MAP] = rslt_RSP['gaspar']
+
+        rslt['gaspar'] = gasparRSP
+        # print(rslt['gaspar'])
+
+    if 'gaspar' in  rslt_RSP and rslt_HSRL :
+        gasparB = np.zeros(len(rslt['lambda']))
+        gasparB[sort_MAP] = rslt_RSP['gaspar']
+        gasparB[sort_Lidar] = rslt_HSRL['gaspar']
+        rslt['gaspar'] = gasparB
+        # print(rslt['gaspar'])
+
+
+    AeroProf = AeroProfNorm_sc2(HSRL_data)
+    
+    # AeroProf =AeroProfNorm_FMF(rslt_HSRL_1)
+    FineProfext,DstProfext,SeaProfext = AeroProf[0],AeroProf[1],AeroProf[2]
+
+
+
+    rslt['VertProf_Mode1'] = AeroProf[0]  #Fine mode 
+    rslt['VertProf_Mode2'] = AeroProf[1]
+    rslt['VertProf_Mode3'] = AeroProf[2]
+
+
+    return rslt
+
 
 def CombineHSRLandRSPrslt(BckHSRL,BckRSP,CharName=None):
 
@@ -384,7 +481,7 @@ def update_HSRLyaml(ymlPath, UpKerFile, YamlFileName: str, noMod: int, Kernel_ty
             data['input']['file'] = 'bench.sdat'
          
         if 'bck' in GRASPModel.lower(): #If set to inverse mode
-            data['retrieval']['mode'] = 'forward'
+            data['retrieval']['mode'] = 'inversion'
             data['output']['segment']['stream'] = 'bench_inversionRslts.txt'
             data['input']['file'] = 'inversionBACK.sdat'
 
@@ -500,6 +597,7 @@ def update_HSRLyaml(ymlPath, UpKerFile, YamlFileName: str, noMod: int, Kernel_ty
                 except Exception as e:
                     print(f"An error occurred for {char_type}: {e}")
                     continue
+
             elif char_type == 'sphere_fraction':
 
                 try:
@@ -516,6 +614,35 @@ def update_HSRLyaml(ymlPath, UpKerFile, YamlFileName: str, noMod: int, Kernel_ty
                     print(f"An error occurred for {char_type}: {e}")
                     continue
 
+            elif char_type =='vertical_profile_parameter_standard_deviation':
+
+                try:
+                    if len(NewVarDict['heightStd'])!=0:
+                        initCond['value'] = float(NewVarDict['heightStd'][noMd])
+                        initCond['max'] = float(NewVarDict['heightStd'][noMd] * maxr)
+                        initCond['min'] = float(NewVarDict['heightStd'][noMd] * minr)
+
+                        print(f"{char_type} Updated")
+                        
+                except Exception as e:
+                    print(f"An error occurred for {char_type}: {e}")
+                    continue
+            
+            elif char_type =='vertical_profile_parameter_height':
+
+                try:
+                    if len(NewVarDict['height'])!=0:
+                        initCond['value'] = float(NewVarDict['height'][noMd])
+                        initCond['max'] = float(NewVarDict['height'][noMd] * maxr)
+                        initCond['min'] = float(NewVarDict['height'][noMd] * minr)
+
+                        print(f"{char_type} Updated")
+                        
+                except Exception as e:
+                    print(f"An error occurred for {char_type}: {e}")
+                    continue
+
+
 
 #.......................................
     # Save the updated YAML file
@@ -524,6 +651,43 @@ def update_HSRLyaml(ymlPath, UpKerFile, YamlFileName: str, noMod: int, Kernel_ty
         yaml.safe_dump(data, f)
 
     print(f"YAML file updated and saved as {ymlPath + UpKerFile}")
+
+
+
+#..............HOW TO RUN..........................................
+
+# fwdModelYAMLpath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_Hex_Case2.yml'
+# HSRL_data = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo)
+
+# # Kernel_type = 'hex'
+# # rsltDict = HSRL_data[0]
+# UpdateDict = HSRL_TamuT[0][0]
+# UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
+# ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+
+# AeroProf= AeroProfNorm_sc2(HSRL_data)
+
+#Up = update_HSRLyaml(ymlPath = ymlPath, UpKerFile=UpKerFile , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = Kernel_type, AeroProf=AeroProf, NewVarDict = UpdateDict, GRASPModel = 'fwd')
+
+
+
+
+#From the combined retrieval" 
+
+# fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_LidarAndMAP_3modes_V.1.2_Simulate.yml'
+# UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
+# ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+
+# UpdateDict = LidarPolTAMU[0][0]
+# UpKerFile = 'settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
+# ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+# Kernel_type = 'hex'
+
+# Up = update_HSRLyaml(ymlPath = ymlPath, UpKerFile=UpKerFile , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = Kernel_type, NewVarDict = UpdateDict, GRASPModel = 'fwd')
+
+#.....................................................................
+
+   
 
     return ymlPath + UpKerFile
 
@@ -572,6 +736,29 @@ def RunGRASPwUpdateYaml(Shape: str, ymlPath: str, fwdModelYAMLpath: str, UpKerFi
     return gr.invRslt[0]
 
 
+#...........................how to run ..................
+# UpdateDict['n'][0][0] = 1.45
+
+# Up = update_HSRLyaml(ymlPath = ymlPath, UpKerFile=UpKerFile , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = Kernel_type, AeroProf=AeroProf, NewVarDict = UpdateDict, GRASPModel = 'fwd')
+# Updatedyaml = Up
+
+# # Create and populate a pixel from HSRL result
+# pix = pixel()
+# pix.populateFromRslt(rsltDict, radianceNoiseFun=None, dataStage='meas', verbose=False)
+
+# # Set up graspRun class, add pixel, and run GRASP
+# gr = graspRun(pathYAML=Updatedyaml, releaseYAML=True, verbose=True)
+# gr.addPix(pix)  # Add pixel to the graspRun instance
+# gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath)  # Run GRASP
+
+# # Print AOD at last wavelength
+# print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1], gr.invRslt[0]['aod'][-1]))
+
+
+# plot_HSRL(gr.invRslt[0],gr.invRslt[0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
+#...................................................
+
+
 def Interpolate(HSRLRslt, RSPwl, NoMode = None, Plot=False):
 
     IntpDict = {}
@@ -602,7 +789,157 @@ def Interpolate(HSRLRslt, RSPwl, NoMode = None, Plot=False):
 
 
 
+fineRRI = np.linspace(1.35, 1.6, 8)
 
+def RunSensitivitySingleVal(constAOD = True, UpdateforconstAOD =None ):
+
+    
+
+    Fine_RRI =[]
+    for i in range(len(fineRRI)):
+
+        print(i)
+
+        UpdateDict['n'][0][0] = fineRRI[i]
+
+        if UpdateforconstAOD == True:
+
+
+        Up = update_HSRLyaml(ymlPath = ymlPath, UpKerFile=UpKerFile , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = Kernel_type, AeroProf=AeroProf, NewVarDict = UpdateDict, GRASPModel = 'fwd')
+
+        Updatedyaml = Up
+
+        # Create and populate a pixel from HSRL result
+        pix = pixel()
+        pix.populateFromRslt(rsltDict, radianceNoiseFun=None, dataStage='meas', verbose=False)
+
+        # Set up graspRun class, add pixel, and run GRASP
+        gr = graspRun(pathYAML=Updatedyaml, releaseYAML=True, verbose=True)
+        gr.addPix(pix)  # Add pixel to the graspRun instance
+        gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath)  # Run GRASP
+
+        # Print AOD at last wavelength
+        print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1], gr.invRslt[0]['aod'][-1]))
+
+        Fine_RRI.append(gr.invRslt[0])
+
+
+
+        if constAOD == True:
+
+            #If AOD is fixed to a constant value
+             NewVol =FactorforConstAOD(fineRRI,FixAOD,DictRslt)[0]
+
+            
+
+        plot_HSRL(gr.invRslt[0],gr.invRslt[0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
+
+
+
+
+def Plot_sensitivity( Idx, DictRslt, ChangeVariable):
+    # sort_Lidar = np.array([0, 3, 7])
+
+    colors = [
+        'y',
+        "#FFD700",  # Gold
+        "#FFA500",  # Orange
+        "#FF8C00",  # Dark Orange
+        "#FF6347",  # Tomato
+        "r",  # Orange Red
+
+        
+        "#00BFFF",  # Deep Sky Blue
+        "#1E90FF",  # Dodger Blue
+    
+        "#5F9EA0",  # Cadet Blue
+        "#00CED1",  # Dark Turquoise
+        "#6495ED",  # Cornflower Blue
+        "#1E3A8A",  # Deep Blue
+
+        "#6A5ACD",  # Slate Blue
+        "b",  # Medium Slate Blue
+        
+        "#8A2BE2",  # Blue Violet
+        "m",  # Dark Magenta
+    ]
+
+    sort_Lidar = Idx
+    fig,ax = plt.subplots(3,3, figsize = (18,18), sharey = True)
+    for Itr in range(len(ChangeVariable)):
+
+        
+        for i in range(3):
+            if Itr == 0: ax[0,i].plot(DictRslt[Itr]['meas_VExt'][:,sort_Lidar[i]]*1000,DictRslt[Itr]['range'][i,:],color ='k', lw = 3, label ='meas')
+            
+            ax[0,i].plot(DictRslt[Itr]['fit_VExt'][:,sort_Lidar[i]]*1000,DictRslt[Itr]['range'][i,:], color = colors[Itr], label =np.round(ChangeVariable[Itr],3))
+            
+            if Itr == 0: ax[1,i].plot(DictRslt[Itr]['meas_VBS'][:,sort_Lidar[i]],DictRslt[Itr]['range'][i,:],color ='k',lw = 3,  label ='meas')
+            
+            ax[1,i].plot(DictRslt[Itr]['fit_VBS'][:,sort_Lidar[i]],DictRslt[Itr]['range'][i,:], color = colors[Itr], label = np.round(ChangeVariable[Itr],3))
+
+            if Itr == 0: ax[2,i].plot(DictRslt[Itr]['meas_DP'][:,sort_Lidar[i]],DictRslt[Itr]['range'][i,:],color ='k',lw = 3,  label ='meas')
+            
+            ax[2,i].plot(DictRslt[Itr]['fit_DP'][:,sort_Lidar[i]],DictRslt[Itr]['range'][i,:], color = colors[Itr], label =np.round(ChangeVariable[Itr],3))
+
+    plt.subplots_adjust(right=0.8)
+
+    # Create a common legend for all subplots, positioned to the right of the figure
+    ax[0,2].legend(loc='center left', bbox_to_anchor=(1.2, -0.25), fancybox=True)
+
+    ax[0,0].set_ylabel("Height")
+    for i in range(2):ax[0,i].set_xlabel(r"$\alpha$")
+    for i in range(3):ax[1,i].set_xlabel(r"$\beta$")
+    for i in range(3):ax[2,i].set_xlabel(r"$\delta$ %")
+    for i in range(3):ax[0,i].set_title(f"{DictRslt[Itr]['lambda'][sort_Lidar][i]} $\mu$m")
+
+
+    plt.savefig("Lidar_sensitivity_rv.png", dpi = 120)
+
+
+
+    fig,ax = plt.subplots(5,3, figsize = (12,12))
+    for Itr in range(len(ChangeVariable)):
+        for i in range(3):
+            # ax[i].plot(DictRslt[Itr]['sca_ang'][:,i],DictRslt[0]['meas_I'][:,i])
+            ax[0,i].plot(DictRslt[Itr]['r'][i],DictRslt[Itr][ 'dVdlnr'][i], color = colors[Itr])
+            ax[0,i].set_xscale('log')
+
+
+            ax[1,i].plot(DictRslt[Itr]['lambda'],DictRslt[Itr][ 'n'][i], color = colors[Itr])
+            ax[2,i].plot(DictRslt[Itr]['lambda'],DictRslt[Itr][ 'k'][i], color = colors[Itr])
+            ax[3,i].plot(DictRslt[Itr]['lambda'],DictRslt[Itr][ 'ssaMode'][i], color = colors[Itr])
+            ax[4,i].plot(DictRslt[Itr]['lambda'],DictRslt[Itr][ 'aodMode'][i], color = colors[Itr])
+
+            
+    plt.tight_layout()
+    plt.savefig("Lidar_sensitivity_rv_data2.png", dpi = 120)
+
+
+
+def FactorforConstAOD(fineRRI,FixAOD,DictRslt):
+    cpDictRslt = DictRslt
+    constVolFactor = np.zeros(len(fineRRI))
+    #New volume concetration to maintain a constant AOD
+    NewVolConc = np.zeros(len(fineRRI))
+
+    for i in range(len(fineRRI)):
+        volFac= FixAOD/cpDictRslt[i]['aodMode'][0][0]  #taking the first wavelength 
+        constVolFactor[i] = volFac
+        NewVolConc[i] = cpDictRslt[i]['vol'][0]*volFac
+
+
+
+    #...................How to run..................................
+    # cpDictRslt = DictRslt
+    # constVolFactor = np.zeros(len(fineRRI))
+    # FixAOD = 0.19895
+    # NewVol = FactorforConstAOD(fineRRI,FixAOD,DictRslt)[1]
+    #...............................................................
+    
+    return NewVolConc, constVolFactor
+
+    
 
 
 
@@ -618,7 +955,25 @@ def Interpolate(HSRLRslt, RSPwl, NoMode = None, Plot=False):
 # All_cases['Sph_HSRLsizetoRSP'].append(Sph_HSRLsizetoRSP)
 
 # update_HSRLyaml(ymlPath = ymlPath, UpKerFile=UpKerFile , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = Kernel_type, AeroProf=AeroProf, NewVarDict = UpdateDict, GRASPModel = 'fwd')
-   
+#    Up = update_HSRLyaml(ymlPath = ymlPath, UpKerFile=UpKerFile , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = Kernel_type, AeroProf=AeroProf, NewVarDict = UpdateDict, GRASPModel = 'fwd')
+
+# Updatedyaml = Up
+
+# # Create and populate a pixel from HSRL result
+# pix = pixel()
+# pix.populateFromRslt(rsltDict, radianceNoiseFun=None, dataStage='meas', verbose=False)
+
+# # Set up graspRun class, add pixel, and run GRASP
+# gr = graspRun(pathYAML=Updatedyaml, releaseYAML=True, verbose=True)
+# gr.addPix(pix)  # Add pixel to the graspRun instance
+# gr.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath)  # Run GRASP
+
+# # Print AOD at last wavelength
+# print('AOD at %5.3f μm was %6.4f.' % (gr.invRslt[0]['lambda'][-1], gr.invRslt[0]['aod'][-1]))
+    
+
+# plot_HSRL(gr.invRslt[0],gr.invRslt[0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
+
 
 
 

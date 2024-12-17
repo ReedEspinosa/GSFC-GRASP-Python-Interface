@@ -945,7 +945,7 @@ def ModAeroProfNorm_sc2(DictHsrl):
 
     return FineProf,DstProf,SeaProf,Aod_Classified
 
-def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo): 
+def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo, RSPwlIdx,GasAbsFn,ModeNo): 
         
         krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
         # Kernel_type =  sphro is for the GRASP spheriod kernal, while TAMU is to run with Hexahedral Kernal
@@ -979,7 +979,7 @@ def RSP_Run(Kernel_type,file_path,file_name,PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,M
             savePath=f"/home/gregmi/ORACLES/RSP1-L1C_P3_20180922_R03_{Kernel_type}"
 
         #rslt is the GRASP rslt dictionary or contains GRASP Objects
-        rslt = Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsFn)
+        rslt = Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, RSPwlIdx,GasAbsFn)
         print(rslt['OBS_hght'])
         # rslt['OBS_hght'] = 38000
         maxCPU = 10 #maximum CPU allocated to run GRASP on server

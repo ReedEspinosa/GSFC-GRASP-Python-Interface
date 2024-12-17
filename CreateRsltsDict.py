@@ -267,13 +267,15 @@ def Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResF
 ### Reading the Multiangle Polarimeter data ()
 
 # Reads the Data from ORACLES and gives the rslt dictionary for GRASP
-def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsFn): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
+def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, RSPwlIdx,GasAbsFn): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
     
     anglesIdx = np.arange(ang1,ang2,1)
     #Reading the hdf file
     f1_MAP = h5py.File(file_path + file_name,'r+') 
     Data = f1_MAP['Data'] #Reading the data
     
+
+    nwl = len(RSPwlIdx)
     #Variables
     wl = Data['Wavelength'] #Wavelength
     if nwl == None: nwl = len(Data['Wavelength'][:]) # User could either provide the number of wavelengths (which is also index of the wl), or it will just take the number of wavelength values in the variable " Wavelength"
@@ -307,11 +309,13 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
     vzi =  np.radians(Viewing_Azimuth)
     
     Relative_Azi = (180/np.pi)*(np.arccos((np.cos((Scattering_ang *np.pi)/180)  + np.cos(sza)*np.cos(vza))/(- np.sin(sza)*np.sin(vza)) ))
+
+
     #TODO
     # Relative_Azi = Solar_Azimuth - Viewing_Azimuth
     # for i in range (len(Relative_Azi)): 
     #     if Relative_Azi[i]<0 : Relative_Azi[i] =  Relative_Azi[i]+360
-    RSP_wlf = [410, 470, 555, 670, 865] #wl as in the file name of response functions
+    # RSP_wlf = [410, 470, 555, 670, 865] #wl as in the file name of response functions
     
     # CorFac1 = np.ones((np.sum(Angfilter),nwl))
     # CorFac2 = np.ones((np.sum(Angfilter),nwl))
@@ -344,9 +348,13 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
             
     # corrFac = (CorFac1+CorFac2)/np.nanmax(CorFac1+CorFac2) #Noramalized correction factore
 
-    I1 = (checkFillVals(Data['Intensity_1'][PixNo,anglesIdx,:nwl]  , negative_check =True))# / corrFac telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
+    I1 = (checkFillVals(Data['Intensity_1'][PixNo,anglesIdx,:]  , negative_check =True))# / corrFac telescope 1 Normalized intensity (unitless)#there are some negative intesity values in the file
+
+    I1 = I1[:, RSPwlIdx]
     # I1 = I1/CorFac2
-    I2 = (checkFillVals(Data['Intensity_2'][PixNo,anglesIdx,:nwl]  ,negative_check =True))# #telescope 2
+    I2 = (checkFillVals(Data['Intensity_2'][PixNo,anglesIdx,:]  ,negative_check =True))# #telescope 2
+
+    I2 = I2[:, RSPwlIdx]
     # I2 = I2/CorFac2
     # Q and U in scattering plane 
 
@@ -354,15 +362,20 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
    
     #Creating rslt dictionary for GRASP
     rslt ={}
-    rslt['lambda'] = Data['Wavelength'][:nwl]/1000 # Wavelengths in um
+    rslt['lambda'] = Data['Wavelength'][RSPwlIdx]/1000 # Wavelengths in um
     rslt['longitude'] = Lon
     rslt['latitude'] = Lat
-    rslt['meas_I'] = (I1+I2)/2  
+    rslt['meas_I'] = (I1+I2)/2 
+
 
     '''This should be changed  '''
 
     # rslt['meas_P'] = rslt['meas_I'] *checkFillVals(Data['DoLP'][PixNo,ang1:ang2,:nwl]  ,negative_check =True)/100
-    rslt['meas_P'] = checkFillVals(Data['DoLP'][PixNo,anglesIdx,:nwl]  ,negative_check =True)/100    #relative value P/I
+    
+    DoLP_p= checkFillVals(Data['DoLP'][PixNo,anglesIdx,:]  ,negative_check =True)/100    #relative value P/I
+    rslt['meas_P']  = DoLP_p[:,RSPwlIdx]
+
+
     #converting modified julian date to julain date and then to gregorian
     jdv = f1_MAP['Geometry']['Measurement_Time'][TelNo,PixNo,0]+ 2400000.5  #Taking the time stamp for first angle
     
@@ -387,7 +400,9 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, nwl,GasAbsF
         rslt['OBS_hght'] = 0
         print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
     
-    rslt['gaspar'] =Gaspar_MAP(wl,rslt['OBS_hght']/1000,GasAbsFn,SpecResFnPath)[:nwl]
+    gasAbsorption = Gaspar_MAP(wl,rslt['OBS_hght']/1000,GasAbsFn,SpecResFnPath)[:]
+    rslt['gaspar'] = gasAbsorption[RSPwlIdx]
+    
     print(rslt['gaspar'])
     f1_MAP.close()
     return rslt
