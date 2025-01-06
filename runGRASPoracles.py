@@ -24,6 +24,7 @@ import matplotlib.patches as mpatches
 from matplotlib.ticker import ScalarFormatter
 from scipy.interpolate import interp1d
 import re
+from itertools import cycle
 
 
 
@@ -83,7 +84,7 @@ HSRLfile_path = "/home/gregmi/ORACLES/HSRL" #Path to the ORACLE data file
 HSRLfile_name =  "/HSRL2_P3_20180922_R2.h5" #Name of the ORACLES file
 RSP_PixNo = 13201
 TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
-nwl = [0,1,2,3,4,5,6] # first  nwl wavelengths
+nwl = [0,1,2,3,4,6,8] # first  nwl wavelengths
 ang1 = 10
 ang2 = 120 # :ang angles  #Remove
 
@@ -142,12 +143,17 @@ SphHSRL =[]
 TAMUHSRL =[]
 PixIndx =[]
 
+nwlIdx = [0,1,2,3,4,6,8] #Index of the waveleg\nghts to be used in the retrieval
 
-for i in range(1):
+DiffWlSph = {}
+DiffWlHex = {}
+
+for i in range(3):
 
     RSP_PixNo = RSP_PixNo +1
     TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
-    nwl = 7 # first  nwl wavelengths
+    RSPwlIdx = nwlIdx[:i+5] # first  nwl wavelengths
+    # RSPwlIdx = nwlIdx[:i+5] # first  nwl wavelengths
     # ang1 = 20
     # ang2 = 100 # :ang angles  #Remove
 
@@ -171,11 +177,15 @@ for i in range(1):
 #     RSP only retrieval
  
 # # # # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
-    rslts_Sph = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
-#     # rslts_Sph2 = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
-    rslts_Tamu = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=3)
-#     # # rslts_Tamu2 = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
-    RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT)
+    rslts_Sph = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,RSPwlIdx,GasAbsFn,ModeNo=3)
+
+    DiffWlSph[f'sph_{len(RSPwlIdx)}'] = rslts_Sph
+    # rslts_Sph2 = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
+    rslts_Tamu = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,RSPwlIdx,GasAbsFn,ModeNo=3)
+
+    DiffWlHex[f'hex_{len(RSPwlIdx)}'] = rslts_Tamu
+    # # rslts_Tamu2 = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,nwl,GasAbsFn,ModeNo=2)
+    # RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT)
    
 
 # # # #     # SphRSP.append(rslts_Sph)
@@ -3052,7 +3062,157 @@ def Interpolate(HSRLRslt, RSPwl, NoMode = None):
     return RSPn, RSPk
 
 
-        
-def UpdateRSPfromHSRL():
 
 
+
+
+def plot_retrievals_by_mode(DiffWlSph, DiffWlHex, UNCERT, save_path="retrievals_by_mode.png"):
+    """
+    Plots retrievals by mode, organizing subplots by rows for retrievals and columns for modes.
+
+    Parameters:
+        DiffWlSph (dict): A dictionary containing spheroid datasets with retrieval information.
+        DiffWlHex (dict): A dictionary containing hexagonal datasets with retrieval information.
+        UNCERT (dict): A dictionary containing uncertainty values for each retrieval type.
+        save_path (str): Path to save the generated plot.
+    """
+    # from matplotlib.cm import tab20
+    # from matplotlib.colors import to_hex
+
+    # Define mode-specific colors and retrievals
+    mode_colors = ['#FF5733', '#33FF57', '#3357FF']  # Consistent for modes (columns)
+    linestyles = ['-', '-', '-']
+    mode_labels = ["Fine", "Dust", "Marine"]
+    retrievals = ['dVdlnr', 'aodMode', 'ssaMode', 'n', 'k']
+
+    # Generate unique colors for each key
+
+
+    spheroid_colors = ['#8097DC','#00008B', '#808080']
+    hex_colors =['#e0b766', '#FF8D64', '#7c2905']
+    # spheroid_colors = [to_hex(tab20(i)) for i in range(len(DiffWlSph))]
+    # hex_colors = [to_hex(tab20(i + len(DiffWlSph))) for i in range(len(DiffWlHex))]
+
+    # Plot settings
+    plt.rcParams['font.size'] = 26
+    plt.rcParams["figure.autolayout"] = True
+
+    keysSph = np.array(list(DiffWlSph.keys()))
+    keysHex = np.array(list(DiffWlHex.keys()))
+
+    # Create subplots with rows as retrievals and columns as modes
+    num_retrievals = len(retrievals)
+    num_modes = len(mode_labels)  # Assuming 3 modes: fine, dust, marine
+    fig, axs = plt.subplots(nrows=num_retrievals + 1, ncols=num_modes, figsize=(30, 25))
+
+    # Iterate through datasets
+    for rep in range(len(keysSph)):  # Iterate through all spheroid keys
+        spheroid_data = DiffWlSph[keysSph[rep]][0]
+        hex_data = DiffWlHex[keysHex[rep]][0]
+        num_modes_data = spheroid_data['r'].shape[0]
+        mode_labels_data = mode_labels[:num_modes_data]
+        spheroid_color = spheroid_colors[rep]
+        hex_color = hex_colors[rep]
+
+        linestyle_cycle = cycle(linestyles)
+
+        lambda_ticks = np.round(spheroid_data['lambda'], decimals=2)
+        lambda_ticks_str = lambda_ticks.astype(str)
+
+        for i, retrieval in enumerate(retrievals):  # Loop through retrievals (rows)
+            for mode in range(num_modes_data):  # Loop through modes (columns)
+                ax = axs[i, mode]  # Get subplot corresponding to retrieval and mode
+                mode_color = mode_colors[mode]
+
+                # Plot spheroid data
+                if retrieval == 'dVdlnr':  # Special handling for dVdlnr
+                    ax.plot(
+                        spheroid_data['r'][mode],
+                        spheroid_data[retrieval][mode],
+                        
+                        color=spheroid_color,
+                        lw=6,
+                        ls='-',
+                        label=f"{keysSph[rep]}"
+                    )
+                    ax.set_xscale("log")
+                else:  # Other retrievals
+                    ax.errorbar(
+                        lambda_ticks_str,
+                        spheroid_data[retrieval][mode],
+                        yerr=UNCERT.get(retrieval, 0), marker="$0$",
+                        markersize=20,
+                       
+                        color=spheroid_color,
+                        lw=6,
+                        ls='-',
+                        label=f"{keysSph[rep]}"
+                    )
+
+                # Plot hexagonal data
+                if retrieval == 'dVdlnr':
+                    ax.plot(
+                        hex_data['r'][mode],
+                        hex_data[retrieval][mode],
+                       
+                        color=hex_color,
+                        lw=5,
+                        ls='-',
+                        label=f"{keysHex[rep]}"
+                    )
+                else:
+                    ax.errorbar(
+                        lambda_ticks_str,
+                        hex_data[retrieval][mode],
+                        yerr=UNCERT.get(retrieval, 0),
+                        marker="D",
+                        markersize=15,
+                        
+                        color=hex_color,
+                       
+                        lw=5,
+                        ls='-',
+                        label=f"{keysHex[rep]}"
+                    )
+
+                # Set labels and titles
+                if i == 0:
+                    ax.set_title(f"{mode_labels_data[mode]} Mode", fontsize=28)
+                if mode == 0:
+                    ax.set_ylabel(retrieval, fontsize=24)
+                ax.set_xlabel("Radius (r) [μm]" if retrieval == 'dVdlnr' else r'$\lambda$ [μm]')
+                # ax.grid(True)
+
+        # Plot total AOD (last row, all modes)
+        for mode in range(num_modes_data):
+            axs[-1, mode].errorbar(
+                lambda_ticks_str,
+                spheroid_data['aod'],
+                yerr=0.03 + UNCERT['aod'] * spheroid_data['aod'],
+                marker="o",
+                color=spheroid_color,
+                lw=5,
+                label=f"{keysSph[rep]}"
+            )
+            axs[-1, mode].errorbar(
+                lambda_ticks_str,
+                hex_data['aod'],
+                yerr=0.03 + UNCERT['aod'] * hex_data['aod'],
+                marker="$H$",
+                color=hex_color,
+                lw=5,
+                label=f"{keysHex[rep]}"
+            )
+        axs[-1, 0].legend()
+
+    # Overall title and layout adjustment
+    fig.suptitle("Spheroid vs Hexahedral Data Retrievals by Mode", fontsize=32)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+    # Save the figure
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    fig.savefig(save_path, dpi=400)
+    plt.show()
+
+# Example usage:
+plot_retrievals_by_mode(DiffWlSph, DiffWlHex, UNCERT, save_path="path/to/figure_modes.png")
