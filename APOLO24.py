@@ -138,8 +138,8 @@ RSP_plot(rslts_Sph,rslts_Tamu,RSP_PixNo,UNCERT)
 
 
 #.....................................................................................
-#Running GRASP for HSRL for two shape models
-#.....................................................................................
+# #Running GRASP for HSRL for two shape models
+# #.....................................................................................
 
 
 
@@ -192,10 +192,21 @@ def Interpolate(Inst1Retrievals, Inst2wl, NoMode = None, Plot=False, Inst1name =
 
     for mode in range(len(Instru1n)): #loop for each mode
         
-        fn = interp1d( Inst1Lwl,Instru1n[mode], kind='linear',fill_value="extrapolate")
-        fk = interp1d( Inst1Lwl,Instru1k[mode], kind='linear',fill_value="extrapolate")
+        fn = interp1d( Inst1Lwl,Instru1n[mode], kind='',fill_value="extrapolate")
+        # fk = interp1d( Inst1Lwl,Instru1k[mode], kind='linear',fill_value="extrapolate")
+        
+        # fn = interp1d( Inst1Lwl,Instru1n[mode], kind='cubic',fill_value="extrapolate")
+        fk = interp1d( Inst1Lwl,Instru1k[mode], kind='quadratic',fill_value="extrapolate")
+        
+        
         Instru2n[mode] = fn(Inst2wl)
+
+        
+
         Instru2k[mode] = fk(Inst2wl)
+        Instru2k[mode][np.where(Instru2k[mode]) < 0 ][0] = 1e-8
+
+
     
     if Plot == True:
         fig,ax = plt.subplots(2,3, figsize = (10,5) )
@@ -214,6 +225,9 @@ def Interpolate(Inst1Retrievals, Inst2wl, NoMode = None, Plot=False, Inst1name =
         
 
     IntpDict['n'] = Instru2n
+    # Instru2n[np.where(Instru2n>1.68)] == 1.68
+    # Instru2n[np.where(Instru2n<1.33)] == 1.33
+
     IntpDict['k'] = Instru2k
 
     #Create a new dictinoary with the interpoated values. 
@@ -226,7 +240,7 @@ def Interpolate(Inst1Retrievals, Inst2wl, NoMode = None, Plot=False, Inst1name =
     DictIntru2['rv'] = Inst1Retrievals['rv']
     DictIntru2['sigma'] = Inst1Retrievals['sigma']
     # DictIntru2['vol'] = Inst1Retrievals['vol']
-    DictIntru2['sph'] = Inst1Retrievals['sph']
+    # DictIntru2['sph'] = Inst1Retrievals['sph']
 
 
 
@@ -252,7 +266,7 @@ rslt_HSRL1 = Read_Data_HSRL_Oracles_Height(HSRLfile_path,HSRLfile_name,HSRLPixNo
 
 
 
-fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_ORACLE_NohgtConst.yml'
+fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_POLAR_3modes_Shape_Hex_Case2.yml'
 ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
 
 krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
@@ -260,7 +274,7 @@ binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
 
 
 #Updated ymal Path is the name of the file that will contsin the new updated yaml 
-UpdatedymlPath = UpdatedymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
+UpdatedymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
 
 
 
@@ -281,6 +295,11 @@ def update_HSRLyaml(UpdatedymlPath, YamlFileName: str, noMod: int, Kernel_type: 
 
 Allrslt = {} #This will store all the GRASP results for 5%, Strictly constrained case. 
 
+Allrslt['RSPonlySph'] = rslts_Sph[0]
+Allrslt['RSPonlyHex'] = rslts_Tamu[0]
+
+Allrslt['HSRLonlySph'] = HSRL_sphrodT[0][0]
+Allrslt['HSRLonlyHex'] = HSRL_TamuT[0][0]
 
 
 Up1 = update_HSRLyaml(UpdatedymlPath=UpdatedymlPath , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = 'hex', NewVarDict = Updatedict_hex[1],maxr=1.05, minr=0.95,  GRASPModel = 'bck')
@@ -318,6 +337,8 @@ Allrslt['sph5'] = gr2.invRslt[0]
 
 
 #...........................................................
+
+#1% of the RSP
 #...........................................................
 
 
@@ -334,7 +355,7 @@ gr3.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath)  # Run GRASP
 # Print AOD at last wavelength
 print('AOD at %5.3f μm was %6.4f.' % (gr3.invRslt[0]['lambda'][-1], gr3.invRslt[0]['aod'][-1]))
 
-Allrslt['hexStrict'] = gr3.invRslt[0]
+Allrslt['hex1'] = gr3.invRslt[0]
 
 
 #...........................................................
@@ -353,7 +374,7 @@ gr4.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath)  # Run GRASP
 # Print AOD at last wavelength
 print('AOD at %5.3f μm was %6.4f.' % (gr4.invRslt[0]['lambda'][-1], gr4.invRslt[0]['aod'][-1]))
 
-Allrslt['sphStrict'] = gr4.invRslt[0]
+Allrslt['sph1'] = gr4.invRslt[0]
 
 
 
@@ -363,10 +384,16 @@ Allrslt['sphStrict'] = gr4.invRslt[0]
 
 #...............................................
 
-plot_HSRL(Allrslt['sph5'],Allrslt['hex5'],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =gr.invRslt[0])
-plot_HSRL(Allrslt['sphStrict'],Allrslt['hexStrict'],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =gr.invRslt[0])
+plot_HSRL(Allrslt['sph5'],Allrslt['hex5'],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =Allrslt['sph5'])
+plot_HSRL(Allrslt['sphStrict'],Allrslt['hexStrict'],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =Allrslt['sphStrict'])
 
 
+import pickle
+
+
+
+with open('APOLO24_Alldata.pickle', 'wb') as handle:
+    pickle.dump(Allrslt, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 
@@ -411,6 +438,10 @@ Allrslt['NoHgtConstsph5'] = gr.invRslt[0]
 
 
 
+with open('APOLO24_Alldata2.pickle', 'wb') as handle:
+    pickle.dump(Allrslt, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 
 #_______________________________________________________________________________________________________________________
 #_______________________________________________________________________________________________________________________
@@ -418,3 +449,53 @@ Allrslt['NoHgtConstsph5'] = gr.invRslt[0]
 #_______________________________________________________________________________________________________________________
 #_______________________________________________________________________________________________________________________
 
+Updatedict2_sph = Interpolate(Inst1Retrievals =HSRL_sphrodT[0][0], Inst1name = ' HSRL' , Inst2wl =rslts_Sph[0]['lambda'] , Inst2name = 'RSP', NoMode =3 , Plot= True)
+Updatedict2_hex = Interpolate(Inst1Retrievals =HSRL_sphrodT[0][0], Inst1name = ' HSRL' , Inst2wl =rslts_Tamu[0]['lambda'] , Inst2name = 'RSP', NoMode =3 , Plot= True)
+
+
+fwdModelYAMLpath ='/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_BCK_DoLP_POLAR_3modes_HexShape_ORACLE_case2.yml'
+ymlPath = '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/'
+
+krnlPath='/home/shared/GRASP_GSFC/src/retrieval/internal_files'
+binPathGRASP ='/home/shared/GRASP_GSFC/build_HEX_v112/bin/grasp_app'
+
+
+#Updated ymal Path is the name of the file that will contsin the new updated yaml 
+UpdatedymlPath =  '/home/gregmi/git/GSFC-Retrieval-Simulators/ACCP_ArchitectureAndCanonicalCases/settings_LIDARandPOLAR_3modes_Shape_Sph_Update.yml'
+
+
+
+Up1 = update_HSRLyaml(UpdatedymlPath=UpdatedymlPath , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = 'hex', NewVarDict = Updatedict2_hex[1],maxr=1.05, minr=0.95,  GRASPModel = 'bck')
+pix = pixel()
+pix.populateFromRslt(rslt_RSP[0], radianceNoiseFun=None, dataStage='meas', verbose=False)
+
+# Set up graspRun class, add pixel, and run GRASP
+gr1 = graspRun(pathYAML=Up1, releaseYAML=True, verbose=True)
+gr1.addPix(pix)  # Add pixel to the graspRun instance
+gr1.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath)  # Run GRASP
+
+# Print AOD at last wavelength
+print('AOD at %5.3f μm was %6.4f.' % (gr1.invRslt[0]['lambda'][-1], gr1.invRslt[0]['aod'][-1]))
+
+Allrslt['RSPhex5'] = gr1.invRslt[0]
+
+
+
+
+
+Up2= update_HSRLyaml(UpdatedymlPath=UpdatedymlPath , YamlFileName = fwdModelYAMLpath , noMod = noMod , Kernel_type = 'spheroid', NewVarDict = Updatedict2_sph[1],maxr=1.05, minr=0.95,  GRASPModel = 'bck')
+pix = pixel()
+pix.populateFromRslt(rslt_RSP[0], radianceNoiseFun=None, dataStage='meas', verbose=False)
+
+# Set up graspRun class, add pixel, and run GRASP
+gr2 = graspRun(pathYAML=Up2, releaseYAML=True, verbose=True)
+gr2.addPix(pix)  # Add pixel to the graspRun instance
+gr2.runGRASP(binPathGRASP=binPathGRASP, krnlPathGRASP=krnlPath)  # Run GRASP
+
+# Print AOD at last wavelength
+print('AOD at %5.3f μm was %6.4f.' % (gr2.invRslt[0]['lambda'][-1], gr2.invRslt[0]['aod'][-1]))
+
+Allrslt['RSPsph5'] = gr2.invRslt[0]
+
+
+#..
