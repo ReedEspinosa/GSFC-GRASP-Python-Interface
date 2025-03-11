@@ -737,15 +737,19 @@ class graspRun():
         ptrnHGNTSTD = re.compile('^[ ]*Aerosol profile standard deviation')
         ptrnAOD = re.compile('^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
         ptrnAODmode = re.compile('^[ ]*Wavelength \(um\),[ ]+AOD_Particle_mode')
-        ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
+        # ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
+        ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total Single Scattering Albedo)') #Updated for GRASPV2 Single Scattering Albedo for Particle component 1
+
         ptrnLidar = re.compile('^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
-        ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
+        # ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
+        ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+Single Scattering Albedo') #Updated for GRASPV2 Single Scattering Albedo for Particle component 1
         ptrnRRI = re.compile('^[ ]*Wavelength \(um\), REAL Ref\. Index')
         ptrnIRI = re.compile('^[ ]*Wavelength \(um\), IMAG Ref\. Index')
         ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
         i = 0
         nsd = 0
-        rngAndβextUnited = True
+        # rngAndβextUnited = True
+        rngAndβextUnited = False #Chaged to fit the 
         while i < len(contents): # loop line by line, checking each one against the patterns above
             if not ptrnLN.match(contents[i]) is None: # lognormal PSD, these fields have unique form
                 mtch = re.search('[ ]*rv \(um\):[ ]*', contents[i+1])
@@ -796,12 +800,26 @@ class graspRun():
                 for key in results[0].keys():
                     if key in results[i]: results[i][key] = np.atleast_1d(results[i][key])
         if 'aodMode' in results[0]:
+
+            # print(results[0],results[0]['aodMode'])
+
+            print(results[0]['aod'])
             Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]
             nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
             for rs in results: # seperate aerosol modes
                 rs['r'] = rs['r'].reshape(nsd,-1)
+                
+
+               
                 rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
                 for key in [k for k in ['aodMode','ssaMode','n','k'] if k in rs]:
+                    print('Line812, runGRASP, Mod for GRASPV2, nneds fixing')
+                    rs['n']= rs['n'][:nsd*Nwvlth]
+                    rs['k']= rs['k'][:nsd*Nwvlth]
+
+                    print(rs['k'].shape[-1],rs['k'] )
+
+
                     if rs[key].shape[-1] == nsd*Nwvlth:
                         rs[key] = rs[key].reshape(nsd,-1) # we double check that -1 -> Nwvlth on next line
                     assert rs[key].shape[-1]==Nwvlth, 'Length of the last dimension of %s was %d, not matching Nλ=%d' % (key, rs[key].shape[-1], Nwvlth)
@@ -1421,8 +1439,10 @@ class graspYAML():
                 for f in lSubFlds:  # loop over each field
                     orgVal = self.access('%s.%d.%s' % (fldName, m, f))
                     if orgVal is not None and len(orgVal) >= Nrepeats:
+                    #     self.access('%s.%d.%s' % (fldName, m, f), orgVal[0:Nrepeats], write2disk=False)
                         self.access('%s.%d.%s' % (fldName, m, f), orgVal[0:Nrepeats], write2disk=False)
-                    # elif orgVal is not None:
+                   
+                    # # elif orgVal is not None:
                     #     rpts = Nrepeats - len(orgVal)
                     #     if f == 'index_of_wavelength_involved' and λField:
                     #         newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
