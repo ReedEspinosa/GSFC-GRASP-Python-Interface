@@ -737,11 +737,11 @@ class graspRun():
         ptrnHGNTSTD = re.compile('^[ ]*Aerosol profile standard deviation')
         ptrnAOD = re.compile('^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
         ptrnAODmode = re.compile('^[ ]*Wavelength \(um\),[ ]+AOD_Particle_mode')
-        # ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
+        ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
         ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total Single Scattering Albedo)') #Updated for GRASPV2 Single Scattering Albedo for Particle component 1
 
         ptrnLidar = re.compile('^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
-        # ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
+        ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
         ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+Single Scattering Albedo') #Updated for GRASPV2 Single Scattering Albedo for Particle component 1
         ptrnRRI = re.compile('^[ ]*Wavelength \(um\), REAL Ref\. Index')
         ptrnIRI = re.compile('^[ ]*Wavelength \(um\), IMAG Ref\. Index')
