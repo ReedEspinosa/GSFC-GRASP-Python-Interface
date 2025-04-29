@@ -753,10 +753,10 @@ class graspRun():
         ptrnHGNT = re.compile(r'^[ ]*Aerosol profile mean height')
         ptrnHGNTSTD = re.compile(r'^[ ]*Aerosol profile standard deviation')
         ptrnAOD = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
-        ptrnAODmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+AOD_Particle_mode')
+        ptrnAODmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(AOD_Particle_mode|Extinction)')
         ptrnSSA = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
+        ptrnSSAmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(SSA_Particle_mode|Single Scattering Albedo)')
         ptrnLidar = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
-        ptrnSSAmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
         ptrnRRI = re.compile(r'^[ ]*Wavelength \(um\), REAL Ref\. Index')
         ptrnIRI = re.compile(r'^[ ]*Wavelength \(um\), IMAG Ref\. Index')
         ptrnReff = re.compile(r'^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
@@ -765,9 +765,9 @@ class graspRun():
         rngAndβextUnited = True
         while i < len(contents): # loop line by line, checking each one against the patterns above
             if not ptrnLN.match(contents[i]) is None: # lognormal PSD, these fields have unique form
-                mtch = re.search('[ ]*rv \(um\):[ ]*', contents[i+1])
+                mtch = re.search(r'[ ]*rv \(um\):[ ]*', contents[i+1])
                 rvArr = np.array(contents[i+1][mtch.end():-1].split(), dtype='float64')
-                mtch = re.search('[ ]*ln\(sigma\):[ ]*', contents[i+2])
+                mtch = re.search(r'[ ]*ln\(sigma\):[ ]*', contents[i+2])
                 sigArr = np.array(contents[i+2][mtch.end():-1].split(), dtype='float64')
                 for k in range(len(results)):
                     results[k]['rv'] = np.append(results[k]['rv'], rvArr[k]) if 'rv' in results[k] else rvArr[k]
@@ -794,17 +794,17 @@ class graspRun():
             self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
             self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
             self.parseMultiParamFld(contents, i, results, ptrnHGNTSTD, 'heightStd')
-            self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode')
+            self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode', 'lambda') # Incase lambda was not pulled in AOD above which is not given in Apr 2025 internal version of GRASP 
             self.parseMultiParamFld(contents, i, results, ptrnSSA, 'ssa')
-            self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')
             self.parseMultiParamFld(contents, i, results, ptrnSSAmode, 'ssaMode')
+            self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')
             self.parseMultiParamFld(contents, i, results, ptrnRRI, 'n')
             self.parseMultiParamFld(contents, i, results, ptrnIRI, 'k')
             i += 1
         if not results or 'lambda' not in results[0]:
             warnings.warn('Limited or no aerosol data found, returning incomplete dictionary...')
             return results
-        wavelengths = np.atleast_1d(results[0]['lambda'])
+        wavelengths = np.unique(np.atleast_1d(results[0]['lambda'])) # unique needed if lambda taken from aodMode (and repeated Nmodes times)
         if len(wavelengths)<2:
             if len(wavelengths)==0:
                 warnings.warn('No wavelengths (lambda) values found, returning incomplete dictionary...')
@@ -813,9 +813,9 @@ class graspRun():
                 for key in results[0].keys():
                     if key in results[i]: results[i][key] = np.atleast_1d(results[i][key])
         if 'aodMode' in results[0]:
-            Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]
+            Nwvlth = len(wavelengths)
             nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
-            for rs in results: # seperate aerosol modes
+            for rs in results: # separate aerosol modes
                 rs['r'] = rs['r'].reshape(nsd,-1)
                 rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
                 for key in [k for k in ['aodMode','ssaMode','n','k'] if k in rs]:
@@ -834,6 +834,8 @@ class graspRun():
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
                         rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
+                if not 'aod' in rs: rs['aod'] = rs['aodMode'].sum(axis=0) # GRASP internal lack total AOD output, build it from modes
+                if not 'ssa' in rs: rs['ssa'] = (rs['ssaMode']*rs['aodMode']).sum(axis=0)/rs['aod'] # GRASP internal lack total SSA output, build it from modes              
         if ('dVdlnr' in results[0]):
             for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
             if 'rEff' not in results[0]:
@@ -933,7 +935,7 @@ class graspRun():
             if not ptrnResid.match(contents[i]) is None: # next line is final value of the cost function
                 pixInd = 0
                 while numericLn.match(contents[i+1]):
-                    results[pixInd]['costVal'] = float(re.search('^[ ]*[0-9\.]+', contents[i+1]).group())
+                    results[pixInd]['costVal'] = float(re.search(r'^[ ]*[0-9\.]+', contents[i+1]).group())
                     if not ptrnIter.findall(contents[i+1]) is None:
                         results[pixInd]['nIter'] = int(ptrnIter.findall(contents[i+1])[0])
                         if results[pixInd]['nIter'] != 0: # not printing this if it is fwd model only
@@ -1468,7 +1470,7 @@ class graspYAML():
         prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal)
         if not prsntVal and newVal: # we were supposed to change a value but the field wasn't there
             if verbose: warnings.warn('%s not found at specified location in YAML' % fldPath)
-            mtch = re.match('retrieval.constraints.characteristic\[[0-9]+\].mode\[([0-9]+)\]', fldPath)
+            mtch = re.match(r'retrieval.constraints.characteristic\[[0-9]+\].mode\[([0-9]+)\]', fldPath)
             if mtch: # we may still be able to add the value if we append a mode
                 lastModePath = np.r_[fldPath.split('.')[0:3] + ['mode[%d]' % (int(mtch.group(1))-1)] + fldPath.split('.')[4:]]
                 if self.YAMLrecursion(self.dl, lastModePath): # this field does exist in the previous mode, we will copy it
