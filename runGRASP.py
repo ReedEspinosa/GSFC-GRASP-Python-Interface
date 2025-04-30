@@ -818,12 +818,13 @@ class graspRun():
             for rs in results: # separate aerosol modes
                 rs['r'] = rs['r'].reshape(nsd,-1)
                 rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
+                if rs['lambda'].shape[-1] == nsd*Nwvlth: rs['lambda'] = rs['lambda'][0:Nwvlth]
                 for key in [k for k in ['aodMode','ssaMode','n','k'] if k in rs]:
                     if rs[key].shape[-1] == nsd*Nwvlth:
                         rs[key] = rs[key].reshape(nsd,-1) # we double check that -1 -> Nwvlth on next line
                     assert rs[key].shape[-1]==Nwvlth, 'Length of the last dimension of %s was %d, not matching Nλ=%d' % (key, rs[key].shape[-1], Nwvlth)
                 for λflatKey in [k for k in ['n','k'] if k in rs.keys()]: # check if spectrally flat RI values used
-                    for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value
+                    for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value (Error can occur here when processing very old GRASP output with a single RI value provided for multiple modes)
                 if 'βext' in rs:
                     rs['range'] = rs['range'].reshape(nsd,-1)
                     rs['βext'] = rs['βext'].reshape(nsd,-1)
