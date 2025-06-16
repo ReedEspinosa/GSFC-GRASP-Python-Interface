@@ -708,11 +708,11 @@ class graspRun():
 
     def parseOutDateTime(self, contents):
         results = []
-        ptrnDate = re.compile('^[ ]*Date[ ]*:[ ]+')
-        ptrnTime = re.compile('^[ ]*Time[ ]*:[ ]+')
-        ptrnLon = re.compile('^[ ]*Longitude[ ]*:[ ]+')
-        ptrnLat = re.compile('^[ ]*Latitude[ ]*:[ ]+')
-        ptrnLndPrc = re.compile('^[ ]*Land percent:[ ]+')
+        ptrnDate = re.compile(r'^[ ]*Date[ ]*:[ ]+')
+        ptrnTime = re.compile(r'^[ ]*Time[ ]*:[ ]+')
+        ptrnLon = re.compile(r'^[ ]*Longitude[ ]*:[ ]+')
+        ptrnLat = re.compile(r'^[ ]*Latitude[ ]*:[ ]+')
+        ptrnLndPrc = re.compile(r'^[ ]*Land percent:[ ]+')
         for line in contents: 
             if not ptrnDate.match(line) is None: # Date
                 dtStrCln = line[ptrnDate.match(line).end():-1].split()
@@ -744,22 +744,22 @@ class graspRun():
         results = self.parseOutDateTime(contents)
         if len(results)==0:
             return []
-        ptrnPSD = re.compile('^[ ]*(Radius \(um\),)?[ ]*Size Distribution dV\/dlnr \(normalized')
-        ptrnProfile = re.compile('^[ ]*Aerosol vertical profile \[1\/m\] for Particle component [0-9]+')
-        ptrnRange = re.compile('^[ ]*Aerosol vertical profile altitudes \[m\] for Particle component [0-9]+')
-        ptrnLN = re.compile('^[ ]*Parameters of lognormal SD')
-        ptrnVol = re.compile('^[ ]*Aerosol volume concentration')
-        ptrnSPH = re.compile('^[ ]*% of spherical particles')
-        ptrnHGNT = re.compile('^[ ]*Aerosol profile mean height')
-        ptrnHGNTSTD = re.compile('^[ ]*Aerosol profile standard deviation')
-        ptrnAOD = re.compile('^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
-        ptrnAODmode = re.compile('^[ ]*Wavelength \(um\),[ ]+AOD_Particle_mode')
-        ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
-        ptrnLidar = re.compile('^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
-        ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
-        ptrnRRI = re.compile('^[ ]*Wavelength \(um\), REAL Ref\. Index')
-        ptrnIRI = re.compile('^[ ]*Wavelength \(um\), IMAG Ref\. Index')
-        ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
+        ptrnPSD = re.compile(r'^[ ]*(Radius \(um\),)?[ ]*Size Distribution dV\/dlnr \(normalized')
+        ptrnProfile = re.compile(r'^[ ]*Aerosol vertical profile \[1\/m\] for Particle component [0-9]+')
+        ptrnRange = re.compile(r'^[ ]*Aerosol vertical profile altitudes \[m\] for Particle component [0-9]+')
+        ptrnLN = re.compile(r'^[ ]*Parameters of lognormal SD')
+        ptrnVol = re.compile(r'^[ ]*Aerosol volume concentration')
+        ptrnSPH = re.compile(r'^[ ]*% of spherical particles')
+        ptrnHGNT = re.compile(r'^[ ]*Aerosol profile mean height')
+        ptrnHGNTSTD = re.compile(r'^[ ]*Aerosol profile standard deviation')
+        ptrnAOD = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
+        ptrnAODmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+AOD_Particle_mode')
+        ptrnSSA = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
+        ptrnLidar = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
+        ptrnSSAmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
+        ptrnRRI = re.compile(r'^[ ]*Wavelength \(um\), REAL Ref\. Index')
+        ptrnIRI = re.compile(r'^[ ]*Wavelength \(um\), IMAG Ref\. Index')
+        ptrnReff = re.compile(r'^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
         i = 0
         nsd = 0
         rngAndβextUnited = True
@@ -843,10 +843,10 @@ class graspRun():
 
     def parseOutSurface(self, contents, Nλ=None):
         results = self.parseOutDateTime(contents)
-        ptrnALB = re.compile('^[ ]*Wavelength \(um\),[ ]+Surface ALBEDO')
-        ptrnBRDF = re.compile('^[ ]*Wavelength \(um\),[ ]+BRDF parameters')
-        ptrnBPDF = re.compile('^[ ]*Wavelength \(um\),[ ]+BPDF parameters')
-        ptrnWater = re.compile('^[ ]*Wavelength \(um\),[ ]+Water surface parameters')
+        ptrnALB = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Surface ALBEDO')
+        ptrnBRDF = re.compile(r'^[ ]*Wavelength \(um\),[ ]+BRDF parameters')
+        ptrnBPDF = re.compile(r'^[ ]*Wavelength \(um\),[ ]+BPDF parameters')
+        ptrnWater = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Water surface parameters')
         i = 0
         while i < len(contents):
             self.parseMultiParamFld(contents, i, results, ptrnALB, 'albedo')
@@ -861,9 +861,9 @@ class graspRun():
 
     def parsePhaseMatrix(self, contents, wavelengths): # wavelengths is need here specificly b/c PM elements don't give index (only value in um)
         results = self.parseOutDateTime(contents)
-        ptrnPMall = re.compile('^[ ]*Phase Matrix[ ]*$')
-        ptrnPMfit = re.compile('^[ ]*ipix=([0-9]+)[ ]+yymmdd = [0-9]+-[0-9]+-[0-9]+[ ]+hhmmss[ ]*=[ ]*[0-9][0-9]:[0-9][0-9]:[0-9][0-9][ ]*$')
-        ptrnPMfitWave = re.compile('^[ ]*wl[ ]*=[ ]*([0-9]+.[0-9]+)[ ]+isd[ ]*=[ ]*([0-9]+)[ ]+sca')
+        ptrnPMall = re.compile(r'^[ ]*Phase Matrix[ ]*$')
+        ptrnPMfit = re.compile(r'^[ ]*ipix=([0-9]+)[ ]+yymmdd = [0-9]+-[0-9]+-[0-9]+[ ]+hhmmss[ ]*=[ ]*[0-9][0-9]:[0-9][0-9]:[0-9][0-9][ ]*$')
+        ptrnPMfitWave = re.compile(r'^[ ]*wl[ ]*=[ ]*([0-9]+.[0-9]+)[ ]+isd[ ]*=[ ]*([0-9]+)[ ]+sca')
         FITfnd = False
         Nang = 181
         skipFlds = 1 # first field is just angle number
@@ -920,11 +920,11 @@ class graspRun():
 
     def parseOutFit(self, contents, wavelengths):
         results = self.parseOutDateTime(contents)
-        ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING .*[\*]+[ ]*$')
-        ptrnPIX = re.compile('^[ ]*pixel[ ]*#[ ]*([0-9]+)[ ]*wavelength[ ]*#[ ]*([0-9]+)[ ]*([0-9\.]+)[ ]*\(um\)')
-        numericLn = re.compile('^[ ]*[0-9]+')
-        ptrnHeader = re.compile('^[ ]*#[ ]*(sza[ ]*vis|Range_\[m\][ ]*meas_)')
-        ptrnResid = re.compile('[ ]*noise[ ]*abs[ ]*rel[ ]*')
+        ptrnFIT = re.compile(r'^[ ]*[\*]+[ ]*FITTING .*[\*]+[ ]*$')
+        ptrnPIX = re.compile(r'^[ ]*pixel[ ]*#[ ]*([0-9]+)[ ]*wavelength[ ]*#[ ]*([0-9]+)[ ]*([0-9\.]+)[ ]*\(um\)')
+        numericLn = re.compile(r'^[ ]*[0-9]+')
+        ptrnHeader = re.compile(r'^[ ]*#[ ]*(sza[ ]*vis|Range_\[m\][ ]*meas_)')
+        ptrnResid = re.compile(r'[ ]*noise[ ]*abs[ ]*rel[ ]*')
         ptrnIter = re.compile(r'iteration #\s*(\d+)')
         i = 0
         skipFlds = 1 # the 1st field is just the measurement number
@@ -973,8 +973,8 @@ class graspRun():
 
     def parseMultiParamFld(self, contents, i, results, ptrn, fdlName, fldName0=False, colOffset=0, Nλ=None):
         if i<len(contents) and not ptrn.match(contents[i]) is None: # RRI by aersol size mode
-            singNumeric = re.compile('^[ ]*[0-9]+[ ]*$')
-            numericLn = re.compile('^[ ]*[0-9]+')
+            singNumeric = re.compile(r'^[ ]*[0-9]+[ ]*$')
+            numericLn = re.compile(r'^[ ]*[0-9]+')
             lastLine = i+1
             while not numericLn.match(contents[lastLine]) is None: lastLine += 1
             Nparams = 0
@@ -1477,10 +1477,14 @@ class graspYAML():
                     lastModeVal = self.YAMLrecursion(self.dl, lastModePath[0:4])
                     self.dl['retrieval']['constraints'][fldPath.split('.')[2]]['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lastModeVal)
                     prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal) # new mode exist now, write value to it
-                    if not 'mode[%d]' % int(mtch.group(1)) in self.dl['retrieval']['forward_model']['phase_matrix']['radius'].keys(): # phase_matrix radius not present from this mode
-                        lstModeRadius = self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]' % (int(mtch.group(1))-1)] # we copy it from previous mode
+                    if 'particles' in self.dl['retrieval']['forward_model'].keys():  # GRASP internal
+                      radiusDict = self.dl['retrieval']['forward_model']['particles']['phase_matrix']['radius']
+                    else: # GRASP v1.1.6 or earlier 
+                      radiusDict = self.dl['retrieval']['forward_model']['phase_matrix']['radius']
+                    if not 'mode[%d]' % int(mtch.group(1)) in radiusDict.keys(): # phase_matrix radius not present from this mode
+                        lstModeRadius = radiusDict['mode[%d]' % (int(mtch.group(1))-1)] # we copy it from previous mode
                         # needs to modify this to change the r_min and r_max limits
-                        self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lstModeRadius)
+                        radiusDict['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lstModeRadius)
                     # Change the maximum iteration before stopping the retrieval, and LM fit
                     # HACK: this is a hack to change the maximum iteration for the retrieval
                     # FIXME: this needs to be generalized, by having an input in the casestr or ina canonical casemap file
