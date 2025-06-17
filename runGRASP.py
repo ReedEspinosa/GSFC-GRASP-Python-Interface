@@ -1189,30 +1189,42 @@ class pixel():
             if msTypInd.size>0: # there are measurements at this wavelength
                 measValsInd = self.addMeas(lVal)
                 msDct = self.measVals[measValsInd] # cleaner syntax (lists and dicts are mutable so changes to msDct['key'] persist in self.measVals)
-                msDct['meas_type'] = [msTypMap[mt] for mt in msTyps[msTypInd]] # this is numberic key for measurements avaiable at current λ
-                msTypsNowSorted = msTyps[msTypInd[np.argsort(msDct['meas_type'])]] # need msType names at this λ, sorted by above numeric measurement type keys
-                msDct['nbvm'] = [len(rslt[keyPtrn % mt][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
+                msDct['meas_type'] = [msTypMap[mt] for mt in msTyps[msTypInd]]
+                msTypsNowSorted = msTyps[msTypInd[np.argsort(msDct['meas_type'])]]
                 msDct['meas_type'] = np.sort(msDct['meas_type'])
                 msDct['nip'] = len(msDct['meas_type'])
-                
-                if np.all(msDct['meas_type'] < 40): # lidar data
-                    msDct['sza'] = 0.01 # we assume vertical lidar
-                    msDct['thetav'] = rslt['RangeLidar'][:,l]
-                    msDct['phi'] = np.repeat(0, len(msDct['thetav']))
-                elif np.all(msDct['meas_type'] > 40): # polarimeter data
-                    msDct['sza'] = rslt['sza'][0,l] # GRASP/rslt dictionary return seperate SZA for every view, even though SDATA doesn't support it
-                    msDct['thetav'] = rslt['vis'][:,l]
-                    msDct['phi'] = rslt['fis'][:,l]
-                    if radianceNoiseFun: msDct['errorModel'] = radianceNoiseFun
-                else:
-                    assert False, 'Both polarimeter and lidar data at the same wavelength is not supported.'
-                if msDct['errorModel'] is not None:
+
+                # Create a boolean mask of all valid measurements at this wavelength
+                valid_mask = np.concatenate([~np.isnan(rslt[keyPtrn % mt][:,l]) for mt in msTypsNowSorted])
+
+                # Determine geometry type
+                isLidar = np.all(msDct['meas_type'] < 40)
+                isPolarimeter = np.all(msDct['meas_type'] > 40)
+                assert not (isLidar and isPolarimeter), 'Both polarimeter and lidar data at the same wavelength is not supported.'
+
+                # Set geometry and filter it with the valid_mask
+                if isLidar:
+                    msDct['sza'] = 0.01
+                    msDct['thetav'] = np.concatenate([rslt['RangeLidar'][:,l] for mt in msTypsNowSorted])[valid_mask]
+                    msDct['phi'] = np.concatenate([np.repeat(0, len(rslt['RangeLidar'][:,l])) for mt in msTypsNowSorted])[valid_mask]
+                elif isPolarimeter:
+                    msDct['sza'] = rslt['sza'][0,l]
+                    msDct['thetav'] = np.concatenate([rslt['vis'][:,l] for mt in msTypsNowSorted])[valid_mask]
+                    msDct['phi'] = np.concatenate([rslt['fis'][:,l] for mt in msTypsNowSorted])[valid_mask]
+
+                # Generate measurements (with noise if applicable) and then filter with the mask
+                if radianceNoiseFun:
+                    msDct['errorModel'] = radianceNoiseFun
                     try:
-                        msDct['measurements'] = msDct['errorModel'](l, rslt, verbose=verbose)
+                        measurements_with_nans = msDct['errorModel'](l, rslt, verbose=verbose)
                     except TypeError:
-                        msDct['measurements'] = msDct['errorModel'](l, rslt)
+                        measurements_with_nans = msDct['errorModel'](l, rslt)
+                    msDct['measurements'] = measurements_with_nans[valid_mask]
                 else:
-                    msDct['measurements'] = np.reshape([rslt[keyPtrn % mt][:,l] for mt in msTypsNowSorted], -1)
+                    measurements_with_nans = np.concatenate([rslt[keyPtrn % mt][:,l] for mt in msTypsNowSorted])
+                    msDct['measurements'] = measurements_with_nans[valid_mask]
+
+                msDct['nbvm'] = [np.sum(~np.isnan(rslt[keyPtrn % mt][:,l])) for mt in msTypsNowSorted]
                 msDct = self.formatMeas(msDct) # this will tile the above msTyp times
         # add pixel metadata
         if 'datetime' in rslt: self.dtObj = rslt['datetime']
@@ -1221,7 +1233,7 @@ class pixel():
         if 'land_prct' in rslt: self.set_land_prct(rslt['land_prct'])
         if 'masl' in rslt: self.masl = rslt['masl']
         if 'OBS_hght' in rslt: self.obsHght = rslt['OBS_hght'] # rslt['OBS_hght'] should be in meters (not km)!
-        
+
 
     def formatMeas(self, newMeas, lowThresh=1e-10):
         frmtMsg = '\n\
