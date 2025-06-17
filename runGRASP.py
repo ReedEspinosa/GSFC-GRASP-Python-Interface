@@ -436,7 +436,7 @@ class graspRun():
     def _printError(self):
         print('>>> GRASP SAYS:')
         for line in iter(self.pObj.stdout.readline, b''):
-            errMtch = re.match('^ERROR:.*$', line.decode("utf-8"))
+            errMtch = re.match(r'^ERROR:.*$', line.decode("utf-8"))
             if errMtch is not None: print(errMtch.group(0))
 
     def readOutput(self, customOUT=None): # customOUT is full path of unrelated output file to read
@@ -765,9 +765,9 @@ class graspRun():
         rngAndβextUnited = True
         while i < len(contents): # loop line by line, checking each one against the patterns above
             if not ptrnLN.match(contents[i]) is None: # lognormal PSD, these fields have unique form
-                mtch = re.search('[ ]*rv \(um\):[ ]*', contents[i+1])
+                mtch = re.search(r'[ ]*rv \(um\):[ ]*', contents[i+1])
                 rvArr = np.array(contents[i+1][mtch.end():-1].split(), dtype='float64')
-                mtch = re.search('[ ]*ln\(sigma\):[ ]*', contents[i+2])
+                mtch = re.search(r'[ ]*ln\(sigma\):[ ]*', contents[i+2])
                 sigArr = np.array(contents[i+2][mtch.end():-1].split(), dtype='float64')
                 for k in range(len(results)):
                     results[k]['rv'] = np.append(results[k]['rv'], rvArr[k]) if 'rv' in results[k] else rvArr[k]
@@ -933,7 +933,7 @@ class graspRun():
             if not ptrnResid.match(contents[i]) is None: # next line is final value of the cost function
                 pixInd = 0
                 while numericLn.match(contents[i+1]):
-                    results[pixInd]['costVal'] = float(re.search('^[ ]*[0-9\.]+', contents[i+1]).group())
+                    results[pixInd]['costVal'] = float(re.search(r'^[ ]*[0-9\.]+', contents[i+1]).group())
                     if not ptrnIter.findall(contents[i+1]) is None:
                         results[pixInd]['nIter'] = int(ptrnIter.findall(contents[i+1])[0])
                         if results[pixInd]['nIter'] != 0: # not printing this if it is fwd model only
@@ -1480,7 +1480,7 @@ class graspYAML():
         prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal)
         if not prsntVal and newVal: # we were supposed to change a value but the field wasn't there
             if verbose: warnings.warn('%s not found at specified location in YAML' % fldPath)
-            mtch = re.match('retrieval.constraints.characteristic\[[0-9]+\].mode\[([0-9]+)\]', fldPath)
+            mtch = re.match(r'retrieval.constraints.characteristic\[[0-9]+\].mode\[([0-9]+)\]', fldPath)
             if mtch: # we may still be able to add the value if we append a mode
                 lastModePath = np.r_[fldPath.split('.')[0:3] + ['mode[%d]' % (int(mtch.group(1))-1)] + fldPath.split('.')[4:]]
                 if self.YAMLrecursion(self.dl, lastModePath): # this field does exist in the previous mode, we will copy it
