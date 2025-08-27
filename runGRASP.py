@@ -764,7 +764,7 @@ class graspRun():
         ptrnHGNT = re.compile(r'^[ ]*Aerosol profile mean height')
         ptrnHGNTSTD = re.compile(r'^[ ]*Aerosol profile standard deviation')
         ptrnAOD = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
-        ptrnAODmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+AOD_Particle_mode')
+        ptrnAODmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(AOD_Particle_mode|Extinction \(Particle Optical Depth\))')
         ptrnSSA = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
         ptrnLidar = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
         ptrnSSAmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
@@ -793,9 +793,10 @@ class graspRun():
             if rngAndβextUnited:
                 try: # sometimes GRASP adds range column before extinction profile (if not this expects one more column than is present, producing an index error)
                     self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
-                except (IndexError, AssertionError): # but other times range is a separate field... no obvious rhyme or reason
-                    del results[0]['βext'] # we should have crashed while setting βext in the first pixel, no need to delete key in others
-                    for rd in results: del rd['range'] # range should have been set in every pixel before the crash
+                except (IndexError, AssertionError): # but other times range is a separate field... no obvious rhyme or reason                  
+                    for rd in results: 
+                      if 'βext' in rd: del rd['βext'] # we should have crashed while setting βext in the first pixel, no need to delete key in others  
+                      if 'range' in rd: del rd['range'] # range should have been set in every pixel before the crash
                     i -= 1 # we need to parse this line again, using the correct arguments for parseMultiParamFld (below)
                     rngAndβextUnited = False # we fixed the issues, and we now know better than to try again
             else:
@@ -805,7 +806,7 @@ class graspRun():
             self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
             self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
             self.parseMultiParamFld(contents, i, results, ptrnHGNTSTD, 'heightStd')
-            self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode')
+            self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode','lambda')
             self.parseMultiParamFld(contents, i, results, ptrnSSA, 'ssa')
             self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')
             self.parseMultiParamFld(contents, i, results, ptrnSSAmode, 'ssaMode')
@@ -815,17 +816,15 @@ class graspRun():
         if not results or 'lambda' not in results[0]:
             warnings.warn('Limited or no aerosol data found, returning incomplete dictionary...')
             return results
-        wavelengths = np.atleast_1d(results[0]['lambda'])
-        if len(wavelengths)<2:
-            if len(wavelengths)==0:
-                warnings.warn('No wavelengths (lambda) values found, returning incomplete dictionary...')
-                return results
+        for rs in results: rs['lambda'] = np.unique(rs['lambda']) # Lambda may have been added for total AOD and/or each mode's AOD
+        if len(results[0]['lambda'])<2:
             for i in range(len(results)): # we need to convert aod, ssa, etc. from scalars to numpy arrays
                 for key in results[0].keys():
                     if key in results[i]: results[i][key] = np.atleast_1d(results[i][key])
         if 'aodMode' in results[0]:
-            Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]
+            Nwvlth = results[0]['lambda'].shape[0]
             nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
+            assert (nsd*Nwvlth)==results[0]['aodMode'].shape[0], "NSD*Nlambda≠len(aodMode)"
             for rs in results: # seperate aerosol modes
                 rs['r'] = rs['r'].reshape(nsd,-1)
                 rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
@@ -850,6 +849,7 @@ class graspRun():
             if 'rEff' not in results[0]:
                 rEffs = mf.integratePSD(results, moment='rEff')
                 for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
+        wavelengths = np.atleast_1d(results[0]['lambda'])
         return results, wavelengths
 
     def parseOutSurface(self, contents, Nλ=None):
