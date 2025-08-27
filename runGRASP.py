@@ -421,6 +421,17 @@ class graspRun():
             if np.greater(Nbins,0).any(): # we have lidar data
                 assert np.all([Nbins[0]==bn for bn in Nbins]), 'Expected same number of vertical bins at every λ, instead found '+str(Nbins)
                 self.yamlObj.adjustVertBins(Nbins[0])
+            
+            # Adjust noise types to match the measurement types in the SDATA file
+            all_measurement_types = []
+            for px in self.pixels:
+                for mv in px.measVals:
+                    all_measurement_types.extend(mv['meas_type'])
+            unique_measurement_types = list(set(all_measurement_types))
+            self.yamlObj.adjustNoiseTypes(unique_measurement_types)
+            
+            # Adjust surface characteristics based on measurement types
+            self.yamlObj.adjustSurfaceCharacteristics(unique_measurement_types)
         if krnlPathGRASP: self.yamlObj.access('path_to_internal_files', krnlPathGRASP)
         self.pObj = Popen([binPathGRASP, self.yamlObj.YAMLpath], stdout=PIPE)
         if not parallel:
@@ -1460,6 +1471,145 @@ class graspYAML():
                     else: # orgVal is None 
                         assert f=='a_priori_estimates.lagrange_multiplier', '%s not found in %s (it is mandatory)' % (f,fldName)
             m += 1
+
+    def adjustNoiseTypes(self, measurement_types):
+        """
+        Adjust YAML noise configurations to match the provided measurement types.
+        
+        Args:
+            measurement_types (list): List of measurement type integers (e.g., [31, 35] for LS and DP)
+        
+        This method will:
+        1. Remove noise entries that don't correspond to any measurement type in the list
+        2. Renumber the remaining noise entries sequentially
+        3. Throw an error if a measurement type is missing from the YAML
+        """
+        self.loadYAML()
+        
+        # Get current noise configurations
+        noises = self.dl['retrieval']['inversion'].get('noises', None)
+        if not noises:
+            # Forward YAML files might not have noise configurations
+            return
+        
+        # Check for empty measurement types list
+        if not measurement_types:
+            raise ValueError("Measurement types list cannot be empty")
+        
+        # Create a mapping of measurement types to noise entries
+        noise_to_measurement_types = {}
+        
+        # Handle both list and dict structures
+        if isinstance(noises, list):
+            noise_items = [(f"noise[{i+1}]", noise) for i, noise in enumerate(noises)]
+        elif isinstance(noises, dict):
+            noise_items = list(noises.items())
+        else:
+            raise ValueError(f"Unexpected noises structure type: {type(noises)}")
+        
+        for noise_key, noise in noise_items:
+            measurement_types_in_noise = []
+            
+            # Extract measurement types from this noise entry
+            m = 1
+            while f"measurement_type[{m}]" in noise:
+                meas_type_entry = noise[f"measurement_type[{m}]"]
+                if "type" in meas_type_entry:
+                    meas_type = meas_type_entry["type"]
+                    # Convert measurement type string to integer
+                    type_mapping = {
+                        'I': 41, 'Q': 42, 'U': 43,  # Polarization
+                        'LS': 31, 'VEXT': 36, 'VBS': 39,  # Lidar
+                        'DP': 35  # Depolarization
+                    }
+                    if meas_type in type_mapping:
+                        measurement_types_in_noise.append(type_mapping[meas_type])
+                m += 1
+            
+            noise_to_measurement_types[noise_key] = measurement_types_in_noise
+        
+        # Find which noise entries to keep
+        noise_entries_to_keep = []
+        for noise_key, noise_meas_types in noise_to_measurement_types.items():
+            # Keep noise entry if any of its measurement types are in the required list
+            if any(meas_type in measurement_types for meas_type in noise_meas_types):
+                noise_entries_to_keep.append(noise_key)
+        
+        # Check if all required measurement types are covered
+        all_covered_types = []
+        for noise_key in noise_entries_to_keep:
+            all_covered_types.extend(noise_to_measurement_types[noise_key])
+        
+        missing_types = [t for t in measurement_types if t not in all_covered_types]
+        if missing_types:
+            raise ValueError(f"Measurement types {missing_types} are not covered by any noise configuration in the YAML file")
+        
+        # Remove unwanted noise entries and renumber
+        new_noises = {}
+        for i, noise_key in enumerate(noise_entries_to_keep):
+            old_noise = noises[noise_key]  # Get the noise entry by key
+            new_noise = copy.deepcopy(old_noise)
+            new_noises[f"noise[{i+1}]"] = new_noise
+        
+        # Update the YAML structure
+        self.dl['retrieval']['inversion']['noises'] = new_noises
+        
+        # Write changes to disk
+        self.writeYAML()
+
+    def adjustSurfaceCharacteristics(self, measurement_types):
+        """
+        Adjust YAML surface characteristics based on measurement types.
+        
+        Args:
+            measurement_types (list): List of measurement type integers (e.g., [31, 35] for LS and DP)
+        
+        This method will:
+        1. Check if all measurement types are lidar types (30-39)
+        2. If so, remove surface characteristics (surface_land_* and surface_water_*)
+        3. Renumber the remaining characteristics sequentially
+        """
+        self.loadYAML()
+        
+        # Check if all measurement types are lidar types (30-39)
+        all_lidar = all(30 <= mt <= 39 for mt in measurement_types)
+        
+        if not all_lidar:
+            # Not all measurements are lidar, keep surface characteristics
+            return
+        
+        # Get current characteristics
+        constraints = self.dl['retrieval']['constraints']
+        if not constraints:
+            return
+        
+        # Identify surface characteristics to remove
+        surface_characteristics = []
+        remaining_characteristics = []
+        
+        for char_key, char_data in constraints.items():
+            char_type = char_data.get('type', '')
+            if (char_type.startswith('surface_land_') or 
+                char_type.startswith('surface_water_')):
+                surface_characteristics.append(char_key)
+            else:
+                remaining_characteristics.append(char_key)
+        
+        if not surface_characteristics:
+            # No surface characteristics to remove
+            return
+        
+        # Remove surface characteristics and renumber
+        new_constraints = {}
+        for i, char_key in enumerate(remaining_characteristics, 1):
+            new_key = f"characteristic[{i}]"
+            new_constraints[new_key] = constraints[char_key]
+        
+        # Update the YAML structure
+        self.dl['retrieval']['constraints'] = new_constraints
+        
+        # Write changes to disk
+        self.writeYAML()
 
     def adjustVertBins(self, Nbins):
         self._repeatElementsInField(fldName='vertical_profile_normalized', Nrepeats=Nbins)
