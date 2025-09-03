@@ -174,6 +174,8 @@ def PltGRASPoutput(RsltDict1, RsltDict2,file_name,PixNo,nkernel=1):
 
 
 def PltGRASPoutput(RsltDict1, RsltDict2,file_name,PixNo,nkernel=1):
+    
+
     plt.rcParams['font.size'] = '14.5'
     Spheriod = RsltDict1[0]
     Hex= RsltDict2[0]
@@ -203,6 +205,8 @@ def PltGRASPoutput(RsltDict1, RsltDict2,file_name,PixNo,nkernel=1):
 
     #Retrivals:
     fig, axs = plt.subplots(nrows= 5, ncols=1, figsize=(8, 25))
+
+
     for i in range(len(Retrival)):
         for mode in range(Spheriod['r'].shape[0]): #for each modes
             if i ==0:

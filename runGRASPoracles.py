@@ -68,20 +68,22 @@ from itertools import cycle
 
 
 
-# # # ###Case 4: 24th Sept 2018, ORACLES
-# file_path = '/home/gregmi/ORACLES/Sept24/'
-# file_name ='RSP1-P3_L1C-RSPCOL-CollocatedRadiances_20180924T090316Z_V003-20210421T233034Z.h5'
-# HSRLfile_path = '/home/gregmi/ORACLES/Sept24/'
-# HSRLfile_name =  "HSRL2_P3_20180924_R2.h5"
-# RSP_PixNo = 382
-# TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
-# nwl = 5 # first  nwl wavelengths
-# ang1 = 10
-# ang2 = 135
+# # ###Case 4: 24th Sept 2018, ORACLES
+file_path = "/data/home/gregmi/Data/ORACLES/RSP/" 
+file_name = 'RSP1-P3_L1C-RSPCOL-CollocatedRadiances_20180924T090316Z_V003-20210421T233034Z.h5'
+HSRLfile_path = "/data/home/gregmi/Data/ORACLES/HSRL2" #Path to the ORACLE data file 
+HSRLfile_name =  '/HSRL2_P3_20180924_R2.h5'
+RSP_Start_PixNo = 382
+TelNo = 0 # aggregated altitude. To obtain geometries corresponding to data from the 1880 nm channel, aggregation altitude should be set to 1, while aggregation altitude =0 should be used for all other channels.
+nwl = 5 # first  nwl wavelengths
+ang1 = 10
+ang2 = 135
 
 
 
-# '''##Case 5: 22nd sept 2018, ORACLES
+
+
+'''##Case 5: 22nd sept 2018, ORACLES
 # # # # #RSP'''
 file_path = "/data/home/gregmi/Data/ORACLES/RSP/"  #Path to the ORACLE data file
 file_name =  "RSP1-P3_L1C-RSPCOL-CollocatedRadiances_20180922T151106Z_V003-20210421T233946Z.h5" #Name of the ORACLES file
@@ -191,10 +193,10 @@ for i in range(1):
 
 
 
-    # sphRSP = RSP_Run_General(fwdModelYAMLpath, binPathGRASP, krnlPath,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, RSPwlIdx,GasAbsFn,SpecResFnPath)
-# # # # # # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
-    rslts_Sph = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,RSPwlIdx,GasAbsFn,SpecResFnPath,ModeNo=3)
-    rslts_Tamu = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,RSPwlIdx,GasAbsFn,SpecResFnPath,ModeNo=3)
+#     # sphRSP = RSP_Run_General(fwdModelYAMLpath, binPathGRASP, krnlPath,file_path,file_name,RSP_PixNo,ang1,ang2,TelNo, RSPwlIdx,GasAbsFn,SpecResFnPath)
+# # # # # # # #  Kernel_type = Run(Kernel_type) for spheriod, Kernel_type = 'TAMU' for hexahedral
+#     rslts_Sph = RSP_Run("sphro",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,RSPwlIdx,GasAbsFn,SpecResFnPath,ModeNo=3)
+#     rslts_Tamu = RSP_Run("TAMU",file_path,file_name,RSP_PixNo,ang1,ang2,TelNo,RSPwlIdx,GasAbsFn,SpecResFnPath,ModeNo=3)
 
 
 
@@ -230,10 +232,10 @@ for i in range(1):
 # # # #    #HSRL2 only retrieval
     
     # plot_HSRL(HSRL_sphrodT[0][0],HSRL_sphrodT[0][0], UNCERT,forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_sphrodT[2]) 
-    HSRL_sphrodT = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i],NoDP =False )
-    HSRL_TamuT = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i],NoDP =False)
+    HSRL_sphrodT = HSLR_run("sphro",HSRLfile_path,HSRLfile_name,HSRLPixNo,nwl,ModeNo=3, updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i], NoDP =False )
+    HSRL_TamuT = HSLR_run("TAMU",HSRLfile_path,HSRLfile_name, HSRLPixNo,nwl,ModeNo=3,updateYaml= False,releaseYAML= True, VertProfConstrain = True,LagrangianOnly = True,  AprioriLagrange =  AprioriLagrange[i], NoDP =False)
     # # plot_HSRL(HSRL_Tamu[0][0],HSRL_Tamu[0][0], forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_Tamu[2])    
-    plot_HSRL(HSRL_sphrodT[0][0],HSRL_TamuT[0][0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
+    # plot_HSRL(HSRL_sphrodT[0][0],HSRL_TamuT[0][0],UNCERT, forward = True, retrieval = True, Createpdf = True,PdfName ="/home/gregmi/ORACLES/rsltPdf/HSRL_Only_Plots_444.pdf", combinedVal =HSRL_TamuT[2])
 
     # SphHSRL.append(HSRL_sphrodT)
     # TAMUHSRL.append(HSRL_TamuT)

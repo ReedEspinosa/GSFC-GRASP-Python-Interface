@@ -1184,7 +1184,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
     hgt = del_dictt['Altitude']
    
     UpH = np.nanmin(LR_max[LR_max>3000]) #Height where LR at 532>100
-    UpH = AirAlt-1600   # Case2 from the HSRL data product descriptionthe maximum altitude for 532 ext and BSA is 2.5 km below the aircraft
+    # UpH = AirAlt-1600   # Case2 from the HSRL data product descriptionthe maximum altitude for 532 ext and BSA is 2.5 km below the aircraft
     UpH = AirAlt-2000   # Case1
     #Dividing the profile into 3 parts
     for i in range (len(inp2)): 
