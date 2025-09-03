@@ -1023,7 +1023,15 @@ class graspRun():
     def genCellHead(self, pixInd):
         nStr = '\n  %d   ' % len(pixInd)
         dtStr = self.pixels[pixInd[0]].dtObj.strftime('%Y-%m-%dT%H:%M:%SZ')
-        endstr = ' %10.2f   0   0\n' % self.pixels[pixInd[0]].obsHght
+        # endstr = ' %10.2f   0   0\n' % self.pixels[pixInd[0]].obsHght
+        
+        if hasattr(self.pixels[pixInd[0]], 'gaspar')==True:
+        #TODO make this genreal: greema
+            endstr = ' %10.2f   0   1\n' % self.pixels[pixInd[0]].obsHght  #setting this to 1 for gas abs
+        else: 
+            endstr = ' %10.2f   0   0\n' % self.pixels[pixInd[0]].obsHght
+        
+        
         return nStr+dtStr+endstr
 
 
@@ -1152,7 +1160,7 @@ class pixel():
             warnings.warn('land_prct provided was %4.2f – this value is a percentage (100 => completely land)' % newValue)
         self.land_prct = newValue
     #g
-    def addMeas(self, wl, msTyp=[], nbvm=[], sza=[], thtv=[], phi=[], msrmnts=[], gaspar=[], errModel=None): 
+    def addMeas(self, wl, msTyp=[], nbvm=[], sza=[], thtv=[], phi=[], msrmnts=[], errModel=None):
         """ This method is called once for each wavelength of data (see frmtMsg below)
             The index i where the new data is stored in self.measVals[i] is returned
             Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)
@@ -1162,7 +1170,7 @@ class pixel():
         fndInd = np.nonzero(wl==np.asarray([mv['wl'] for mv in self.measVals]))[0]
         if len(msTyp)==0 and len(fndInd)>0: return fndInd[0] # the measurement wavelength is already there and we have nothing to add – return index and leave it be
         assert len(fndInd)==0, 'New measurements can not be added at an existing wavelength!'
-        newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts,gaspar = gaspar, errorModel=errModel)  #,gaspar = gaspar
+        newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts, errorModel=errModel)
         newMeas = self.formatMeas(newMeas)
         insertInd = np.nonzero([z['wl'] > newMeas['wl'] for z in self.measVals])[0] # we want to insert in order
         self.nwl += 1
@@ -1219,7 +1227,7 @@ class pixel():
                     msDct['thetav'] = np.concatenate([rslt['RangeLidar'][:,l] for mt in msTypsNowSorted])[valid_mask]
                     msDct['phi'] = np.concatenate([np.repeat(0, len(rslt['RangeLidar'][:,l])) for mt in msTypsNowSorted])[valid_mask]
                 elif isPolarimeter:
-                    msDct['sza'] = rslt['sza'][0,l]
+                    msDct['sza'] = rslt['sza'][0,l] # GRASP/rslt dictionary return seperate SZA for every view, even though SDATA doesn't support it
                     msDct['thetav'] = np.concatenate([rslt['vis'][:,l] for mt in msTypsNowSorted])[valid_mask]
                     msDct['phi'] = np.concatenate([rslt['fis'][:,l] for mt in msTypsNowSorted])[valid_mask]
 
@@ -1244,9 +1252,10 @@ class pixel():
         if 'land_prct' in rslt: self.set_land_prct(rslt['land_prct'])
         if 'masl' in rslt: self.masl = rslt['masl']
         if 'OBS_hght' in rslt: self.obsHght = rslt['OBS_hght'] # rslt['OBS_hght'] should be in meters (not km)!
-
+        if 'gaspar' in rslt: self.gaspar = rslt['gaspar']
 
     def formatMeas(self, newMeas, lowThresh=1e-10):
+        
         frmtMsg = '\n\
             For more than one measurement type or viewing geometry pass msTyp, nbvm, thtv, phi and msrments as vectors: \n\
             len(msrments)=len(thtv)=len(phi)=sum(nbvm); len(msTyp)=len(nbvm) \n\
@@ -1257,8 +1266,8 @@ class pixel():
         newMeas['thetav'] = np.atleast_1d(newMeas['thetav'])
         newMeas['phi'] = np.atleast_1d(newMeas['phi'])
         newMeas['measurements'] = np.atleast_1d(newMeas['measurements'])
-        #Added by greema
-        newMeas['gaspar'] = np.atleast_1d(newMeas['gaspar'])
+        
+        
         if len(newMeas['measurements']) > 0: # we have at least one measurement
             newMeas['measurements'][np.abs(newMeas['measurements']) < lowThresh] = lowThresh
             if len(newMeas['thetav']) == len(newMeas['measurements'])/newMeas['nip']: # viewing zenith not provided for each measurement type
@@ -1277,9 +1286,7 @@ class pixel():
         return newMeas
 
     def genString(self):
-        #if len(meas['gaspar'] != 0 , then baseStrFrmt with 1 )
-        baseStrFrmt = '%2d %2d 1 0 1 %10.5f %10.5f %7.2f %6.2f %d' # everything up to meas fields 1 if gas absorption
-        #baseStrFrmt = '%2d %2d 1 0 0 %10.5f %10.5f %7.2f %6.2f %d' # everything up to meas fields
+        baseStrFrmt = '%2d %2d 1 0 0 %10.5f %10.5f %7.2f %6.2f %d'
         baseStr = baseStrFrmt % (self.ix, self.iy, self.lon, self.lat, self.masl, self.land_prct, self.nwl)
         wlStr = " ".join(['%6.4f' % obj['wl'] for obj in self.measVals])
         nipStr = " ".join(['%d' % obj['nip'] for obj in self.measVals])
@@ -1294,11 +1301,13 @@ class pixel():
         phiStr = " ".join(['%7.3f' % n for n in allVals])
         allVals = np.block([obj['measurements'] for obj in self.measVals])
         measStr = " ".join(['%14.10f' % n for n in allVals])
-        #Added by Greema for gas absorption correction
-        allVals = np.block([obj['gaspar'] for obj in self.measVals])
-        GasAbsorb = " ".join(['%14.10f' % n for n in allVals]) #Molecular depolarization ration if DP is used or Tau of LS is used
         settingStr = '0 '*2*len(meas_typeStr.split(" "))
-        measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr,GasAbsorb))  #,GasAbsorb
+        if hasattr(self, 'gaspar')== True:  #check if gas absorption/molecular depol values are provided
+            allVals = np.block([self.gaspar])
+            GasAbsorb = " ".join(['%14.10f' % n for n in allVals]) #Molecular depolarization ration if DP is used or Tau of LS is used
+            measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr, GasAbsorb))  #,GasAbsorb
+        else: 
+            measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr))
         return " ".join((baseStr, measStrAll, settingStr, '\n'))
 
 
@@ -1465,8 +1474,14 @@ class graspYAML():
                         rpts = Nrepeats - len(orgVal)
                         if f == 'index_of_wavelength_involved' and λField:
                             newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
+                            if fldName =='vertical_profile_normalized': 
+                                newVal = orgVal[:-1] + [orgVal[-2]]+  np.r_[(orgVal[-2]+1):(orgVal[-2]+1+rpts)].tolist()
+                                newVal[-1] = orgVal[-1]
                         else:
                             newVal = orgVal + np.repeat(orgVal[-1], rpts).tolist()
+                            if fldName =='vertical_profile_normalized': 
+                                newVal = orgVal[:-1]+ [orgVal[-2]] + np.repeat(orgVal[-2], rpts).tolist()
+                                newVal[-1] = orgVal[-1]
                         self.access('%s.%d.%s' % (fldName, m, f), newVal, write2disk=False)
                     else: # orgVal is None 
                         assert f=='a_priori_estimates.lagrange_multiplier', '%s not found in %s (it is mandatory)' % (f,fldName)
