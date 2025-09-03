@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import tempfile
-import os.path
 import warnings
+import os
 import re
 import time
 import pickle
@@ -17,7 +17,7 @@ import pandas as pd
 from scipy.stats import gaussian_kde
 import numpy as np
 import yaml # may require `conda install pyyaml`
-import miscFunctions as ms
+import miscFunctions as mf
 
 try:
     from netCDF4 import Dataset
@@ -31,6 +31,14 @@ try:
 except ImportError:
     PLOT_LOADED = False
 
+vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
+
+#<><><><>
+# local tmp directory
+LOCAL_TMPDIR_ = os.popen('echo $LOCAL_TMPDIR')
+LOCAL_TMPDIR = LOCAL_TMPDIR_.read()[:-2]
+LOCAL_TMPDIR_.close()
+#<><><><>
 
 class graspDB():
 
@@ -38,14 +46,15 @@ class graspDB():
         """
         The graspDB class is designed to run many instances of GRASP in parallel/sequence (depending on maxCPU and maxT below).
         It also contains a variety of (rather old) plotting functions to apply to many grasp results
-        INPUTS: graspRunObjs - what it sounds like, a list of grasp run objects
+        INPUTS: graspRunObjs - what it sounds like, a list of grasp run objects OR just a graspRun with LOTS of pixels
                 maxCPU - the maximum number of GRASP process to run at any given time (each process consumes one core); Default is 2
                 maxT - the maximum number of pixels to include in a single GRASP process; None for no max (not used if graspRunObjs is list)
         """
         self.maxCPU = maxCPU
-        if type(graspRunObjs) is list:
+        if type(graspRunObjs) is list: # already a list of i_n objects; totalPixels = Σi len(graspRunObjs[i].pixels)
+            if maxT: warnings.warn('graspDB was explicitly initiated with maxT=%d but maxT is ignored when graspRunObjs is a list.')
             self.grObjs = graspRunObjs
-        elif 'graspRun' in type(graspRunObjs).__name__:
+        elif 'graspRun' in type(graspRunObjs).__name__: # single run that needs to be subdivided
             assert maxCPU or maxT, 'maxCPU or maxT must be provided to subdivide the graspRun! If you want to process a single run sequentially pass it as a single element list.'
             self.grObjs = []
             Npix = len(graspRunObjs.pixels)
@@ -55,7 +64,7 @@ class graspDB():
                 grspChnkSz = int(maxT if maxT else int(np.ceil(Npix/maxCPU)))
             strtInds = np.r_[0:Npix:grspChnkSz]
             for strtInd in strtInds:
-                gObj = graspRun(graspRunObjs.yamlObj.YAMLpath, graspRunObjs.orbHght/1e3, releaseYAML=graspRunObjs.releaseYAML) # not specifying dirGRASP so a new temp dir is created
+                gObj = graspRun(graspRunObjs.yamlObj.YAMLpath, releaseYAML=graspRunObjs.releaseYAML) # not specifying dirGRASP so a new temp dir is created
                 endInd = min(strtInd+grspChnkSz, Npix)
                 for ind in range(strtInd, endInd):
                     gObj.addPix(graspRunObjs.pixels[ind])
@@ -329,14 +338,15 @@ class graspDB():
 class graspRun():
     def __init__(self, pathYAML=None, orbHghtKM=None, dirGRASP=None, releaseYAML=False, verbose=True):
         """
-        pathYAML – yaml data: posix path string, graspYAML object or None
+        pathYAML – yaml data: posix path string, graspYAML object or None ('pathYAML' is historical and possibly misleading since it is not always path)
             Note: type(pathYAML)==graspYAML –> create new instance of a graspYAML object, with a duplicated YAML file in dirGRASP (see below)
-        dirGRASP – grasp working directory, None for new temp dir; this needs to point to directory with SDATA file if writeSDATA is not called
+        dirGRASP – grasp working directory, None for new temp dir; this needs to point to directory with SDATA file if writeSDATA is not called (Note this is not the grasp binary!)
         releaseYAML – allow this class to adjust YAML to match SDATA (e.g. change number of wavelengths)
+        verbose - True or 2 will print everything, 1 prints this script but not GRASP SAYS, False or 0 prints nothing
         """
         self.releaseYAML = releaseYAML # allow automated modification of YAML, all index of wavelength involved fields MUST cover every wavelength
         self.pathSDATA = False
-        self.verbose = verbose        
+        self.verbose = 2*verbose if type(verbose)==bool else verbose
         self.pixels = []
         self.pObj = False
         self.invRslt = dict()
@@ -347,20 +357,25 @@ class graspRun():
             self.dirGRASP = None
             self.yamlObj = graspYAML()
             return
-        self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP # set working dir
+        if 'borg' in os.uname()[1]:
+            
+            self.dirGRASP = LOCAL_TMPDIR+tempfile.mkdtemp() if not dirGRASP else dirGRASP
+            os.makedirs(self.dirGRASP, exist_ok=True)
+        else:
+            self.dirGRASP = tempfile.mkdtemp() if not dirGRASP else dirGRASP # set working dir
         if type(pathYAML)==str:
             if os.path.dirname(pathYAML) == self.dirGRASP: # if YAML is in specified working dir
                 self.yamlObj = graspYAML(pathYAML)
             else: # we copy YAML file to new directory
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML))
                 self.yamlObj = graspYAML(pathYAML, newPathYAML)
-        elif type(pathYAML)==graspYAML:
+        elif type(pathYAML)==graspYAML: # path YAML is actually a YAML object, not a path
             if pathYAML.dl is not None: pathYAML.writeYAML() # incase there are unsaved changes
-            if releaseYAML: # copy so we don't overwrite orinal
+            if releaseYAML: # copy so we don't overwrite orginal
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
                 self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
-            elif os.path.dirname(pathYAML.YAMLpath) == self.dirGRASP: # if YAML is in specified working dir:
-                self.yamlObj = pathYAML # path YAML is actually a YAML object, not a path
+            elif os.path.dirname(pathYAML.YAMLpath) == self.dirGRASP: # if YAML is in specified working dir no changes required
+                self.yamlObj = pathYAML
             else: # we copy YAML file to the directory that will have the SDATA file [THIS WILL BREAK RUN WITH JUST YAML!!!]
                 newPathYAML = os.path.join(self.dirGRASP, os.path.basename(pathYAML.YAMLpath))
                 self.yamlObj = graspYAML(pathYAML.YAMLpath, newPathYAML)
@@ -406,13 +421,24 @@ class graspRun():
             if np.greater(Nbins,0).any(): # we have lidar data
                 assert np.all([Nbins[0]==bn for bn in Nbins]), 'Expected same number of vertical bins at every λ, instead found '+str(Nbins)
                 self.yamlObj.adjustVertBins(Nbins[0])
+            
+            # Adjust noise types to match the measurement types in the SDATA file
+            all_measurement_types = []
+            for px in self.pixels:
+                for mv in px.measVals:
+                    all_measurement_types.extend(mv['meas_type'])
+            unique_measurement_types = list(set(all_measurement_types))
+            self.yamlObj.adjustNoiseTypes(unique_measurement_types)
+            
+            # Adjust surface characteristics based on measurement types
+            self.yamlObj.adjustSurfaceCharacteristics(unique_measurement_types)
         if krnlPathGRASP: self.yamlObj.access('path_to_internal_files', krnlPathGRASP)
         self.pObj = Popen([binPathGRASP, self.yamlObj.YAMLpath], stdout=PIPE)
         if not parallel:
             print('Running GRASP...')
 #            self.pObj.wait()
             output = self.pObj.communicate() # This seems to keep things from hanging if there is a lot of output...
-            if len(output)>0 and self.verbose: print('>>> GRASP SAYS:\n %s' % output[0].decode("utf-8"))
+            if len(output)>0 and self.verbose>1: print('>>> GRASP SAYS:\n %s' % output[0].decode("utf-8"))
             # if self.pObj.returncode > 0: self._printError()
             self.pObj.stdout.close()
             self.invRslt = self.readOutput() # Why store rsltDict only if not parallel? I guess to keep it from being stored twice in memory in graspDB case?
@@ -421,7 +447,7 @@ class graspRun():
     def _printError(self):
         print('>>> GRASP SAYS:')
         for line in iter(self.pObj.stdout.readline, b''):
-            errMtch = re.match('^ERROR:.*$', line.decode("utf-8"))
+            errMtch = re.match(r'^ERROR:.*$', line.decode("utf-8"))
             if errMtch is not None: print(errMtch.group(0))
 
     def readOutput(self, customOUT=None): # customOUT is full path of unrelated output file to read
@@ -440,8 +466,6 @@ class graspRun():
             msg = '%s could not be found, probably because GRASP crashed. \n   Returning empty list in place of output data...'
             warnings.warn(msg % outputFN)
             return []
-
-        
         rsltAeroDict, wavelengths = self.parseOutAerosol(contents)
         if not rsltAeroDict:
             warnings.warn('Aerosol data could not be read from %s\n  Returning empty list in place of output data...' % outputFN)
@@ -522,7 +546,6 @@ class graspRun():
         if not NC4_LOADED:
             print('netCDF4 module failed to import, file could not be written.')
             return
-        vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
         rsltDict = self._findRslts(rsltDict, customOUT)
         with Dataset(nc4Path, 'w', format='NETCDF4') as root_grp: # open/create netCDF4 data file
             root_grp.description = 'Results of a GRASP run'
@@ -579,6 +602,8 @@ class graspRun():
                 varHnds[angName][:] = rsltDict[0]['angle'][:,0,0] # assume scattering angle same for all pixels, modes, wavelengths (fundamental to NC4 concept)
                 varHnds[angName].units = 'degrees'
                 varHnds[angName].long_name = 'Scattering angle for PM'
+            else:
+                angName = None
 
             # write data variables
             for key in rsltDict[0].keys(): # loop over keys
@@ -656,7 +681,7 @@ class graspRun():
                 varNm = 'ROD'
                 varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (λName))
                 varHnds[varNm].units = 'none'
-                varHnds[varNm][:] = seaLevelROD(varHnds[λName][:])
+                varHnds[varNm][:] = mf.seaLevelROD(varHnds[λName][:])
                 varHnds[varNm].long_name = 'Rayleigh Optical Depth'
                 varNm = 'rayleigh_depol'
                 varHnds[varNm] = root_grp.createVariable(varNm, 'f8', (λName))
@@ -668,6 +693,7 @@ class graspRun():
         """ Creates and writes data to a new netCDF variable """
         if not srchKey==trgtKey: return False
         if nc4Key is None: nc4Key = trgtKey
+        vzaSgnCalc = lambda vis,fis : np.round(vis*(1-2*(fis>180)), decimals=2) # maps all positive VZA to signed and rounded VZA
         varHnds[nc4Key] = root_grp.createVariable(nc4Key, 'f8', dimTuple)
         varHnds[nc4Key].units = units
         varHnds[nc4Key].long_name = desc
@@ -693,11 +719,11 @@ class graspRun():
 
     def parseOutDateTime(self, contents):
         results = []
-        ptrnDate = re.compile('^[ ]*Date[ ]*:[ ]+')
-        ptrnTime = re.compile('^[ ]*Time[ ]*:[ ]+')
-        ptrnLon = re.compile('^[ ]*Longitude[ ]*:[ ]+')
-        ptrnLat = re.compile('^[ ]*Latitude[ ]*:[ ]+')
-        ptrnLndPrc = re.compile('^[ ]*Land percent:[ ]+')
+        ptrnDate = re.compile(r'^[ ]*Date[ ]*:[ ]+')
+        ptrnTime = re.compile(r'^[ ]*Time[ ]*:[ ]+')
+        ptrnLon = re.compile(r'^[ ]*Longitude[ ]*:[ ]+')
+        ptrnLat = re.compile(r'^[ ]*Latitude[ ]*:[ ]+')
+        ptrnLndPrc = re.compile(r'^[ ]*Land percent:[ ]+')
         for line in contents: 
             if not ptrnDate.match(line) is None: # Date
                 dtStrCln = line[ptrnDate.match(line).end():-1].split()
@@ -719,42 +745,40 @@ class graspRun():
     def parseSingleParamFld(self, line, results, ptrn, fdlName):
         ptrnMatch = ptrn.match(line)
         if ptrnMatch is not None: 
-            vals = np.array(line[ptrnMatch.end():-1].split(), dtype=np.float)
+            vals = np.array(line[ptrnMatch.end():-1].split(), dtype=float)
             for k,val in enumerate(vals):
                 results[k][fdlName] = val
-        return ptrnMatch is not None   
-
+        return ptrnMatch is not None                
+                    
 
     def parseOutAerosol(self, contents):
         results = self.parseOutDateTime(contents)
         if len(results)==0:
             return []
-        ptrnPSD = re.compile('^[ ]*(Radius \(um\),)?[ ]*Size Distribution dV\/dlnr \(normalized')
-        ptrnProfile = re.compile('^[ ]*Aerosol vertical profile \[1\/m\] for Particle component [0-9]+')
-        ptrnRange = re.compile('^[ ]*Aerosol vertical profile altitudes \[m\] for Particle component [0-9]+')
-        ptrnLN = re.compile('^[ ]*Parameters of lognormal SD')
-        ptrnVol = re.compile('^[ ]*Aerosol volume concentration')
-        ptrnSPH = re.compile('^[ ]*% of spherical particles')
-        ptrnHGNT = re.compile('^[ ]*Aerosol profile mean height')
-        ptrnHGNTSTD = re.compile('^[ ]*Aerosol profile standard deviation')
-        ptrnAOD = re.compile('^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
-        ptrnAODmode = re.compile(r'^\s*Wavelength \(um\),\s*Extinction \(Particle Optical Depth\)')
-        ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
-        ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total Single Scattering Albedo)') #Updated for GRASPV2 Single Scattering Albedo for Particle component 1
-        ptrnLidar = re.compile('^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
-        ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+Single Scattering Albedo')
-        ptrnRRI = re.compile('^[ ]*Wavelength \(um\), REAL Ref\. Index')
-        ptrnIRI = re.compile('^[ ]*Wavelength \(um\), IMAG Ref\. Index')
-        ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
-        
+        ptrnPSD = re.compile(r'^[ ]*(Radius \(um\),)?[ ]*Size Distribution dV\/dlnr \(normalized')
+        ptrnProfile = re.compile(r'^[ ]*Aerosol vertical profile \[1\/m\] for Particle component [0-9]+')
+        ptrnRange = re.compile(r'^[ ]*Aerosol vertical profile altitudes \[m\] for Particle component [0-9]+')
+        ptrnLN = re.compile(r'^[ ]*Parameters of lognormal SD')
+        ptrnVol = re.compile(r'^[ ]*Aerosol volume concentration')
+        ptrnSPH = re.compile(r'^[ ]*% of spherical particles')
+        ptrnHGNT = re.compile(r'^[ ]*Aerosol profile mean height')
+        ptrnHGNTSTD = re.compile(r'^[ ]*Aerosol profile standard deviation')
+        ptrnAOD = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
+        ptrnAODmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(AOD_Particle_mode|Extinction \(Particle Optical Depth\))')
+        ptrnSSA = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA|Total Single Scattering Albedo)')
+        ptrnLidar = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
+        ptrnSSAmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(SSA_Particle_mode|Single Scattering Albedo)')
+        ptrnRRI = re.compile(r'^[ ]*Wavelength \(um\), REAL Ref\. Index')
+        ptrnIRI = re.compile(r'^[ ]*Wavelength \(um\), IMAG Ref\. Index')
+        ptrnReff = re.compile(r'^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
         i = 0
         nsd = 0
         rngAndβextUnited = True
         while i < len(contents): # loop line by line, checking each one against the patterns above
             if not ptrnLN.match(contents[i]) is None: # lognormal PSD, these fields have unique form
-                mtch = re.search('[ ]*rv \(um\):[ ]*', contents[i+1])
+                mtch = re.search(r'[ ]*rv \(um\):[ ]*', contents[i+1])
                 rvArr = np.array(contents[i+1][mtch.end():-1].split(), dtype='float64')
-                mtch = re.search('[ ]*ln\(sigma\):[ ]*', contents[i+2])
+                mtch = re.search(r'[ ]*ln\(sigma\):[ ]*', contents[i+2])
                 sigArr = np.array(contents[i+2][mtch.end():-1].split(), dtype='float64')
                 for k in range(len(results)):
                     results[k]['rv'] = np.append(results[k]['rv'], rvArr[k]) if 'rv' in results[k] else rvArr[k]
@@ -769,79 +793,38 @@ class graspRun():
             if rngAndβextUnited:
                 try: # sometimes GRASP adds range column before extinction profile (if not this expects one more column than is present, producing an index error)
                     self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
-                except (IndexError, AssertionError): # but other times range is a separate field... no obvious rhyme or reason
-                    del results[0]['βext'] # we should have crashed while setting βext in the first pixel, no need to delete key in others
-                    for rd in results: del rd['range'] # range should have been set in every pixel before the crash
+                except (IndexError, AssertionError): # but other times range is a separate field... no obvious rhyme or reason                  
+                    for rd in results: 
+                      if 'βext' in rd: del rd['βext'] # we should have crashed while setting βext in the first pixel, no need to delete key in others  
+                      if 'range' in rd: del rd['range'] # range should have been set in every pixel before the crash
                     i -= 1 # we need to parse this line again, using the correct arguments for parseMultiParamFld (below)
                     rngAndβextUnited = False # we fixed the issues, and we now know better than to try again
             else:
                 self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext')
                 self.parseMultiParamFld(contents, i, results, ptrnRange, 'range')
-
-
             self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
             self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
             self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
             self.parseMultiParamFld(contents, i, results, ptrnHGNTSTD, 'heightStd')
-            self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode')
+            self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode','lambda')
             self.parseMultiParamFld(contents, i, results, ptrnSSA, 'ssa')
             self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')
             self.parseMultiParamFld(contents, i, results, ptrnSSAmode, 'ssaMode')
             self.parseMultiParamFld(contents, i, results, ptrnRRI, 'n')
             self.parseMultiParamFld(contents, i, results, ptrnIRI, 'k')
             i += 1
-
-
-
         if not results or 'lambda' not in results[0]:
-
-            wl = np.array([0.355, 0.41, 0.46, 0.532, 0.555, 0.67, 0.854, 1.064 ])
-            if len (results[0]['k'])/3 == 5:
-                results[0]['lambda'] = np.array([wl[1],wl[2],wl[4],wl[5],wl[6]])
-            if len (results[0]['k'])/3 == 3:
-                results[0]['lambda'] = np.array([wl[0],wl[3],wl[7]])
-            if len (results[0]['k'])/3 == 8:
-                results[0]['lambda'] = wl
-            if len (results[0]['k']) == 7:
-                results[0]['lambda'] = np.array([0.38, 0.41, 0.55, 0.67, 0.87, 0.904, 0.940])
-
-            if len (results[0]['k']) == 3:
-                results[0]['lambda'] = np.array([wl[0],wl[3],wl[7]])
-
-                if 'aodMode' in results[0]:
-
-                    results[0]['aod'] = np.sum(results[0]['aodMode'])
-                    results[0]['ssa'] = np.sum(results[0]['ssaMode'])
-                
-            
-
-
-            # print(results[0])
-            
             warnings.warn('Limited or no aerosol data found, returning incomplete dictionary...')
-
-            # return results
-
-        wavelengths = np.atleast_1d(results[0]['lambda'])
-        if len(wavelengths)<2:
-            if len(wavelengths)==0:
-                warnings.warn('No wavelengths (lambda) values found, returning incomplete dictionary...')
-                return results
+            return results
+        for rs in results: rs['lambda'] = np.unique(rs['lambda']) # Lambda may have been added for total AOD and/or each mode's AOD
+        if len(results[0]['lambda'])<2:
             for i in range(len(results)): # we need to convert aod, ssa, etc. from scalars to numpy arrays
                 for key in results[0].keys():
                     if key in results[i]: results[i][key] = np.atleast_1d(results[i][key])
         if 'aodMode' in results[0]:
-
-            if len (results[0]['k']) == 3:
-                results[0]['aod'] = results[0]['aodMode']
-                results[0]['ssa'] = results[0]['ssaMode']
-                
-            else:
-                results[0]['aod'] = np.sum(results[0]['aodMode'].reshape(3,len(results[0]['lambda'])), axis =0)
-                results[0]['ssa'] = np.sum(results[0]['ssaMode'].reshape(3,len(results[0]['lambda'])), axis =0)
-                
-            Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]
+            Nwvlth = results[0]['lambda'].shape[0]
             nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
+            assert (nsd*Nwvlth)==results[0]['aodMode'].shape[0], "NSD*Nlambda≠len(aodMode)"
             for rs in results: # seperate aerosol modes
                 rs['r'] = rs['r'].reshape(nsd,-1)
                 rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
@@ -860,166 +843,23 @@ class graspRun():
                     λ550Ind = np.argmin(np.abs(rs['lambda']-0.55))
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
-                        rs['βext'][mode,:] = 1e6*ms.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
+                        rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
+                if 'aod' not in rs: rs['aod'] = rs['aodMode'].sum(axis=0)
+                if 'ssa' not in rs: rs['ssa'] = np.sum(rs['ssaMode']*rs['aodMode'], axis=0)/rs['aod']
         if ('dVdlnr' in results[0]):
             for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
             if 'rEff' not in results[0]:
-                rEffs = ms.integratePSD(results, moment='rEff')
+                rEffs = mf.integratePSD(results, moment='rEff')
                 for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
-        return results, wavelengths             
-                    
+        wavelengths = np.atleast_1d(results[0]['lambda'])
+        return results, wavelengths
 
-    # def parseOutAerosol(self, contents):
-
-    #     results = self.parseOutDateTime(contents)
-    #     if len(results)==0:
-    #         return []
-    #     ptrnPSD = re.compile('^[ ]*(Radius \(um\),)?[ ]*Size Distribution dV\/dlnr \(normalized')
-    #     ptrnProfile = re.compile('^[ ]*Aerosol vertical profile \[1\/m\] for Particle component [0-9]+')
-    #     ptrnRange = re.compile('^[ ]*Aerosol vertical profile altitudes \[m\] for Particle component [0-9]+')
-    #     ptrnLN = re.compile('^[ ]*Parameters of lognormal SD')
-    #     ptrnVol = re.compile('^[ ]*Aerosol volume concentration')
-    #     ptrnSPH = re.compile('^[ ]*% of spherical particles')
-    #     ptrnHGNT = re.compile('^[ ]*Aerosol profile mean height')
-    #     ptrnHGNTSTD = re.compile('^[ ]*Aerosol profile standard deviation')
-    #     ptrnAOD = re.compile('^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
-    #     ptrnAODmode = re.compile('^[ ]*Wavelength \(um\),[ ]+AOD_Particle_mode')
-    #     ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
-    #     ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total Single Scattering Albedo)') #Updated for GRASPV2 Single Scattering Albedo for Particle component 1
-
-    #     ptrnLidar = re.compile('^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
-    #     ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
-    #     ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+Single Scattering Albedo') #Updated for GRASPV2 Single Scattering Albedo for Particle component 1
-    #     ptrnRRI = re.compile('^[ ]*Wavelength \(um\), REAL Ref\. Index')
-    #     ptrnIRI = re.compile('^[ ]*Wavelength \(um\), IMAG Ref\. Index')
-    #     ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
-    #     i = 0
-    #     nsd = 0
-    #     # rngAndβextUnited = True
-    #     rngAndβextUnited = False #Chaged to fit the 
-    #     while i < len(contents): # loop line by line, checking each one against the patterns above
-    #         if not ptrnLN.match(contents[i]) is None: # lognormal PSD, these fields have unique form
-    #             mtch = re.search('[ ]*rv \(um\):[ ]*', contents[i+1])
-    #             rvArr = np.array(contents[i+1][mtch.end():-1].split(), dtype='float64')
-    #             mtch = re.search('[ ]*ln\(sigma\):[ ]*', contents[i+2])
-    #             sigArr = np.array(contents[i+2][mtch.end():-1].split(), dtype='float64')
-    #             for k in range(len(results)):
-    #                 results[k]['rv'] = np.append(results[k]['rv'], rvArr[k]) if 'rv' in results[k] else rvArr[k]
-    #                 results[k]['sigma'] = np.append(results[k]['sigma'], sigArr[k]) if 'sigma' in results[k] else sigArr[k]
-    #             i += 2
-    #         if not ptrnReff.match(contents[i]) is None: # Reff, field has unique form
-    #             Reffs = np.array(ptrnReff.match(contents[i]).group(1).split(), dtype='float64')
-    #             for k,Reff in enumerate(Reffs):
-    #                 results[k]['rEff'] = Reff
-    #         # self.parseMultiParamFld(contents, i, results, ptrnAOD, 'aod', 'lambda')
-    #         self.parseMultiParamFld(contents, i, results, ptrnPSD, 'dVdlnr', 'r')
-    #         if rngAndβextUnited:
-    #             try: # sometimes GRASP adds range column before extinction profile (if not this expects one more column than is present, producing an index error)
-    #                 self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
-    #             except (IndexError, AssertionError): # but other times range is a separate field... no obvious rhyme or reason
-    #                 del results[0]['βext'] # we should have crashed while setting βext in the first pixel, no need to delete key in others
-    #                 for rd in results: del rd['range'] # range should have been set in every pixel before the crash
-    #                 i -= 1 # we need to parse this line again, using the correct arguments for parseMultiParamFld (below)
-    #                 rngAndβextUnited = False # we fixed the issues, and we now know better than to try again
-    #         else:
-    #             self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext')
-    #             self.parseMultiParamFld(contents, i, results, ptrnRange, 'range')
-    #         self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
-    #         self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
-    #         self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
-    #         self.parseMultiParamFld(contents, i, results, ptrnHGNTSTD, 'heightStd')
-    #         self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode')
-    #         self.parseMultiParamFld(contents, i, results, ptrnSSA, 'ssa')
-    #         self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')
-    #         self.parseMultiParamFld(contents, i, results, ptrnSSAmode, 'ssaMode')
-    #         self.parseMultiParamFld(contents, i, results, ptrnRRI, 'n')
-    #         self.parseMultiParamFld(contents, i, results, ptrnIRI, 'k')
-    #         i += 1
-    #     if not results or 'lambda' not in results[0]:
-
-    #         print(results[0]['k'])
-
-    #         wl = np.array([0.355, 0.41, 0.46, 0.532, 0.555, 0.67, 0.854, 1.064 ])
-    #         if len (results[0]['k'])/3 == 5:
-    #             results[0]['lambda'] = np.array([wl[1],wl[2],wl[4],wl[5],wl[6]])
-    #         if len (results[0]['k'])/3 == 3:
-    #             results[0]['lambda'] = np.array([wl[0],wl[3],wl[7]])
-    #         if len (results[0]['k'])/3 == 8:
-    #             results[0]['lambda'] = wl
-            
-    #         results[0]['aod'] = np.sum(results[0]['aodMode'].reshape(3,len(results[0]['lambda'])), axis =0)
-    #         results[0]['ssa'] = np.sum(results[0]['ssaMode'].reshape(3,len(results[0]['lambda'])), axis =0)
-    #         warnings.warn('Limited or no aerosol data found, returning incomplete dictionary...')
-    #         # return results
-
-    #     wavelengths = np.atleast_1d(results[0]['lambda'])
-
-    #     print(wavelengths)
-    #     if len(wavelengths)<2:
-    #         if len(wavelengths)==0:
-    #             warnings.warn('No wavelengths (lambda) values found, returning incomplete dictionary...')
-    #             return results
-    #         for i in range(len(results)): # we need to convert aod, ssa, etc. from scalars to numpy arrays
-    #             for key in results[0].keys():
-    #                 if key in results[i]: results[i][key] = np.atleast_1d(results[i][key])
-    #     if 'aodMode' in results[0]:
-
-    #         # print(results[0]['aod'])
-    #         # if len(results[0]['aod'].shape[0] ==0):
-    #         Nwvlth = results[0]['lambda'].shape[0]
-    #         # else:
-
-
-    #         #     Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]  #org delete l 825-830
-    #         nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
-    #         for rs in results: # seperate aerosol modes
-    #             rs['r'] = rs['r'].reshape(nsd,-1)
-                
-
-               
-    #             rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
-    #             for key in [k for k in ['aodMode','ssaMode','n','k'] if k in rs]:
-    #                 print('Line812, runGRASP, Mod for GRASPV2, nneds fixing')
-    #                 rs['n']= rs['n'].reshape(3,len(wavelengths))
-    #                 rs['k']= rs['k'].reshape(3,len(wavelengths))
-
-    #                 # print(rs['k'].shape[-1],rs['k'] )
-
-
-    #                 if rs[key].shape[-1] == nsd*Nwvlth:
-    #                     rs[key] = rs[key].reshape(nsd,-1) # we double check that -1 -> Nwvlth on next line
-    #                 assert rs[key].shape[-1]==Nwvlth, 'Length of the last dimension of %s was %d, not matching Nλ=%d' % (key, rs[key].shape[-1], Nwvlth)
-    #             for λflatKey in [k for k in ['n','k'] if k in rs.keys()]: # check if spectrally flat RI values used
-    #                 for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value
-    #             if 'βext' in rs:
-    #                 rs['range'] = rs['range'].reshape(nsd,-1)
-    #                 rs['βext'] = rs['βext'].reshape(nsd,-1)
-    #                 βprfl = rs['βext'].sum(axis=0)
-    #                 rng = rs['range'][0]
-    #                 rs['height'] = np.trapz(βprfl*rng, rng)/np.trapz(βprfl, rng) # extinction weighted mean height
-    #                 λ550Ind = np.argmin(np.abs(rs['lambda']-0.55))
-    #                 for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
-    #                     AOD = rs['aodMode'][mode, λ550Ind]
-    #                     rs['βext'][mode,:] = 1e6*ms.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
-    #     if ('dVdlnr' in results[0]):
-    #         for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
-    #         if 'rEff' not in results[0]:
-    #             rEffs = ms.integratePSD(results, moment='rEff')
-    #             for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
-
-           
-    #     return results, wavelengths
-
-    
-    
-    
-    
     def parseOutSurface(self, contents, Nλ=None):
         results = self.parseOutDateTime(contents)
-        ptrnALB = re.compile('^[ ]*Wavelength \(um\),[ ]+Surface ALBEDO')
-        ptrnBRDF = re.compile('^[ ]*Wavelength \(um\),[ ]+BRDF parameters')
-        ptrnBPDF = re.compile('^[ ]*Wavelength \(um\),[ ]+BPDF parameters')
-        ptrnWater = re.compile('^[ ]*Wavelength \(um\),[ ]+Water surface parameters')
+        ptrnALB = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Surface ALBEDO')
+        ptrnBRDF = re.compile(r'^[ ]*Wavelength \(um\),[ ]+BRDF parameters')
+        ptrnBPDF = re.compile(r'^[ ]*Wavelength \(um\),[ ]+BPDF parameters')
+        ptrnWater = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Water surface parameters')
         i = 0
         while i < len(contents):
             self.parseMultiParamFld(contents, i, results, ptrnALB, 'albedo')
@@ -1034,9 +874,9 @@ class graspRun():
 
     def parsePhaseMatrix(self, contents, wavelengths): # wavelengths is need here specificly b/c PM elements don't give index (only value in um)
         results = self.parseOutDateTime(contents)
-        ptrnPMall = re.compile('^[ ]*Phase Matrix[ ]*$')
-        ptrnPMfit = re.compile('^[ ]*ipix=([0-9]+)[ ]+yymmdd = [0-9]+-[0-9]+-[0-9]+[ ]+hhmmss[ ]*=[ ]*[0-9][0-9]:[0-9][0-9]:[0-9][0-9][ ]*$')
-        ptrnPMfitWave = re.compile('^[ ]*wl[ ]*=[ ]*([0-9]+.[0-9]+)[ ]+isd[ ]*=[ ]*([0-9]+)[ ]+sca')
+        ptrnPMall = re.compile(r'^[ ]*Phase Matrix[ ]*$')
+        ptrnPMfit = re.compile(r'^[ ]*ipix=([0-9]+)[ ]+yymmdd = [0-9]+-[0-9]+-[0-9]+[ ]+hhmmss[ ]*=[ ]*[0-9][0-9]:[0-9][0-9]:[0-9][0-9][ ]*$')
+        ptrnPMfitWave = re.compile(r'^[ ]*wl[ ]*=[ ]*([0-9]+.[0-9]+)[ ]+isd[ ]*=[ ]*([0-9]+)[ ]+sca')
         FITfnd = False
         Nang = 181
         skipFlds = 1 # first field is just angle number
@@ -1093,11 +933,12 @@ class graspRun():
 
     def parseOutFit(self, contents, wavelengths):
         results = self.parseOutDateTime(contents)
-        ptrnFIT = re.compile('^[ ]*[\*]+[ ]*FITTING .*[\*]+[ ]*$')
-        ptrnPIX = re.compile('^[ ]*pixel[ ]*#[ ]*([0-9]+)[ ]*wavelength[ ]*#[ ]*([0-9]+)[ ]*([0-9\.]+)[ ]*\(um\)')
-        numericLn = re.compile('^[ ]*[0-9]+')
-        ptrnHeader = re.compile('^[ ]*#[ ]*(sza[ ]*vis|Range_\[m\][ ]*meas_)')
-        ptrnResid = re.compile('[ ]*noise[ ]*abs[ ]*rel[ ]*')
+        ptrnFIT = re.compile(r'^[ ]*[\*]+[ ]*FITTING .*[\*]+[ ]*$')
+        ptrnPIX = re.compile(r'^[ ]*pixel[ ]*#[ ]*([0-9]+)[ ]*wavelength[ ]*#[ ]*([0-9]+)[ ]*([0-9\.]+)[ ]*\(um\)')
+        numericLn = re.compile(r'^[ ]*[0-9]+')
+        ptrnHeader = re.compile(r'^[ ]*#[ ]*(sza[ ]*vis|Range_\[m\][ ]*meas_)')
+        ptrnResid = re.compile(r'[ ]*noise[ ]*abs[ ]*rel[ ]*')
+        ptrnIter = re.compile(r'iteration #\s*(\d+)')
         i = 0
         skipFlds = 1 # the 1st field is just the measurement number
         FITfnd = False
@@ -1105,7 +946,13 @@ class graspRun():
             if not ptrnResid.match(contents[i]) is None: # next line is final value of the cost function
                 pixInd = 0
                 while numericLn.match(contents[i+1]):
-                    results[pixInd]['costVal'] = float(re.search('^[ ]*[0-9\.]+', contents[i+1]).group())
+                    results[pixInd]['costVal'] = float(re.search(r'^[ ]*[0-9\.]+', contents[i+1]).group())
+                    if not ptrnIter.findall(contents[i+1]) is None:
+                        results[pixInd]['nIter'] = int(ptrnIter.findall(contents[i+1])[0])
+                        if results[pixInd]['nIter'] != 0: # not printing this if it is fwd model only
+                            if self.verbose: print('nIter = %d, for pixel %d' % (results[pixInd]['nIter'], pixInd+1))  
+                    else:
+                        print('nIter not found!, len(contents)=%d, i=%d \n content=%s for pixel %d' % (len(contents), i, contents[i+1], pixInd+1))
                     i += 1
                     pixInd += 1
             if not ptrnFIT.match(contents[i]) is None: # We found fitting data
@@ -1113,10 +960,7 @@ class graspRun():
             pixMatch = ptrnPIX.match(contents[i]) if FITfnd else None
             if pixMatch is not None:  # We found a single pixel & wavelength group
                 pixInd = int(pixMatch.group(1))-1
-
-                print("L970 Comment line 971")
-                wvlInd = int(pixMatch.group(2))-1
-
+        #        wvlInd = int(pixMatch.group(2))-1
                 wvlVal = float(pixMatch.group(3))
                 try:
                     wvlInd = np.nonzero(np.isclose(wavelengths, wvlVal, atol=1e-3))[0][0] # this matches them if they are within 1 nm
@@ -1142,8 +986,8 @@ class graspRun():
 
     def parseMultiParamFld(self, contents, i, results, ptrn, fdlName, fldName0=False, colOffset=0, Nλ=None):
         if i<len(contents) and not ptrn.match(contents[i]) is None: # RRI by aersol size mode
-            singNumeric = re.compile('^[ ]*[0-9]+[ ]*$')
-            numericLn = re.compile('^[ ]*[0-9]+')
+            singNumeric = re.compile(r'^[ ]*[0-9]+[ ]*$')
+            numericLn = re.compile(r'^[ ]*[0-9]+')
             lastLine = i+1
             while not numericLn.match(contents[lastLine]) is None: lastLine += 1
             Nparams = 0
@@ -1172,12 +1016,17 @@ class graspRun():
     def genSDATAHead(self, unqTimes):
         nx = max([pix.ix for pix in self.pixels])
         ny = max([pix.iy for pix in self.pixels])
+        if nx==1 and ny==1 and len(self.pixels)>len(unqTimes):
+            msg = "\n>>> Nx=Ny=1 with %d pixels but only %d unique times. GRASP likes pixel locations to be distinct in spacetime.\n"
+            warnings.warn(msg % (len(self.pixels), len(unqTimes)))
         Nstr = ' %d %d %d : NX NY NT' % (nx, ny, len(unqTimes))
         return 'SDATA version 2.0\n%s\n' % Nstr
 
     def genCellHead(self, pixInd):
         nStr = '\n  %d   ' % len(pixInd)
         dtStr = self.pixels[pixInd[0]].dtObj.strftime('%Y-%m-%dT%H:%M:%SZ')
+        # endstr = ' %10.2f   0   0\n' % self.pixels[pixInd[0]].obsHght
+        
         if hasattr(self.pixels[pixInd[0]], 'gaspar')==True:
         #TODO make this genreal: greema
             endstr = ' %10.2f   0   1\n' % self.pixels[pixInd[0]].obsHght  #setting this to 1 for gas abs
@@ -1274,7 +1123,7 @@ class rsltDictTools():
             x = x[~np.isnan(y)] # without these 2 lines np.interp (and maybe angstrmIntrp) will return nans, in some circustances
             y = y[~np.isnan(y)]
         if 'aod' in key.lower():
-            return np.asarray([ms.angstrmIntrp(x,y,xNew) for xNew in xn])
+            return np.asarray([mf.angstrmIntrp(x,y,xNew) for xNew in xn])
         else:
             return np.interp(xn, x, y)
 
@@ -1317,10 +1166,13 @@ class pixel():
         """ This method is called once for each wavelength of data (see frmtMsg below)
             The index i where the new data is stored in self.measVals[i] is returned
             Optimal input described by frmtMsg but method will expand thtv and phi if they have length len(msrmnts)/len(msTyp)
+            * If there is already a measurement at wl, and msTyp is empty, this function just returns the index of the measVal with that wavelength
         """
-        assert wl not in [valDict['wl'] for valDict in self.measVals], 'Each measurement must have a unqiue wavelength!'
         if type(msTyp) is int: msTyp=[msTyp]
-        newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts, errorModel=errModel)  
+        fndInd = np.nonzero(wl==np.asarray([mv['wl'] for mv in self.measVals]))[0]
+        if len(msTyp)==0 and len(fndInd)>0: return fndInd[0] # the measurement wavelength is already there and we have nothing to add – return index and leave it be
+        assert len(fndInd)==0, 'New measurements can not be added at an existing wavelength!'
+        newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts, errorModel=errModel)
         newMeas = self.formatMeas(newMeas)
         insertInd = np.nonzero([z['wl'] > newMeas['wl'] for z in self.measVals])[0] # we want to insert in order
         self.nwl += 1
@@ -1333,7 +1185,7 @@ class pixel():
 
     def populateFromRslt(self, rslt, radianceNoiseFun=None, dataStage='fit', endStr='', verbose=False):
         """ This method will overwrite any previously existing data in the pixel at the following keys:
-            meas_type, nbvm, nip, measurements, sza, thetav, phi, datetime, latitude, longitude, land_prct
+            measVals(includes meas_type, nbvm, nip, measurements, sza, thetav, phi, etc.), datetime, latitude, longitude, land_prct
             if self.meas == [] when called, populateFromRslt will add a measurement for each wvl in rslt
             radianceNoiseFun will override (and permanently set) self.measVals[n]['errorModel']
 
@@ -1357,34 +1209,43 @@ class pixel():
             msTypInd = np.nonzero([~np.isnan(rslt[keyPtrn % mt][:,l]).any() for mt in msTyps])[0] # inds of msTyps that are not NAN at current λ
             if msTypInd.size>0: # there are measurements at this wavelength
                 measValsInd = self.addMeas(lVal)
-                msDct = self.measVals[measValsInd] # lists and dicts are mutable so changes to msDct['key'] persist in self.measVals
-                msDct['meas_type'] = [msTypMap[mt] for mt in msTyps[msTypInd]] # this is numberic key for measurements avaiable at current λ
-                msTypsNowSorted = msTyps[msTypInd[np.argsort(msDct['meas_type'])]] # need msType names at this λ, sorted by above numeric measurement type keys
-                msDct['nbvm'] = [len(rslt[keyPtrn % mt][:,l]) for mt in msTypsNowSorted] # number of measurement for each type (e.g. [10, 10, 10])
+                msDct = self.measVals[measValsInd] # cleaner syntax (lists and dicts are mutable so changes to msDct['key'] persist in self.measVals)
+                msDct['meas_type'] = [msTypMap[mt] for mt in msTyps[msTypInd]]
+                msTypsNowSorted = msTyps[msTypInd[np.argsort(msDct['meas_type'])]]
                 msDct['meas_type'] = np.sort(msDct['meas_type'])
                 msDct['nip'] = len(msDct['meas_type'])
-                
-                
-                if np.all(msDct['meas_type'] < 40): # lidar data
-                    msDct['sza'] = 0.01 # we assume vertical lidar
-                    msDct['thetav'] = rslt['RangeLidar'][:,l]
-                    msDct['phi'] = np.repeat(0, len(msDct['thetav']))
-                    
-                elif np.all(msDct['meas_type'] > 40): # polarimeter data
-                    msDct['sza'] = rslt['sza'][0,l] # GRASP/rslt dictionary return seperate SZA for every view, even though SDATA doesn't support it
-                    msDct['thetav'] = rslt['vis'][:,l]
-                    msDct['phi'] = rslt['fis'][:,l]
 
-                    if radianceNoiseFun: msDct['errorModel'] = radianceNoiseFun
-                else:
-                    assert False, 'Both polarimeter and lidar data at the same wavelength is not supported.'
-                if msDct['errorModel'] is not None:
+                # Create a boolean mask of all valid measurements at this wavelength
+                valid_mask = np.concatenate([~np.isnan(rslt[keyPtrn % mt][:,l]) for mt in msTypsNowSorted])
+
+                # Determine geometry type
+                isLidar = np.all(msDct['meas_type'] < 40)
+                isPolarimeter = np.all(msDct['meas_type'] > 40)
+                assert not (isLidar and isPolarimeter), 'Both polarimeter and lidar data at the same wavelength is not supported.'
+
+                # Set geometry and filter it with the valid_mask
+                if isLidar:
+                    msDct['sza'] = 0.01
+                    msDct['thetav'] = np.concatenate([rslt['RangeLidar'][:,l] for mt in msTypsNowSorted])[valid_mask]
+                    msDct['phi'] = np.concatenate([np.repeat(0, len(rslt['RangeLidar'][:,l])) for mt in msTypsNowSorted])[valid_mask]
+                elif isPolarimeter:
+                    msDct['sza'] = rslt['sza'][0,l] # GRASP/rslt dictionary return seperate SZA for every view, even though SDATA doesn't support it
+                    msDct['thetav'] = np.concatenate([rslt['vis'][:,l] for mt in msTypsNowSorted])[valid_mask]
+                    msDct['phi'] = np.concatenate([rslt['fis'][:,l] for mt in msTypsNowSorted])[valid_mask]
+
+                # Generate measurements (with noise if applicable) and then filter with the mask
+                if radianceNoiseFun:
+                    msDct['errorModel'] = radianceNoiseFun
                     try:
-                        msDct['measurements'] = msDct['errorModel'](l, rslt, verbose=verbose)
+                        measurements_with_nans = msDct['errorModel'](l, rslt, verbose=verbose)
                     except TypeError:
-                        msDct['measurements'] = msDct['errorModel'](l, rslt)
+                        measurements_with_nans = msDct['errorModel'](l, rslt)
+                    msDct['measurements'] = measurements_with_nans[valid_mask]
                 else:
-                    msDct['measurements'] = np.reshape([rslt[keyPtrn % mt][:,l] for mt in msTypsNowSorted], -1)
+                    measurements_with_nans = np.concatenate([rslt[keyPtrn % mt][:,l] for mt in msTypsNowSorted])
+                    msDct['measurements'] = measurements_with_nans[valid_mask]
+
+                msDct['nbvm'] = [np.sum(~np.isnan(rslt[keyPtrn % mt][:,l])) for mt in msTypsNowSorted]
                 msDct = self.formatMeas(msDct) # this will tile the above msTyp times
         # add pixel metadata
         if 'datetime' in rslt: self.dtObj = rslt['datetime']
@@ -1427,8 +1288,7 @@ class pixel():
         return newMeas
 
     def genString(self):
-        baseStrFrmt = '%2d %2d 1 0 0 %10.5f %10.5f %7.2f %6.2f %d'  
-        #baseStrFrmt = '%2d %2d 1 0 0 %10.5f %10.5f %7.2f %6.2f %d' # everything up to meas fields
+        baseStrFrmt = '%2d %2d 1 0 0 %10.5f %10.5f %7.2f %6.2f %d'
         baseStr = baseStrFrmt % (self.ix, self.iy, self.lon, self.lat, self.masl, self.land_prct, self.nwl)
         wlStr = " ".join(['%6.4f' % obj['wl'] for obj in self.measVals])
         nipStr = " ".join(['%d' % obj['nip'] for obj in self.measVals])
@@ -1443,19 +1303,13 @@ class pixel():
         phiStr = " ".join(['%7.3f' % n for n in allVals])
         allVals = np.block([obj['measurements'] for obj in self.measVals])
         measStr = " ".join(['%14.10f' % n for n in allVals])
-        #Added by Greema for gas absorption correction
-
         settingStr = '0 '*2*len(meas_typeStr.split(" "))
-        
         if hasattr(self, 'gaspar')== True:  #check if gas absorption/molecular depol values are provided
             allVals = np.block([self.gaspar])
             GasAbsorb = " ".join(['%14.10f' % n for n in allVals]) #Molecular depolarization ration if DP is used or Tau of LS is used
-            # print("Gasabs",GasAbsorb,len(np.block([self.gaspar])))
-            measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr,GasAbsorb))  #,GasAbsorb
+            measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr, GasAbsorb))  #,GasAbsorb
         else: 
-            measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr))  #,GasAbsorb
-       
-
+            measStrAll = " ".join((wlStr, nipStr, meas_typeStr, nbvmStr, szaStr, thetavStr, phiStr, measStr))
         return " ".join((baseStr, measStrAll, settingStr, '\n'))
 
 
@@ -1486,7 +1340,18 @@ class graspYAML():
             randomID = hex(np.random.randint(0, 2**63-1))[2:] # needed to prevent identical FN w/ many parallel runs
             tag = newTmpFile if type(newTmpFile)==str else 'NEW'
             newFn = '%s_%s_%s.yml' % (os.path.basename(baseYAMLpath)[:-4], tag, randomID)
-            self.YAMLpath = os.path.join(tempfile.gettempdir(), newFn)
+            # To avoid the overuage of storage (temp space in discover)
+            if 'borg' in os.uname()[1]:
+                # creating a temp space in DISCOVER NOBACKUP drive
+                # if not os.path.exists('temp'):
+                #     os.mkdir('temp')
+                #     print('Creating temp directory')
+                newPat = LOCAL_TMPDIR + tempfile.gettempdir()
+                self.YAMLpath = os.path.join(newPat, newFn)
+                os.makedirs(newPat, exist_ok = True)
+                print('Yes')
+            else:
+                self.YAMLpath = os.path.join(tempfile.gettempdir(), newFn)
             copyfile(baseYAMLpath, self.YAMLpath)
         else:
             self.YAMLpath = baseYAMLpath
@@ -1566,8 +1431,12 @@ class graspYAML():
                     uprBnd = np.array(mode['initial_guess']['max'], dtype=float)
                     rngBnd = fracOfSpace*(uprBnd - lowBnd)/2
                     meanBnd = (lowBnd + uprBnd)/2
-                    newGuess = np.random.uniform(meanBnd-rngBnd, meanBnd+rngBnd).tolist() # guess is spectrally flat relative to rng
-                    mode['initial_guess']['value'] = newGuess
+                    if char['type'] in ['imaginary_part_of_refractive_index_spectral_dependent', 'aerosol_concentration']:
+                        newGuess = mf.loguniform(meanBnd-rngBnd, meanBnd+rngBnd) # guess is spectrally flat relative to rng #HACK 
+                    else: # random number in linear space                        
+                        newGuess = np.random.uniform(meanBnd-rngBnd, meanBnd+rngBnd)
+                    if isinstance(newGuess, np.ndarray): newGuess = newGuess.tolist()
+                    mode['initial_guess']['value'] = newGuess # guess is spectrally flat relative to rng
         self.writeYAML()
 
     def adjustLambda(self, Nlambda):
@@ -1602,7 +1471,6 @@ class graspYAML():
                 for f in lSubFlds:  # loop over each field
                     orgVal = self.access('%s.%d.%s' % (fldName, m, f))
                     if orgVal is not None and len(orgVal) >= Nrepeats:
-                    #     self.access('%s.%d.%s' % (fldName, m, f), orgVal[0:Nrepeats], write2disk=False)
                         self.access('%s.%d.%s' % (fldName, m, f), orgVal[0:Nrepeats], write2disk=False)
                     elif orgVal is not None:
                         rpts = Nrepeats - len(orgVal)
@@ -1620,6 +1488,145 @@ class graspYAML():
                     else: # orgVal is None 
                         assert f=='a_priori_estimates.lagrange_multiplier', '%s not found in %s (it is mandatory)' % (f,fldName)
             m += 1
+
+    def adjustNoiseTypes(self, measurement_types):
+        """
+        Adjust YAML noise configurations to match the provided measurement types.
+        
+        Args:
+            measurement_types (list): List of measurement type integers (e.g., [31, 35] for LS and DP)
+        
+        This method will:
+        1. Remove noise entries that don't correspond to any measurement type in the list
+        2. Renumber the remaining noise entries sequentially
+        3. Throw an error if a measurement type is missing from the YAML
+        """
+        self.loadYAML()
+        
+        # Get current noise configurations
+        noises = self.dl['retrieval']['inversion'].get('noises', None)
+        if not noises:
+            # Forward YAML files might not have noise configurations
+            return
+        
+        # Check for empty measurement types list
+        if not measurement_types:
+            raise ValueError("Measurement types list cannot be empty")
+        
+        # Create a mapping of measurement types to noise entries
+        noise_to_measurement_types = {}
+        
+        # Handle both list and dict structures
+        if isinstance(noises, list):
+            noise_items = [(f"noise[{i+1}]", noise) for i, noise in enumerate(noises)]
+        elif isinstance(noises, dict):
+            noise_items = list(noises.items())
+        else:
+            raise ValueError(f"Unexpected noises structure type: {type(noises)}")
+        
+        for noise_key, noise in noise_items:
+            measurement_types_in_noise = []
+            
+            # Extract measurement types from this noise entry
+            m = 1
+            while f"measurement_type[{m}]" in noise:
+                meas_type_entry = noise[f"measurement_type[{m}]"]
+                if "type" in meas_type_entry:
+                    meas_type = meas_type_entry["type"]
+                    # Convert measurement type string to integer
+                    type_mapping = {
+                        'I': 41, 'Q': 42, 'U': 43,  # Polarization
+                        'LS': 31, 'VEXT': 36, 'VBS': 39,  # Lidar
+                        'DP': 35  # Depolarization
+                    }
+                    if meas_type in type_mapping:
+                        measurement_types_in_noise.append(type_mapping[meas_type])
+                m += 1
+            
+            noise_to_measurement_types[noise_key] = measurement_types_in_noise
+        
+        # Find which noise entries to keep
+        noise_entries_to_keep = []
+        for noise_key, noise_meas_types in noise_to_measurement_types.items():
+            # Keep noise entry if any of its measurement types are in the required list
+            if any(meas_type in measurement_types for meas_type in noise_meas_types):
+                noise_entries_to_keep.append(noise_key)
+        
+        # Check if all required measurement types are covered
+        all_covered_types = []
+        for noise_key in noise_entries_to_keep:
+            all_covered_types.extend(noise_to_measurement_types[noise_key])
+        
+        missing_types = [t for t in measurement_types if t not in all_covered_types]
+        if missing_types:
+            raise ValueError(f"Measurement types {missing_types} are not covered by any noise configuration in the YAML file")
+        
+        # Remove unwanted noise entries and renumber
+        new_noises = {}
+        for i, noise_key in enumerate(noise_entries_to_keep):
+            old_noise = noises[noise_key]  # Get the noise entry by key
+            new_noise = copy.deepcopy(old_noise)
+            new_noises[f"noise[{i+1}]"] = new_noise
+        
+        # Update the YAML structure
+        self.dl['retrieval']['inversion']['noises'] = new_noises
+        
+        # Write changes to disk
+        self.writeYAML()
+
+    def adjustSurfaceCharacteristics(self, measurement_types):
+        """
+        Adjust YAML surface characteristics based on measurement types.
+        
+        Args:
+            measurement_types (list): List of measurement type integers (e.g., [31, 35] for LS and DP)
+        
+        This method will:
+        1. Check if all measurement types are lidar types (30-39)
+        2. If so, remove surface characteristics (surface_land_* and surface_water_*)
+        3. Renumber the remaining characteristics sequentially
+        """
+        self.loadYAML()
+        
+        # Check if all measurement types are lidar types (30-39)
+        all_lidar = all(30 <= mt <= 39 for mt in measurement_types)
+        
+        if not all_lidar:
+            # Not all measurements are lidar, keep surface characteristics
+            return
+        
+        # Get current characteristics
+        constraints = self.dl['retrieval']['constraints']
+        if not constraints:
+            return
+        
+        # Identify surface characteristics to remove
+        surface_characteristics = []
+        remaining_characteristics = []
+        
+        for char_key, char_data in constraints.items():
+            char_type = char_data.get('type', '')
+            if (char_type.startswith('surface_land_') or 
+                char_type.startswith('surface_water_')):
+                surface_characteristics.append(char_key)
+            else:
+                remaining_characteristics.append(char_key)
+        
+        if not surface_characteristics:
+            # No surface characteristics to remove
+            return
+        
+        # Remove surface characteristics and renumber
+        new_constraints = {}
+        for i, char_key in enumerate(remaining_characteristics, 1):
+            new_key = f"characteristic[{i}]"
+            new_constraints[new_key] = constraints[char_key]
+        
+        # Update the YAML structure
+        self.dl['retrieval']['constraints'] = new_constraints
+        
+        # Write changes to disk
+        self.writeYAML()
 
     def adjustVertBins(self, Nbins):
         self._repeatElementsInField(fldName='vertical_profile_normalized', Nrepeats=Nbins)
@@ -1640,7 +1647,7 @@ class graspYAML():
         prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal)
         if not prsntVal and newVal: # we were supposed to change a value but the field wasn't there
             if verbose: warnings.warn('%s not found at specified location in YAML' % fldPath)
-            mtch = re.match('retrieval.constraints.characteristic\[[0-9]+\].mode\[([0-9]+)\]', fldPath)
+            mtch = re.match(r'retrieval.constraints.characteristic\[[0-9]+\].mode\[([0-9]+)\]', fldPath)
             if mtch: # we may still be able to add the value if we append a mode
                 lastModePath = np.r_[fldPath.split('.')[0:3] + ['mode[%d]' % (int(mtch.group(1))-1)] + fldPath.split('.')[4:]]
                 if self.YAMLrecursion(self.dl, lastModePath): # this field does exist in the previous mode, we will copy it
@@ -1649,9 +1656,20 @@ class graspYAML():
                     lastModeVal = self.YAMLrecursion(self.dl, lastModePath[0:4])
                     self.dl['retrieval']['constraints'][fldPath.split('.')[2]]['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lastModeVal)
                     prsntVal = self.YAMLrecursion(self.dl, np.array(fldPath.split('.')), newVal) # new mode exist now, write value to it
-                    if not 'mode[%d]' % int(mtch.group(1)) in self.dl['retrieval']['forward_model']['phase_matrix']['radius'].keys(): # phase_matrix radius not present from this mode
-                        lstModeRadius = self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]' % (int(mtch.group(1))-1)] # we copy it from previous mode
-                        self.dl['retrieval']['forward_model']['phase_matrix']['radius']['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lstModeRadius)
+                    if 'particles' in self.dl['retrieval']['forward_model'].keys():  # GRASP internal
+                      radiusDict = self.dl['retrieval']['forward_model']['particles']['phase_matrix']['radius']
+                    else: # GRASP v1.1.6 or earlier 
+                      radiusDict = self.dl['retrieval']['forward_model']['phase_matrix']['radius']
+                    if not 'mode[%d]' % int(mtch.group(1)) in radiusDict.keys(): # phase_matrix radius not present from this mode
+                        lstModeRadius = radiusDict['mode[%d]' % (int(mtch.group(1))-1)] # we copy it from previous mode
+                        # needs to modify this to change the r_min and r_max limits
+                        radiusDict['mode[%d]' % int(mtch.group(1))] = copy.deepcopy(lstModeRadius)
+                    # Change the maximum iteration before stopping the retrieval, and LM fit
+                    # HACK: this is a hack to change the maximum iteration for the retrieval
+                    # FIXME: this needs to be generalized, by having an input in the casestr or ina canonical casemap file
+                    # WRE: I'm commenting this out because it is unexpected behavior and is called many redundant time for a typical simulation
+#                     self.dl['retrieval']['inversion']['convergence']['maximum_iterations_for_stopping'] = 50
+#                     self.dl['retrieval']['inversion']['convergence']['maximum_iterations_of_Levenberg-Marquardt'] = 50
         if newVal and write2disk: self.writeYAML() # if no change was made no need to re-write the file
         return prsntVal
 
@@ -1682,10 +1700,17 @@ class graspYAML():
         return fldPath
 
     def writeYAML(self):
+        self._valueTypeCheck(self.dl)
         with open(self.YAMLpath, 'w') as outfile:
             yaml.dump(self.dl, outfile, default_flow_style=None, indent=4, width=1000, sort_keys=False)
-            # debug
-            # print('yaml file:%s' %self.YAMLpath)
+            
+    def _valueTypeCheck(self, dl):
+        for v in dl.values():
+            if isinstance(v, dict):
+                self._valueTypeCheck(v)
+            elif isinstance(v, np.ndarray) or (isinstance(v, list) and isinstance(v, np.generic)): # check if ndarray or list of numpy types
+                assert False, 'One or more fields contained numpy types which are not supported by the yaml module.'
+            
     def loadYAML(self):
         assert self.YAMLpath, 'You must provide a YAML file path to perform a task utilizing a YAML file!'
         if not self.dl:
