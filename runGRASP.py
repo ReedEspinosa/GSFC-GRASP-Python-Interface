@@ -1309,7 +1309,6 @@ class pixel():
         self.measVals = []
         self.obsHght = obsHghtKM*1000
 
-
     def set_land_prct(self, newValue):
         """ There is a special method for this so that we can warn user if not setting it as a percent """
         if np.isclose(newValue, 1.0, rtol=1e-3, atol=1e-3):
@@ -1325,15 +1324,13 @@ class pixel():
         if type(msTyp) is int: msTyp=[msTyp]
         newMeas = dict(wl=wl, nip=len(msTyp), meas_type=msTyp, nbvm=nbvm, sza=sza, thetav=thtv, phi=phi, measurements=msrmnts, errorModel=errModel)  
         newMeas = self.formatMeas(newMeas)
-        insertInd = np.nonzero([z['wl'] > newMeas['wl'] for z in self.measVals])[0] # we want  to insert in order
+        insertInd = np.nonzero([z['wl'] > newMeas['wl'] for z in self.measVals])[0] # we want to insert in order
         self.nwl += 1
-        
         if len(insertInd)==0: # this is the longest wavelength so far, including the case w/ no measurements so far
             self.measVals.append(newMeas)
             return self.nwl-1
         else:
             self.measVals.insert(insertInd[0], newMeas)
-        
             return insertInd
 
     def populateFromRslt(self, rslt, radianceNoiseFun=None, dataStage='fit', endStr='', verbose=False):
@@ -1391,17 +1388,13 @@ class pixel():
                 else:
                     msDct['measurements'] = np.reshape([rslt[keyPtrn % mt][:,l] for mt in msTypsNowSorted], -1)
                 msDct = self.formatMeas(msDct) # this will tile the above msTyp times
-                
-
         # add pixel metadata
-        
         if 'datetime' in rslt: self.dtObj = rslt['datetime']
         if 'latitude' in rslt: self.lat = rslt['latitude']
         if 'longitude' in rslt: self.lon = rslt['longitude']
         if 'land_prct' in rslt: self.set_land_prct(rslt['land_prct'])
         if 'masl' in rslt: self.masl = rslt['masl']
         if 'OBS_hght' in rslt: self.obsHght = rslt['OBS_hght'] # rslt['OBS_hght'] should be in meters (not km)!
-        #gree
         if 'gaspar' in rslt: self.gaspar = rslt['gaspar']
 
     def formatMeas(self, newMeas, lowThresh=1e-10):
@@ -1433,8 +1426,6 @@ class pixel():
             newMeas['meas_type'].shape[0]==newMeas['nbvm'].shape[0] and \
             newMeas['nbvm'].sum()==newMeas['thetav'].shape[0], \
             'Each measurement must conform to the following format:' + frmtMsg
-        
-
         return newMeas
 
     def genString(self):
@@ -1587,7 +1578,6 @@ class graspYAML():
             self._repeatElementsInField(fldName=lt, Nrepeats=Nlambda, λonly=True)  # loop over constraint types
         msg = 'Could not find YAML noises field! Note GSFC-GRASP-Python-Interface only works with GRASP version ≥1.0.'
         assert self.access('retrieval.inversion.noises') is not None, msg
-        
         for n in range(len(self.access('retrieval.inversion.noises'))): # adjust the noise lambda as well
             m = 1
             while self.access('retrieval.inversion.noises.noise[%d].measurement_type[%d]' % (n+1, m)):
@@ -1599,7 +1589,7 @@ class graspYAML():
                     rpts = Nlambda - len(orgVal)
                     newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
                 self.access(fldNm, newVal, write2disk=False)
-                m += 1 
+                m += 1
         self.writeYAML()
 
     def _repeatElementsInField(self, fldName, Nrepeats, λonly=False):
@@ -1616,17 +1606,6 @@ class graspYAML():
                     if orgVal is not None and len(orgVal) >= Nrepeats:
                     #     self.access('%s.%d.%s' % (fldName, m, f), orgVal[0:Nrepeats], write2disk=False)
                         self.access('%s.%d.%s' % (fldName, m, f), orgVal[0:Nrepeats], write2disk=False)
-                   
-                    # # elif orgVal is not None:
-                    #     rpts = Nrepeats - len(orgVal)
-                    #     if f == 'index_of_wavelength_involved' and λField:
-                    #         newVal = orgVal + np.r_[(orgVal[-1]+1):(orgVal[-1]+1+rpts)].tolist()
-                    #     else:
-                    #         newVal = orgVal + np.repeat(orgVal[-1], rpts).tolist()
-                    #     self.access('%s.%d.%s' % (fldName, m, f), newVal, write2disk=False)
-                       
-                       
-                        # modified by greema: Repeating second to last instead of last value in the yaml file. 
                     elif orgVal is not None:
                         rpts = Nrepeats - len(orgVal)
                         if f == 'index_of_wavelength_involved' and λField:
@@ -1634,18 +1613,14 @@ class graspYAML():
                             if fldName =='vertical_profile_normalized': 
                                 newVal = orgVal[:-1] + [orgVal[-2]]+  np.r_[(orgVal[-2]+1):(orgVal[-2]+1+rpts)].tolist()
                                 newVal[-1] = orgVal[-1]
-
                         else:
                             newVal = orgVal + np.repeat(orgVal[-1], rpts).tolist()
                             if fldName =='vertical_profile_normalized': 
                                 newVal = orgVal[:-1]+ [orgVal[-2]] + np.repeat(orgVal[-2], rpts).tolist()
                                 newVal[-1] = orgVal[-1]
                         self.access('%s.%d.%s' % (fldName, m, f), newVal, write2disk=False)
-                        
                     else: # orgVal is None 
                         assert f=='a_priori_estimates.lagrange_multiplier', '%s not found in %s (it is mandatory)' % (f,fldName)
-
-                    
             m += 1
 
     def adjustVertBins(self, Nbins):
