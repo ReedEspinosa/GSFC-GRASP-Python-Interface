@@ -844,6 +844,8 @@ class graspRun():
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
                         rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
+                if 'aod' not in rs: rs['aod'] = rs['aodMode'].sum(axis=0)
+                if 'ssa' not in rs: rs['ssa'] = np.sum(rs['ssaMode']*rs['aodMode'], axis=0)/rs['aod']
         if ('dVdlnr' in results[0]):
             for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
             if 'rEff' not in results[0]:
