@@ -1178,8 +1178,6 @@ class graspRun():
     def genCellHead(self, pixInd):
         nStr = '\n  %d   ' % len(pixInd)
         dtStr = self.pixels[pixInd[0]].dtObj.strftime('%Y-%m-%dT%H:%M:%SZ')
-        # endstr = ' %10.2f   0   0\n' % self.pixels[pixInd[0]].obsHght
-        
         if hasattr(self.pixels[pixInd[0]], 'gaspar')==True:
         #TODO make this genreal: greema
             endstr = ' %10.2f   0   1\n' % self.pixels[pixInd[0]].obsHght  #setting this to 1 for gas abs
