@@ -440,6 +440,8 @@ class graspRun():
             msg = '%s could not be found, probably because GRASP crashed. \n   Returning empty list in place of output data...'
             warnings.warn(msg % outputFN)
             return []
+
+        
         rsltAeroDict, wavelengths = self.parseOutAerosol(contents)
         if not rsltAeroDict:
             warnings.warn('Aerosol data could not be read from %s\n  Returning empty list in place of output data...' % outputFN)
@@ -720,8 +722,8 @@ class graspRun():
             vals = np.array(line[ptrnMatch.end():-1].split(), dtype=np.float)
             for k,val in enumerate(vals):
                 results[k][fdlName] = val
-        return ptrnMatch is not None                
-                    
+        return ptrnMatch is not None   
+
 
     def parseOutAerosol(self, contents):
         results = self.parseOutDateTime(contents)
@@ -736,20 +738,18 @@ class graspRun():
         ptrnHGNT = re.compile('^[ ]*Aerosol profile mean height')
         ptrnHGNTSTD = re.compile('^[ ]*Aerosol profile standard deviation')
         ptrnAOD = re.compile('^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
-        ptrnAODmode = re.compile('^[ ]*Wavelength \(um\),[ ]+AOD_Particle_mode')
+        ptrnAODmode = re.compile(r'^\s*Wavelength \(um\),\s*Extinction \(Particle Optical Depth\)')
         ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
         ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total Single Scattering Albedo)') #Updated for GRASPV2 Single Scattering Albedo for Particle component 1
-
         ptrnLidar = re.compile('^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
-        ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
-        ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+Single Scattering Albedo') #Updated for GRASPV2 Single Scattering Albedo for Particle component 1
+        ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+Single Scattering Albedo')
         ptrnRRI = re.compile('^[ ]*Wavelength \(um\), REAL Ref\. Index')
         ptrnIRI = re.compile('^[ ]*Wavelength \(um\), IMAG Ref\. Index')
         ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
+        
         i = 0
         nsd = 0
-        # rngAndβextUnited = True
-        rngAndβextUnited = False #Chaged to fit the 
+        rngAndβextUnited = True
         while i < len(contents): # loop line by line, checking each one against the patterns above
             if not ptrnLN.match(contents[i]) is None: # lognormal PSD, these fields have unique form
                 mtch = re.search('[ ]*rv \(um\):[ ]*', contents[i+1])
@@ -777,6 +777,8 @@ class graspRun():
             else:
                 self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext')
                 self.parseMultiParamFld(contents, i, results, ptrnRange, 'range')
+
+
             self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
             self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
             self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
@@ -788,9 +790,38 @@ class graspRun():
             self.parseMultiParamFld(contents, i, results, ptrnRRI, 'n')
             self.parseMultiParamFld(contents, i, results, ptrnIRI, 'k')
             i += 1
+
+
+
         if not results or 'lambda' not in results[0]:
+
+            wl = np.array([0.355, 0.41, 0.46, 0.532, 0.555, 0.67, 0.854, 1.064 ])
+            if len (results[0]['k'])/3 == 5:
+                results[0]['lambda'] = np.array([wl[1],wl[2],wl[4],wl[5],wl[6]])
+            if len (results[0]['k'])/3 == 3:
+                results[0]['lambda'] = np.array([wl[0],wl[3],wl[7]])
+            if len (results[0]['k'])/3 == 8:
+                results[0]['lambda'] = wl
+            if len (results[0]['k']) == 7:
+                results[0]['lambda'] = np.array([0.38, 0.41, 0.55, 0.67, 0.87, 0.904, 0.940])
+
+            if len (results[0]['k']) == 3:
+                results[0]['lambda'] = np.array([wl[0],wl[3],wl[7]])
+
+                if 'aodMode' in results[0]:
+
+                    results[0]['aod'] = np.sum(results[0]['aodMode'])
+                    results[0]['ssa'] = np.sum(results[0]['ssaMode'])
+                
+            
+
+
+            # print(results[0])
+            
             warnings.warn('Limited or no aerosol data found, returning incomplete dictionary...')
-            return results
+
+            # return results
+
         wavelengths = np.atleast_1d(results[0]['lambda'])
         if len(wavelengths)<2:
             if len(wavelengths)==0:
@@ -801,25 +832,20 @@ class graspRun():
                     if key in results[i]: results[i][key] = np.atleast_1d(results[i][key])
         if 'aodMode' in results[0]:
 
-            # print(results[0],results[0]['aodMode'])
-
-            print(results[0]['aod'])
+            if len (results[0]['k']) == 3:
+                results[0]['aod'] = results[0]['aodMode']
+                results[0]['ssa'] = results[0]['ssaMode']
+                
+            else:
+                results[0]['aod'] = np.sum(results[0]['aodMode'].reshape(3,len(results[0]['lambda'])), axis =0)
+                results[0]['ssa'] = np.sum(results[0]['ssaMode'].reshape(3,len(results[0]['lambda'])), axis =0)
+                
             Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]
             nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
             for rs in results: # seperate aerosol modes
                 rs['r'] = rs['r'].reshape(nsd,-1)
-                
-
-               
                 rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
                 for key in [k for k in ['aodMode','ssaMode','n','k'] if k in rs]:
-                    print('Line812, runGRASP, Mod for GRASPV2, nneds fixing')
-                    rs['n']= rs['n'][:nsd*Nwvlth]
-                    rs['k']= rs['k'][:nsd*Nwvlth]
-
-                    print(rs['k'].shape[-1],rs['k'] )
-
-
                     if rs[key].shape[-1] == nsd*Nwvlth:
                         rs[key] = rs[key].reshape(nsd,-1) # we double check that -1 -> Nwvlth on next line
                     assert rs[key].shape[-1]==Nwvlth, 'Length of the last dimension of %s was %d, not matching Nλ=%d' % (key, rs[key].shape[-1], Nwvlth)
@@ -840,8 +866,154 @@ class graspRun():
             if 'rEff' not in results[0]:
                 rEffs = ms.integratePSD(results, moment='rEff')
                 for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
-        return results, wavelengths
+        return results, wavelengths             
+                    
 
+    # def parseOutAerosol(self, contents):
+
+    #     results = self.parseOutDateTime(contents)
+    #     if len(results)==0:
+    #         return []
+    #     ptrnPSD = re.compile('^[ ]*(Radius \(um\),)?[ ]*Size Distribution dV\/dlnr \(normalized')
+    #     ptrnProfile = re.compile('^[ ]*Aerosol vertical profile \[1\/m\] for Particle component [0-9]+')
+    #     ptrnRange = re.compile('^[ ]*Aerosol vertical profile altitudes \[m\] for Particle component [0-9]+')
+    #     ptrnLN = re.compile('^[ ]*Parameters of lognormal SD')
+    #     ptrnVol = re.compile('^[ ]*Aerosol volume concentration')
+    #     ptrnSPH = re.compile('^[ ]*% of spherical particles')
+    #     ptrnHGNT = re.compile('^[ ]*Aerosol profile mean height')
+    #     ptrnHGNTSTD = re.compile('^[ ]*Aerosol profile standard deviation')
+    #     ptrnAOD = re.compile('^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
+    #     ptrnAODmode = re.compile('^[ ]*Wavelength \(um\),[ ]+AOD_Particle_mode')
+    #     ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
+    #     ptrnSSA = re.compile('^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total Single Scattering Albedo)') #Updated for GRASPV2 Single Scattering Albedo for Particle component 1
+
+    #     ptrnLidar = re.compile('^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
+    #     ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
+    #     ptrnSSAmode = re.compile('^[ ]*Wavelength \(um\),[ ]+Single Scattering Albedo') #Updated for GRASPV2 Single Scattering Albedo for Particle component 1
+    #     ptrnRRI = re.compile('^[ ]*Wavelength \(um\), REAL Ref\. Index')
+    #     ptrnIRI = re.compile('^[ ]*Wavelength \(um\), IMAG Ref\. Index')
+    #     ptrnReff = re.compile('^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode
+    #     i = 0
+    #     nsd = 0
+    #     # rngAndβextUnited = True
+    #     rngAndβextUnited = False #Chaged to fit the 
+    #     while i < len(contents): # loop line by line, checking each one against the patterns above
+    #         if not ptrnLN.match(contents[i]) is None: # lognormal PSD, these fields have unique form
+    #             mtch = re.search('[ ]*rv \(um\):[ ]*', contents[i+1])
+    #             rvArr = np.array(contents[i+1][mtch.end():-1].split(), dtype='float64')
+    #             mtch = re.search('[ ]*ln\(sigma\):[ ]*', contents[i+2])
+    #             sigArr = np.array(contents[i+2][mtch.end():-1].split(), dtype='float64')
+    #             for k in range(len(results)):
+    #                 results[k]['rv'] = np.append(results[k]['rv'], rvArr[k]) if 'rv' in results[k] else rvArr[k]
+    #                 results[k]['sigma'] = np.append(results[k]['sigma'], sigArr[k]) if 'sigma' in results[k] else sigArr[k]
+    #             i += 2
+    #         if not ptrnReff.match(contents[i]) is None: # Reff, field has unique form
+    #             Reffs = np.array(ptrnReff.match(contents[i]).group(1).split(), dtype='float64')
+    #             for k,Reff in enumerate(Reffs):
+    #                 results[k]['rEff'] = Reff
+    #         # self.parseMultiParamFld(contents, i, results, ptrnAOD, 'aod', 'lambda')
+    #         self.parseMultiParamFld(contents, i, results, ptrnPSD, 'dVdlnr', 'r')
+    #         if rngAndβextUnited:
+    #             try: # sometimes GRASP adds range column before extinction profile (if not this expects one more column than is present, producing an index error)
+    #                 self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext', 'range', colOffset=1)
+    #             except (IndexError, AssertionError): # but other times range is a separate field... no obvious rhyme or reason
+    #                 del results[0]['βext'] # we should have crashed while setting βext in the first pixel, no need to delete key in others
+    #                 for rd in results: del rd['range'] # range should have been set in every pixel before the crash
+    #                 i -= 1 # we need to parse this line again, using the correct arguments for parseMultiParamFld (below)
+    #                 rngAndβextUnited = False # we fixed the issues, and we now know better than to try again
+    #         else:
+    #             self.parseMultiParamFld(contents, i, results, ptrnProfile, 'βext')
+    #             self.parseMultiParamFld(contents, i, results, ptrnRange, 'range')
+    #         self.parseMultiParamFld(contents, i, results, ptrnVol, 'vol')
+    #         self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
+    #         self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
+    #         self.parseMultiParamFld(contents, i, results, ptrnHGNTSTD, 'heightStd')
+    #         self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode')
+    #         self.parseMultiParamFld(contents, i, results, ptrnSSA, 'ssa')
+    #         self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')
+    #         self.parseMultiParamFld(contents, i, results, ptrnSSAmode, 'ssaMode')
+    #         self.parseMultiParamFld(contents, i, results, ptrnRRI, 'n')
+    #         self.parseMultiParamFld(contents, i, results, ptrnIRI, 'k')
+    #         i += 1
+    #     if not results or 'lambda' not in results[0]:
+
+    #         print(results[0]['k'])
+
+    #         wl = np.array([0.355, 0.41, 0.46, 0.532, 0.555, 0.67, 0.854, 1.064 ])
+    #         if len (results[0]['k'])/3 == 5:
+    #             results[0]['lambda'] = np.array([wl[1],wl[2],wl[4],wl[5],wl[6]])
+    #         if len (results[0]['k'])/3 == 3:
+    #             results[0]['lambda'] = np.array([wl[0],wl[3],wl[7]])
+    #         if len (results[0]['k'])/3 == 8:
+    #             results[0]['lambda'] = wl
+            
+    #         results[0]['aod'] = np.sum(results[0]['aodMode'].reshape(3,len(results[0]['lambda'])), axis =0)
+    #         results[0]['ssa'] = np.sum(results[0]['ssaMode'].reshape(3,len(results[0]['lambda'])), axis =0)
+    #         warnings.warn('Limited or no aerosol data found, returning incomplete dictionary...')
+    #         # return results
+
+    #     wavelengths = np.atleast_1d(results[0]['lambda'])
+
+    #     print(wavelengths)
+    #     if len(wavelengths)<2:
+    #         if len(wavelengths)==0:
+    #             warnings.warn('No wavelengths (lambda) values found, returning incomplete dictionary...')
+    #             return results
+    #         for i in range(len(results)): # we need to convert aod, ssa, etc. from scalars to numpy arrays
+    #             for key in results[0].keys():
+    #                 if key in results[i]: results[i][key] = np.atleast_1d(results[i][key])
+    #     if 'aodMode' in results[0]:
+
+    #         # print(results[0]['aod'])
+    #         # if len(results[0]['aod'].shape[0] ==0):
+    #         Nwvlth = results[0]['lambda'].shape[0]
+    #         # else:
+
+
+    #         #     Nwvlth = 1 if np.isscalar(results[0]['aod']) else results[0]['aod'].shape[0]  #org delete l 825-830
+    #         nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
+    #         for rs in results: # seperate aerosol modes
+    #             rs['r'] = rs['r'].reshape(nsd,-1)
+                
+
+               
+    #             rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
+    #             for key in [k for k in ['aodMode','ssaMode','n','k'] if k in rs]:
+    #                 print('Line812, runGRASP, Mod for GRASPV2, nneds fixing')
+    #                 rs['n']= rs['n'].reshape(3,len(wavelengths))
+    #                 rs['k']= rs['k'].reshape(3,len(wavelengths))
+
+    #                 # print(rs['k'].shape[-1],rs['k'] )
+
+
+    #                 if rs[key].shape[-1] == nsd*Nwvlth:
+    #                     rs[key] = rs[key].reshape(nsd,-1) # we double check that -1 -> Nwvlth on next line
+    #                 assert rs[key].shape[-1]==Nwvlth, 'Length of the last dimension of %s was %d, not matching Nλ=%d' % (key, rs[key].shape[-1], Nwvlth)
+    #             for λflatKey in [k for k in ['n','k'] if k in rs.keys()]: # check if spectrally flat RI values used
+    #                 for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value
+    #             if 'βext' in rs:
+    #                 rs['range'] = rs['range'].reshape(nsd,-1)
+    #                 rs['βext'] = rs['βext'].reshape(nsd,-1)
+    #                 βprfl = rs['βext'].sum(axis=0)
+    #                 rng = rs['range'][0]
+    #                 rs['height'] = np.trapz(βprfl*rng, rng)/np.trapz(βprfl, rng) # extinction weighted mean height
+    #                 λ550Ind = np.argmin(np.abs(rs['lambda']-0.55))
+    #                 for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
+    #                     AOD = rs['aodMode'][mode, λ550Ind]
+    #                     rs['βext'][mode,:] = 1e6*ms.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
+    #     if ('dVdlnr' in results[0]):
+    #         for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
+    #         if 'rEff' not in results[0]:
+    #             rEffs = ms.integratePSD(results, moment='rEff')
+    #             for rs,rEff in zip(results, rEffs): rs['rEff'] = rEff
+
+           
+    #     return results, wavelengths
+
+    
+    
+    
+    
     def parseOutSurface(self, contents, Nλ=None):
         results = self.parseOutDateTime(contents)
         ptrnALB = re.compile('^[ ]*Wavelength \(um\),[ ]+Surface ALBEDO')
@@ -941,7 +1113,10 @@ class graspRun():
             pixMatch = ptrnPIX.match(contents[i]) if FITfnd else None
             if pixMatch is not None:  # We found a single pixel & wavelength group
                 pixInd = int(pixMatch.group(1))-1
-        #        wvlInd = int(pixMatch.group(2))-1
+
+                print("L970 Comment line 971")
+                wvlInd = int(pixMatch.group(2))-1
+
                 wvlVal = float(pixMatch.group(3))
                 try:
                     wvlInd = np.nonzero(np.isclose(wavelengths, wvlVal, atol=1e-3))[0][0] # this matches them if they are within 1 nm
