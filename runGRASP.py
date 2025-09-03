@@ -765,9 +765,9 @@ class graspRun():
         ptrnHGNTSTD = re.compile(r'^[ ]*Aerosol profile standard deviation')
         ptrnAOD = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(Total_AOD|AOD_Total)')
         ptrnAODmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(AOD_Particle_mode|Extinction \(Particle Optical Depth\))')
-        ptrnSSA = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA)')
+        ptrnSSA = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(SSA_Total|Total_SSA|Total Single Scattering Albedo)')
         ptrnLidar = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Lidar[ ]*Ratio[ ]*\(Total\)')
-        ptrnSSAmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+SSA_Particle_mode')
+        ptrnSSAmode = re.compile(r'^[ ]*Wavelength \(um\),[ ]+(SSA_Particle_mode|Single Scattering Albedo)')
         ptrnRRI = re.compile(r'^[ ]*Wavelength \(um\), REAL Ref\. Index')
         ptrnIRI = re.compile(r'^[ ]*Wavelength \(um\), IMAG Ref\. Index')
         ptrnReff = re.compile(r'^[ ]*reff total[ ]*([0-9Ee.+\- ]+)[ ]*$') # this seems to have been removed in GRASP V0.8.2, atleast with >1 mode

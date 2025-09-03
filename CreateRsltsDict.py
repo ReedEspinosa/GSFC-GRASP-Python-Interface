@@ -104,7 +104,7 @@ def VertP(Data, hgtInterv,inp2):
     
     return df
 #TODO make this more general
-SpecResFnPath = '/home/gregmi/ORACLES/RSP_Spectral_Response/'
+# SpecResFnPath = '/home/gregmi/ORACLES/RSP_Spectral_Response/'
 
 def Gaspar_MAP(RSP_wl,Airhgt,GasAbsFn,SpecResFnPath):
     """This function will caculate the total gas optical depth when the spectral Response function and Gas Optical Depth for different gases are 
@@ -267,7 +267,7 @@ def Abs_Correction(Solar_Zenith,Viewing_Zenith,Wlname,GasAbsFn,altIndex,SpecResF
 ### Reading the Multiangle Polarimeter data ()
 
 # Reads the Data from ORACLES and gives the rslt dictionary for GRASP
-def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, RSPwlIdx,GasAbsFn): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
+def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, RSPwlIdx,GasAbsFn,SpecResFnPath): #PixNo = Index of the pixel, #nwl = wavelength index, :nwl will be taken
     
     anglesIdx = np.arange(ang1,ang2,1)
     #Reading the hdf file
@@ -284,31 +284,36 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, RSPwlIdx,Ga
     Lat = f1_MAP['Geometry']['Collocated_Latitude'][TelNo,PixNo]
     Lon = f1_MAP['Geometry']['Collocated_Longitude'][TelNo,PixNo]   
     #All the angles are converted to GRASP's definition of Genometry which is different than that of RSP
-    vza = 180-f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,anglesIdx]
+    # vza = 180-f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,anglesIdx]
 
-    #This can be used to filter scattering angles if required
-    vza[f1_MAP['Geometry']['Nadir_Index'][0,PixNo]:] = - vza[f1_MAP['Geometry']['Nadir_Index'][0,PixNo]:]
-    Angfilter = (vza>= -45) & (vza<= 45) # taking only the values of view zenith from -65 to 45
-
+    # #This can be used to filter scattering angles if required
+    # vza[f1_MAP['Geometry']['Nadir_Index'][0,PixNo]:] = - vza[f1_MAP['Geometry']['Nadir_Index'][0,PixNo]:]
+    
     #Angles are checked for nans 
     Scattering_ang = checkFillVals(f1_MAP['Geometry']['Scattering_Angle'][TelNo,PixNo,anglesIdx]  )
-    Solar_Zenith =  checkFillVals(f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,anglesIdx]  )
+    Solar_Zenith =  checkFillVals(f1_MAP['Geometry']['Solar_Zenith'][TelNo,PixNo,anglesIdx])
     
     #Converting sunlight azimuth to solar azimuth: 𝜃𝑠, 180- 𝜃𝑣 𝜙𝑠 = 𝜙𝑠 -180, 𝜙𝑣
 
-    Solar_Azimuth = checkFillVals(f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,anglesIdx], ) - 180
-    Viewing_Azimuth = checkFillVals(f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,anglesIdx]  )
+    Solar_Azimuth = checkFillVals(f1_MAP['Geometry']['Solar_Azimuth'][TelNo,PixNo,anglesIdx])-180
+    Viewing_Azimuth = checkFillVals(f1_MAP['Geometry']['Viewing_Azimuth'][TelNo,PixNo,anglesIdx])
    
     #Converting viewing zenith with respect to nadir to that wrt zenith
-    Viewing_Zenith = 180 - checkFillVals(f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,anglesIdx]  ) # Theta_v <90
+    Viewing_Zenith = 180-checkFillVals(f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,anglesIdx] ) # Theta_v <90
+    # Viewing_Zenith = checkFillVals(f1_MAP['Geometry']['Viewing_Zenith'][TelNo,PixNo,anglesIdx] ) # Theta_v <90
     
     #Converting values into radians to caculate the relative azimuth angles        
     sza =  np.radians(Solar_Zenith)
     vza =   np.radians(Viewing_Zenith)
     szi =  np.radians(Solar_Azimuth)
     vzi =  np.radians(Viewing_Azimuth)
+
+
+    Relative_Azi = (Solar_Azimuth-Viewing_Azimuth)% 360.0
     
-    Relative_Azi = (180/np.pi)*(np.arccos((np.cos((Scattering_ang *np.pi)/180)  + np.cos(sza)*np.cos(vza))/(- np.sin(sza)*np.sin(vza)) ))
+    # Relative_Azi = (180/np.pi)*(np.arccos((np.cos((Scattering_ang *np.pi)/180)  + np.cos(sza)*np.cos(vza))/(- np.sin(sza)*np.sin(vza)) ))
+
+
 
 
     #TODO
@@ -403,7 +408,7 @@ def Read_Data_RSP_Oracles(file_path,file_name,PixNo,ang1,ang2,TelNo, RSPwlIdx,Ga
     gasAbsorption = Gaspar_MAP(wl,rslt['OBS_hght']/1000,GasAbsFn,SpecResFnPath)[:]
     rslt['gaspar'] = gasAbsorption[RSPwlIdx]
     
-    print(rslt['gaspar'])
+    # print(rslt['gaspar'])
     f1_MAP.close()
     return rslt
 
@@ -414,7 +419,7 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
     #Latitude and longitude values 
     latitude,longitude = f1['Nav_Data']['gps_lat'][:],f1['Nav_Data']['gps_lon'][:]
     AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
-    print(AirAlt)
+    # print(AirAlt)
 
     del_dict ={} #This dictionary stores 
     inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep']
@@ -432,7 +437,7 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
     df_new.interpolate(inplace=True, limit_area= 'inside')
 
     BLHIndx = np.where(np.gradient(df_new['1064_dep'],df_new['Altitude']) ==np.nanmax(np.gradient(df_new['1064_dep'],df_new['Altitude']))) #index of the BLH
-    print(BLHIndx)
+    # print(BLHIndx)
     #Height limits
     # BLh = 1200 #Boundary layer height 
     BLh = np.array(df_new['Altitude'][:])[BLHIndx]
@@ -558,9 +563,9 @@ def Read_Data_HSRL_Oracles(file_path,file_name,PixNo,Plot_avg_prof = None):
     # Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
 
     Dep = np.ones((height_shape,3))
-    Dep[:,0] = df['355_dep'][:]
-    Dep[:,1] = df['532_dep'][:]
-    Dep[:,2] = df['1064_dep'] [:]
+    Dep[:,0] = df['355_dep'][:]*np.nan
+    Dep[:,1] = df['532_dep'][:]*np.nan
+    Dep[:,2] = df['1064_dep'] [:]*np.nan
 
     #Unit conversion 
     rslt['meas_VExt'] = Bext / 1000
@@ -625,9 +630,367 @@ def Read_HARP2(file_path,file_name,PixNo,ang1,ang2):
         print(f"The collocated height was { rslt['OBS_hght']}, OBS_hght was set to 0 ")
     
     rslt['gaspar'] =Gaspar_MAP(wl,rslt['OBS_hght']/1000,GasAbsFn,SpecResFnPath)
-    print(rslt['gaspar'])
-    f1_MAP.close()
+    # print(rslt['gaspar'])
+    # f1_MAP.close()
     return rslt
+
+
+
+# def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleCase =None):
+
+#     """Note: This is the function that is being currently used to run GRASP for HSRL (ORACLES)"""
+
+#     #Specify the Path and the name of the HSRL file
+#     #Reading the HSRL data
+#     f1= h5py.File(file_path + file_name,'r+')  #reading Lidar measurements 
+
+#     HSRL = f1['DataProducts']
+#     Temp =  f1['State']['Temperature'][:]
+#     AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
+#     AerID = HSRL['Aerosol_ID'][PixNo][:]
+#     hgt = HSRL['Altitude'][:].flatten()
+    
+#     DMR = HSRL['Dust_Mixing_Ratio'][:]
+#     DMR[np.where(np.isnan(DMR))[0]] = 0
+
+#     #Extinding the value of Vext to the aircraft altitude. To do so we assume lidar ratio closer to the aircraft to be constant, Vext at h > ~4000 to HAircradt  = LR * VBsc
+#     Vext532  = HSRL['532_ext'][PixNo][:]
+#     Vext355  = HSRL['355_ext'][PixNo][:]
+
+#     Bsca532  = HSRL['532_bsc'][PixNo][:]
+#     Bsca355  = HSRL['355_bsc'][PixNo][:]
+
+#     NanHgt355 = hgt[(np.where(np.isnan(Vext355)))[0]]  #Finding the index of the first nan value. 
+#     MaxExtIdx355 = int(np.where(hgt ==np.nanmin(NanHgt355[NanHgt355>3000]))[0]) -10
+
+#     NanHgt532 = hgt[(np.where(np.isnan(Vext532)))[0]]  #Finding the index of the first nan value. 
+#     MaxExtIdx532 = int(np.where(hgt == np.nanmin(NanHgt532[NanHgt532>3000]))[0]) -10
+   
+#     # Calculating the lodar ratio
+#     LR_532_cal =Vext532/Bsca532
+#     LR_355_cal =Vext355/Bsca355
+
+#     #Caculatig the height above which the lidar ratio is too high:
+
+#     LR_max = hgt[(np.where(LR_532_cal>=100))[0]]
+#     print('Height above which LR at 532> 100', np.nanmin(LR_max[LR_max>4000]))
+
+#     plt.plot(LR_532_cal ,hgt)
+#     plt.plot(LR_355_cal,hgt)
+
+#     # Assuming the lidar ratio to be constant
+#     # Vext532hmax = LR_532_cal[MaxExtIdx532-10]*Bsca532[MaxExtIdx355-2:]
+#     # Vext355hmax  = LR_355_cal[MaxExtIdx355-10]*Bsca355[MaxExtIdx355-2:]
+#     # # Vext532[MaxExtIdx355-2:] = Vext532hmax 
+
+#     #Color ratio
+
+#     ColorRatioA =Vext355/Vext532
+#     ColorRatioA =Vext532/Vext355  #for 532
+
+#     # Vext355hmax  = LR_355_cal[MaxExtIdx355-10]*Bsca355[MaxExtIdx355:]
+#     ColorRatio = np.mean(ColorRatioA[np.where((hgt>4000) & (hgt<4550))[0]])
+#     # ColorRatio = np.nanmax(ColorRatioA)
+#     # print(ColorRatio)
+#     # # LR_355_cal =Vext355/Bsca355
+#     # #Assuming the lidar ratio to be constant
+#     # # Vext532hmax = ColorRatio[MaxExtIdx355-2]*Vext355hmax[MaxExtIdx355-1:]
+#     Vext355hmax = ColorRatio*Vext532[MaxExtIdx355-2:]
+    
+     
+#     #Replacing the nan values by the caculate Vext from LR and Backscatter
+#     # Vext532[MaxExtIdx355-2:] = Vext532hmax 
+#     Vext355[MaxExtIdx355-2:] = Vext355hmax
+
+#     # DMRpar = HSRL['532_aer_dep'][PixNo][:]
+#     # DMRpar[MaxExtIdx355-1:] = HSRL['1064_dep'][PixNo][MaxExtIdx355-1:]
+
+
+#     # fig,axs  = plt.subplots(1,2, figsize =(10,6), sharey =True)
+
+#     # axs[0].plot(Vext532hmax, hgt[MaxExtIdx532-1:],marker ='o',c= '#888859', label ='cal')
+#     # axs[0].plot(HSRL['532_ext'][PixNo][:],hgt,c='k')
+
+
+#     # axs[1].plot(Vext355hmax,hgt[MaxExtIdx355-1:],c= '#888859',marker ='o', label='cal')
+#     # axs[1].plot(HSRL['355_ext'][PixNo][:],hgt,c='k')
+
+
+#     # axs[0].set_xlabel('532 Ext km-1')
+#     # axs[1].set_xlabel('355 Ext km-1')
+
+#     # axs[0].set_ylabel('Altitude m')
+#     # # axs[1].set_ylabel('Altitude m')
+
+#     # # print(HSRL['532_ext'][PixNo][:])
+
+#     # # print(Vext532hmax )
+#     # axs[0].legend()
+#     # axs[1].legend()
+    
+
+
+#     NanHgt = hgt[(np.where(np.isnan(HSRL['532_ext'][PixNo][:])))[0]] #finding the upper limit of the profile height (filtering for high noise) 
+#     # UpH =   np.nanmin(NanHgt[NanHgt>3000]) 
+
+#     #Index of values below aircraft and above ground
+#     hmaxInd = np.min(np.where(HSRL['Altitude'][0] >=AirAlt)[0])  #-1000 os added to avoid values vary close to the aircraft
+   
+#     #Minimun index is the max height where the values are not nan, taking 500 as a dummy value for height. 
+#     hminInd = int(np.where(hgt ==np.nanmax(NanHgt[NanHgt<1000]))[0]) # -1 is to set the min value to 0 so that we dont have extra aod
+    
+#     # print('Height range of the profile',hmaxInd,hminInd)
+#     # print('Height range of the profile',AirAlt)
+
+#     # print(AerID)
+#     # HSRL['Dust_Mixing_Ratio'][PixNo][:][np.where(AerID > 8)] = np.nanmax(HSRL['Dust_Mixing_Ratio'][PixNo][:])
+#     # print(HSRL['Dust_Mixing_Ratio'][PixNo][:][np.where(AerID > 8)])
+#     #Horizontal Averaging the Angstrom exponent data to reduce noise  and caculating the fine mode fraction
+#     # AEpix5= HSRL['Angstrom_532_355'][PixNo-5:PixNo+5][:]
+   
+#     AEpix5= HSRL['Angstrom_532_355'][PixNo-3:PixNo+3][:]/HSRL['Angstrom_Spherical'][PixNo-3:PixNo+3][:]
+#     avgFMF = np.nanmean(AEpix5 , axis = 0)
+
+#     # Caculating the fine mode froaction of 
+
+#     # Voth532 = (1-DMR[PixNo-3:PixNo+3])*HSRL['532_ext'][PixNo-3:PixNo+3]
+#     # Voth355 = (1-DMR[PixNo-3:PixNo+3])*HSRL['355_ext'][PixNo-3:PixNo+3]
+#     # AngVoth = -np.log(Voth532/Voth355)/np.log(532/355)
+#     # FMFVoth = AngVoth/HSRL['Angstrom_Spherical'][PixNo-3:PixNo+3][:]
+    
+#     Voth532 = (1-DMR[PixNo])*Vext532
+#     Voth355 = (1-DMR[PixNo])*Vext355
+#     # Voth355 = (1-DMR[PixNo-3:PixNo+3])*HSRL['355_ext'][PixNo-3:PixNo+3]
+
+#     AngVoth = -np.log(Voth532/Voth355)/np.log(532/355)
+#     FMFVoth = AngVoth/HSRL['Angstrom_Spherical'][PixNo][:]
+#     AvgFMFVoth = FMFVoth 
+
+    
+
+   
+#     Data_dic ={} #This dictionary stores all the HSRL variables used for GRASP forward simulation
+#     inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep','Dust_Mixing_Ratio' ,'532_aer_dep']
+#     inp2 = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep', 'Altitude','Dust_Mixing_Ratio','532_aer_dep','FMF'] #Key words for Datadic
+    
+    
+#     Data_dic['Altitude'] = HSRL2_checkFillVals(HSRL['Altitude'][0][hminInd:hmaxInd])  # Height of the aerosol layer from the sea level
+#     # Data_dic['FMF'] = HSRL2_checkFillVals(avgFMF[hminInd:hmaxInd])
+#     Data_dic['FMF'] = HSRL2_checkFillVals(AvgFMFVoth[hminInd:hmaxInd])
+    
+
+#     #Setting negative values to zero, The negative values are due to low signal so we can replace with 0 without loss of info.
+    
+    
+#     for i in range (len(inp)):
+        
+
+#         Data_dic[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo][hminInd:hmaxInd] #Values within the reasonable heights
+#         df_new = pd.DataFrame(Data_dic)
+    
+#     # print(Data_dic['532_ext'][:])
+
+#  #Specify the Path and the name of the HSRL file
+#     #Reading the HSRL data
+#     #Dividing the height into 3 layers> Boundary layer, dust dominated layer( for ORACLES case, spt 22, 2018), and high layer
+#     Data_dic['532_ext'] = Vext532[hminInd:hmaxInd]
+#     Data_dic['355_ext'] = Vext355[hminInd:hmaxInd]
+#     # Data_dic['532_aer_dep'] =DMRpar[hminInd:hmaxInd] #Replacing the nan values of aerosol DP at 532 with aer DP at 1064 #TODO change this 
+
+#     # Data_dic['532_aer_dep'][np.where(Data_dic['Altitude']>hgtNanHgt355 )[0]] = Data_dic['532_dep'][hminInd:hmaxInd][np.where(Data_dic['Altitude']>NanHgt355 )[0]]
+    
+
+#     del_dictt = Data_dic     
+#     #Calculating the marine boundary layer height, Because we are interested in aerosol shape, usin Dp as a parameter to determine boundary layer height
+    
+#     """Another potential parameter for boundary layer height is the relative humidity, as it potentially helps to differentiate the layer with spherical and non-spherical layer
+#     Note: this is this case specific (marine in the boundary layer (spherical) and dust layer above(NonSph)) and cannot be applied to other cases
+#     """
+
+#     #TODO : cacluating blh with respect to temp or humidity
+
+#     BLHIndx = np.where(np.gradient(df_new['1064_dep'],df_new['Altitude']) ==np.nanmax(np.gradient(df_new['1064_dep'],df_new['Altitude']))) #index of the BLH
+#     # print(BLHIndx)
+#     #Height limits
+#     # BLh = 1200 #Boundary layer height 
+#     BLh = np.array(df_new['Altitude'][:])[BLHIndx] #Boundary layer height 
+#     # print(df_new['Altitude'][:])
+#     # print(BLh)
+#     # fig,axs  = plt.subplots(1,2, figsize =(10,6), sharey =True)
+#     # axs[0].plot(Data_dic['532_ext'][:],Data_dic['Altitude'],c='k')
+#     # axs[1].plot(Data_dic['355_ext'][:],Data_dic['Altitude'],c='k')
+
+
+#     # axs[0].set_xlabel('532 Ext km-1')
+#     # axs[1].set_xlabel('355 Ext km-1')
+
+#     # axs[0].set_ylabel('Altitude m')
+#     # # axs[1].set_ylabel('Altitude m')
+
+
+#     # axs[0].legend()
+#     # axs[1].legend()
+    
+
+
+
+#      #3000 is a dummy value 
+
+#     # UpH = np.nanmax(df_new['Altitude'][:]) # avoid low signals
+#     # BLh =300
+#     belowBL ={}
+#     MidAtm={}
+#     UpAtm={}
+
+#     #TODO make this part more general
+#     #No of height grids: divinding the profile into two layer: below and above the boundary layer heights.
+   
+#     MidInv = 150 #150 #No of grids below the boundary layer
+#     UpInv = 800
+#     BLIntv = 110 #No of grids below the boundary layer
+#     avgProf = pd.DataFrame()
+#     hgt = del_dictt['Altitude']
+   
+#     # UpH = hgt[MaxExtIdx355] #Height where Vext355 is nan
+
+#     UpH = np.nanmin(LR_max[LR_max>4000]) #Height where LR at 532>100
+#     # UpH = hgt[MaxExtIdx532] #Height where Vext355 is nan
+
+#     #Dividing the profile  #This needs to be modified
+#     for i in range (len(inp2)): 
+#         belowBL[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt<BLh)]
+#         # MidAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where((hgt>= BLh))]
+#         MidAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where((hgt>= BLh) &(hgt< UpH))]
+#         UpAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt>= UpH)]
+    
+#     #Average profiles
+#     BLProf= VertP(belowBL, BLIntv,inp2)
+#     MidProf= VertP(MidAtm, MidInv,inp2)
+#     UpProf = VertP(UpAtm, UpInv,inp2)
+#     AppendZeroTOA = 0
+
+#     plt.plot()
+#     # UpProf= VertP(UpAtm, UpInv)
+#     inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep', 'Dust_Mixing_Ratio' ,'FMF','532_aer_dep']
+
+#     FullAvgProf = {}
+#     for i in range (len(inp2)): 
+#         FullAvgProf[inp2[i]] =  np.concatenate((np.array(UpProf[inp2[i]]), np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
+#         # FullAvgProf[inp2[i]] =  np.concatenate(( np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
+#         # GRASP extrapolates the top ofthe profile to TOA, to stop that we will append a 0 point on top of the profile.
+
+#         # TODO uncomment this changed in Apr 27
+#         if inp2[i] != 'Altitude':
+#             FullAvgProf[inp2[i]][0] = AppendZeroTOA  # The HSRL datahas artifacts/ noisy at altitudes near the aircraft. 
+#         if 'dep' in inp2[i]:
+#             FullAvgProf[inp2[i]][0] = 0.0037
+            
+
+#     # FullAvgProf['Altitude'][0] = AirAlt-1000
+        
+
+#         # FullAvgProf[inp2[i]] =  np.concatenate(( np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
+#         # FullAvgProf[inp2[i]] =   np.array(MidProf[inp2[i]])
+       
+    
+#     fig, axs = plt.subplots(nrows= 1, ncols=len(inp), figsize=(20, 6), sharey = True)
+#     for i in range (0,len(inp)):
+#         axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+#         axs[i].plot(FullAvgProf[f'{inp[i]}'],FullAvgProf['Altitude'], marker= '.' , label = "Avg Prof")
+
+#         axs[i].set_xlabel(f'{inp[i]}')
+
+#     axs[0].legend()
+#     axs[0].set_ylabel('Height m ') 
+
+
+#     fig, axs = plt.subplots(nrows= 1, ncols=len(inp), figsize=(20, 6), sharey = True)
+#     for i in range (0,len(inp)):
+#         axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
+#         # axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
+#         axs[i].plot(MidAtm[f'{inp[i]}'],MidAtm['Altitude'], marker= '.' , label = "bl")
+#         # axs[i].plot(UpAtm[f'{inp[i]}'],UpAtm['Altitude'], marker= '.' , label = "bl")
+#         axs[i].set_xlabel(f'{inp[i]}')
+#     axs[0].legend()
+#     axs[0].set_ylabel('Height m ') 
+#     # Creating GRASP rslt dictionary for runGRASP.py    
+    
+    
+    
+#     df = pd.DataFrame(FullAvgProf)
+#     # df = pd.DataFrame(df_new)
+#     rslt = {} # 
+
+#     DstMR = df['Dust_Mixing_Ratio'][:]
+#     # AEsph = df['Angstrom_Spherical'][:]
+#     aDP= df['532_aer_dep'][:]
+
+#     AEt= df['FMF'][:]
+
+#     #dust mixing ratio from paper
+   
+    
+#     height_shape = np.array(df['Altitude'][:]).shape[0]   #setting the lowermos value to zero to avoid GRASP intgration
+
+#     Range = np.ones((height_shape,3))
+#     Range[:,0] = df['Altitude'][:]
+#     Range[:,1] = df['Altitude'][:]
+#     Range[:,2] = df['Altitude'][:]  # in meters
+#     rslt['RangeLidar'] = Range
+    
+
+#     Bext = np.zeros((height_shape,3))
+#     Bext[:,0] = df['355_ext'][:]
+#     Bext[:,1] = df['532_ext'][:]
+#     Bext[:,2] = df['1064_ext'] [:]
+#     Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
+
+
+#     Bsca = np.zeros((height_shape,3))
+#     Bsca[:,0] = df['355_bsc'][:]
+#     Bsca[:,1] = df['532_bsc'] [:]
+#     Bsca[:,2] = df['1064_bsc'][:]
+#     # Bsca[0,2] = np.nan
+    
+#     Dep = np.zeros((height_shape,3))
+
+#     Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
+#     Dep[:,1] = df['532_dep'][:]
+#     Dep[:,2] = df['1064_dep'] [:]
+
+    
+
+#     #Unit conversion 
+#     rslt['meas_VExt'] = Bext / 1000
+#     rslt['meas_VBS'] = Bsca / 1000 # converting units from km-1 to m-1
+#     rslt['meas_DP'] = Dep *100  # in percentage
+
+
+#     rslt['lambda'] = np.array([355,532,1064])/1000 #values of HSRL wl in um
+#     rslt['wl'] = np.array([355,532,1064])/1000
+#     rslt['datetime'] =dt.datetime.strptime(str(int(f1["header"]['date'][0][0]))+ str(f1['Nav_Data']['UTCtime2'][PixNo][0]),'%Y%m%d%H%M%S.%f')
+#     rslt['latitude'] = f1['Nav_Data']['gps_lat'][PixNo]
+#     rslt['longitude']= f1['Nav_Data']['gps_lon'][PixNo]
+
+#     rslt['OBS_hght']= AirAlt 
+#     # rslt['OBS_height'] = np.nanmax(Range[:,0])   
+#     # aircraft altitude in m
+#     rslt['land_prct'] = 0 #Ocean Surface
+
+#     # if gaspar ==True: # Molecular depolarization correction 
+#     rslt['gaspar'] = np.array([0.0037,0.0037,0.0037])
+
+#     if SimpleCase == True:
+#         Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
+#         Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
+
+        
+    
+#      # TODO check the units for molecular depol correction.   
+#     # TODO make this general
+
+#     f1.close()
+#     return rslt,BLh,DstMR,aDP,AEt,AerID, Temp
 
 
 
@@ -638,37 +1001,40 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
     #Specify the Path and the name of the HSRL file
     #Reading the HSRL data
     f1= h5py.File(file_path + file_name,'r+')  #reading Lidar measurements 
-
     HSRL = f1['DataProducts']
-    Temp =  f1['State']['Temperature'][:]
+    Temp =  f1['State']['Temperature'][:]  #Temperture 
     AirAlt = f1['Nav_Data']['gps_alt'][PixNo] #Altitude of the aircraft
     AerID = HSRL['Aerosol_ID'][PixNo][:]
-    hgt = HSRL['Altitude'][:].flatten()
+    hgt = HSRL['Altitude'][:].flatten() #Convert into 1D array
     
-    DMR = HSRL['Dust_Mixing_Ratio'][:]
-    DMR[np.where(np.isnan(DMR))[0]] = 0
+    DMR = HSRL['Dust_Mixing_Ratio'][:]  #dust mixing ration from HSRl
+    # DMR[np.where(np.isnan(DMR))[0]] = 0  #chaneg the nan values to 0
 
     #Extinding the value of Vext to the aircraft altitude. To do so we assume lidar ratio closer to the aircraft to be constant, Vext at h > ~4000 to HAircradt  = LR * VBsc
     Vext532  = HSRL['532_ext'][PixNo][:]
     Vext355  = HSRL['355_ext'][PixNo][:]
+    Bsca532  = HSRL['532_bsc_Sa'][PixNo][:]
+    Bsca355  = HSRL['355_bsc_Sa'][PixNo][:]
 
-    Bsca532  = HSRL['532_bsc'][PixNo][:]
-    Bsca355  = HSRL['355_bsc'][PixNo][:]
 
+    #Measurement are nan at altide closer to the ground and above the aircarft altitude, finding the upper/lower height limits  with vavlid measuments
+    """ Finding the height range where all the measurement types have valid values"""
     NanHgt355 = hgt[(np.where(np.isnan(Vext355)))[0]]  #Finding the index of the first nan value. 
     MaxExtIdx355 = int(np.where(hgt ==np.nanmin(NanHgt355[NanHgt355>3000]))[0]) -10
 
     NanHgt532 = hgt[(np.where(np.isnan(Vext532)))[0]]  #Finding the index of the first nan value. 
     MaxExtIdx532 = int(np.where(hgt == np.nanmin(NanHgt532[NanHgt532>3000]))[0]) -10
    
-    # Calculating the lodar ratio
+    # Calculating the lidar ratio
     LR_532_cal =Vext532/Bsca532
     LR_355_cal =Vext355/Bsca355
 
-    #Caculatig the height above which the lidar ratio is too high:
-
+    #Caculatig the height above which the lidar ratio is too high: Filtering the height, only taking the height with resonable values for Lidar Ratio, here <100
     LR_max = hgt[(np.where(LR_532_cal>=100))[0]]
     print('Height above which LR at 532> 100', np.nanmin(LR_max[LR_max>4000]))
+
+    DMR[(np.where(LR_532_cal>=100))[0]] =  DMR[np.nanmin((np.where(LR_532_cal>=100))[0])]  # The DMR is not relaible for the LR>100 
+
 
     plt.plot(LR_532_cal ,hgt)
     plt.plot(LR_355_cal,hgt)
@@ -679,23 +1045,22 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
     # # Vext532[MaxExtIdx355-2:] = Vext532hmax 
 
     #Color ratio
-
-    ColorRatioA =Vext355/Vext532
-    ColorRatioA =Vext532/Vext355  #for 532
+    # ColorRatioA =Vext355/Vext532
+    # ColorRatioA =Vext532/Vext355  #for 532
 
     # Vext355hmax  = LR_355_cal[MaxExtIdx355-10]*Bsca355[MaxExtIdx355:]
-    ColorRatio = np.mean(ColorRatioA[np.where((hgt>4000) & (hgt<4550))[0]])
+    # ColorRatio = np.mean(ColorRatioA[np.where((hgt>4000) & (hgt<4550))[0]])
     # ColorRatio = np.nanmax(ColorRatioA)
-    print(ColorRatio)
+    # print(ColorRatio)
     # # LR_355_cal =Vext355/Bsca355
     # #Assuming the lidar ratio to be constant
     # # Vext532hmax = ColorRatio[MaxExtIdx355-2]*Vext355hmax[MaxExtIdx355-1:]
-    Vext355hmax = ColorRatio*Vext532[MaxExtIdx355-2:]
+    # Vext355hmax = ColorRatio*Vext532[MaxExtIdx355-2:]
     
      
     #Replacing the nan values by the caculate Vext from LR and Backscatter
     # Vext532[MaxExtIdx355-2:] = Vext532hmax 
-    Vext355[MaxExtIdx355-2:] = Vext355hmax
+    # Vext355[MaxExtIdx355-2:] = Vext355hmax
 
     # DMRpar = HSRL['532_aer_dep'][PixNo][:]
     # DMRpar[MaxExtIdx355-1:] = HSRL['1064_dep'][PixNo][MaxExtIdx355-1:]
@@ -732,27 +1097,12 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
     hmaxInd = np.min(np.where(HSRL['Altitude'][0] >=AirAlt)[0])  #-1000 os added to avoid values vary close to the aircraft
    
     #Minimun index is the max height where the values are not nan, taking 500 as a dummy value for height. 
-    hminInd = int(np.where(hgt ==np.nanmax(NanHgt[NanHgt<1000]))[0]) # -1 is to set the min value to 0 so that we dont have extra aod
-    
-    print('Height range of the profile',hmaxInd,hminInd)
-    print('Height range of the profile',AirAlt)
-
-    # print(AerID)
-    # HSRL['Dust_Mixing_Ratio'][PixNo][:][np.where(AerID > 8)] = np.nanmax(HSRL['Dust_Mixing_Ratio'][PixNo][:])
-    # print(HSRL['Dust_Mixing_Ratio'][PixNo][:][np.where(AerID > 8)])
-    #Horizontal Averaging the Angstrom exponent data to reduce noise  and caculating the fine mode fraction
-    # AEpix5= HSRL['Angstrom_532_355'][PixNo-5:PixNo+5][:]
-   
+    hminInd = int(np.where(hgt ==np.nanmax(NanHgt[NanHgt<1000]))[0]) # 2 bins above the ground  # -1 is to set the min value to 0 so that we dont have extra aod
+    hmaxInd = np.min(np.where(HSRL['Altitude'][0] >=AirAlt)[0])  #-1000 os added to avoid values vary close to the aircraft
+ 
     AEpix5= HSRL['Angstrom_532_355'][PixNo-3:PixNo+3][:]/HSRL['Angstrom_Spherical'][PixNo-3:PixNo+3][:]
     avgFMF = np.nanmean(AEpix5 , axis = 0)
 
-    # Caculating the fine mode froaction of 
-
-    # Voth532 = (1-DMR[PixNo-3:PixNo+3])*HSRL['532_ext'][PixNo-3:PixNo+3]
-    # Voth355 = (1-DMR[PixNo-3:PixNo+3])*HSRL['355_ext'][PixNo-3:PixNo+3]
-    # AngVoth = -np.log(Voth532/Voth355)/np.log(532/355)
-    # FMFVoth = AngVoth/HSRL['Angstrom_Spherical'][PixNo-3:PixNo+3][:]
-    
     Voth532 = (1-DMR[PixNo])*Vext532
     Voth355 = (1-DMR[PixNo])*Vext355
     # Voth355 = (1-DMR[PixNo-3:PixNo+3])*HSRL['355_ext'][PixNo-3:PixNo+3]
@@ -765,12 +1115,13 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
 
    
     Data_dic ={} #This dictionary stores all the HSRL variables used for GRASP forward simulation
-    inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep','Dust_Mixing_Ratio' ,'532_aer_dep']
-    inp2 = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep', 'Altitude','Dust_Mixing_Ratio','532_aer_dep','FMF'] #Key words for Datadic
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep','Dust_Mixing_Ratio' ,'532_aer_dep','1064_aer_dep']
+    inp2 = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Altitude','Dust_Mixing_Ratio','532_aer_dep','1064_aer_dep','FMF'] #Key words for Datadic
     
+
+
     
     Data_dic['Altitude'] = HSRL2_checkFillVals(HSRL['Altitude'][0][hminInd:hmaxInd])  # Height of the aerosol layer from the sea level
-    # Data_dic['FMF'] = HSRL2_checkFillVals(avgFMF[hminInd:hmaxInd])
     Data_dic['FMF'] = HSRL2_checkFillVals(AvgFMFVoth[hminInd:hmaxInd])
     
 
@@ -781,19 +1132,25 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
         
 
         Data_dic[f'{inp[i]}'] = HSRL[f'{inp[i]}'][PixNo][hminInd:hmaxInd] #Values within the reasonable heights
-        df_new = pd.DataFrame(Data_dic)
-    
-    # print(Data_dic['532_ext'][:])
+
+
+        if inp[i] == '532_aer_dep':  #Exrapolating the endpoints to have reasonable DMR at the ends #TODO have to reconfirm with the literature
+            arr= Data_dic['532_aer_dep']
+            valid = ~np.isnan(arr)
+            x = np.arange(len(arr))
+            # Interpolate and extrapolate
+            arr_filled = np.interp(x, x[valid], arr[valid])
+            Data_dic['532_aer_dep'] = arr_filled
+            
+    df_new = pd.DataFrame(Data_dic)
+
 
  #Specify the Path and the name of the HSRL file
     #Reading the HSRL data
     #Dividing the height into 3 layers> Boundary layer, dust dominated layer( for ORACLES case, spt 22, 2018), and high layer
     Data_dic['532_ext'] = Vext532[hminInd:hmaxInd]
     Data_dic['355_ext'] = Vext355[hminInd:hmaxInd]
-    # Data_dic['532_aer_dep'] =DMRpar[hminInd:hmaxInd] #Replacing the nan values of aerosol DP at 532 with aer DP at 1064 #TODO change this 
 
-    # Data_dic['532_aer_dep'][np.where(Data_dic['Altitude']>hgtNanHgt355 )[0]] = Data_dic['532_dep'][hminInd:hmaxInd][np.where(Data_dic['Altitude']>NanHgt355 )[0]]
-    
 
     del_dictt = Data_dic     
     #Calculating the marine boundary layer height, Because we are interested in aerosol shape, usin Dp as a parameter to determine boundary layer height
@@ -805,28 +1162,8 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
     #TODO : cacluating blh with respect to temp or humidity
 
     BLHIndx = np.where(np.gradient(df_new['1064_dep'],df_new['Altitude']) ==np.nanmax(np.gradient(df_new['1064_dep'],df_new['Altitude']))) #index of the BLH
-    # print(BLHIndx)
-    #Height limits
-    # BLh = 1200 #Boundary layer height 
     BLh = np.array(df_new['Altitude'][:])[BLHIndx] #Boundary layer height 
-    # print(df_new['Altitude'][:])
-    # print(BLh)
-    # fig,axs  = plt.subplots(1,2, figsize =(10,6), sharey =True)
-    # axs[0].plot(Data_dic['532_ext'][:],Data_dic['Altitude'],c='k')
-    # axs[1].plot(Data_dic['355_ext'][:],Data_dic['Altitude'],c='k')
-
-
-    # axs[0].set_xlabel('532 Ext km-1')
-    # axs[1].set_xlabel('355 Ext km-1')
-
-    # axs[0].set_ylabel('Altitude m')
-    # # axs[1].set_ylabel('Altitude m')
-
-
-    # axs[0].legend()
-    # axs[1].legend()
     
-
 
 
      #3000 is a dummy value 
@@ -842,87 +1179,46 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
    
     MidInv = 150 #150 #No of grids below the boundary layer
     UpInv = 800
-    BLIntv = 110 #No of grids below the boundary layer
+    BLIntv = 140 #No of grids below the boundary layer
     avgProf = pd.DataFrame()
     hgt = del_dictt['Altitude']
    
-    # UpH = hgt[MaxExtIdx355] #Height where Vext355 is nan
-
-    UpH = np.nanmin(LR_max[LR_max>4000]) #Height where LR at 532>100
-    # UpH = hgt[MaxExtIdx532] #Height where Vext355 is nan
-
-    #Dividing the profile  #This needs to be modified
+    UpH = np.nanmin(LR_max[LR_max>3000]) #Height where LR at 532>100
+    # UpH = AirAlt-1600   # Case2 from the HSRL data product descriptionthe maximum altitude for 532 ext and BSA is 2.5 km below the aircraft
+    UpH = AirAlt-2000   # Case1
+    #Dividing the profile into 3 parts
     for i in range (len(inp2)): 
         belowBL[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt<BLh)]
-        # MidAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where((hgt>= BLh))]
         MidAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where((hgt>= BLh) &(hgt< UpH))]
-        UpAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt>= UpH)]
+        # UpAtm[f'{inp2[i]}'] = del_dictt[f'{inp2[i]}'][np.where(hgt>= UpH)]
     
     #Average profiles
     BLProf= VertP(belowBL, BLIntv,inp2)
     MidProf= VertP(MidAtm, MidInv,inp2)
-    UpProf = VertP(UpAtm, UpInv,inp2)
-    AppendZeroTOA = 0
+    # UpProf = VertP(UpAtm, UpInv,inp2)
+    # # AppendZeroTOA = 0
 
     plt.plot()
     # UpProf= VertP(UpAtm, UpInv)
-    inp = ['355_ext','532_ext','1064_ext','355_bsc','532_bsc','1064_bsc','355_dep', '532_dep','1064_dep', 'Dust_Mixing_Ratio' ,'FMF','532_aer_dep']
+    inp = ['355_ext','532_ext','1064_ext','355_bsc_Sa','532_bsc_Sa','1064_bsc_Sa','355_dep', '532_dep','1064_dep', 'Dust_Mixing_Ratio' ,'FMF','532_aer_dep','1064_aer_dep']
 
     FullAvgProf = {}
     for i in range (len(inp2)): 
-        FullAvgProf[inp2[i]] =  np.concatenate((np.array(UpProf[inp2[i]]), np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
-        # FullAvgProf[inp2[i]] =  np.concatenate(( np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
-        # GRASP extrapolates the top ofthe profile to TOA, to stop that we will append a 0 point on top of the profile.
-        if inp2[i] != 'Altitude':
-            FullAvgProf[inp2[i]][0] = AppendZeroTOA  # The HSRL datahas artifacts/ noisy at altitudes near the aircraft. 
-        if 'dep' in inp2[i]:
-            FullAvgProf[inp2[i]][0] = 0.0037
-            
-
-    # FullAvgProf['Altitude'][0] = AirAlt-1000
-        
-
-        # FullAvgProf[inp2[i]] =  np.concatenate(( np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
-        # FullAvgProf[inp2[i]] =   np.array(MidProf[inp2[i]])
-       
-    
-    fig, axs = plt.subplots(nrows= 1, ncols=len(inp), figsize=(20, 6), sharey = True)
-    for i in range (0,len(inp)):
-        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
-        axs[i].plot(FullAvgProf[f'{inp[i]}'],FullAvgProf['Altitude'], marker= '.' , label = "Avg Prof")
-
-        axs[i].set_xlabel(f'{inp[i]}')
-
-    axs[0].legend()
-    axs[0].set_ylabel('Height m ') 
-
-
-    fig, axs = plt.subplots(nrows= 1, ncols=len(inp), figsize=(20, 6), sharey = True)
-    for i in range (0,len(inp)):
-        axs[i].plot(del_dictt[f'{inp[i]}'],del_dictt['Altitude'], marker= '.', label = "Org" )
-        # axs[i].plot(belowBL[f'{inp[i]}'],belowBL['Altitude'], marker= '.' , label = "bl")
-        axs[i].plot(MidAtm[f'{inp[i]}'],MidAtm['Altitude'], marker= '.' , label = "bl")
-        # axs[i].plot(UpAtm[f'{inp[i]}'],UpAtm['Altitude'], marker= '.' , label = "bl")
-        axs[i].set_xlabel(f'{inp[i]}')
-    axs[0].legend()
-    axs[0].set_ylabel('Height m ') 
-    # Creating GRASP rslt dictionary for runGRASP.py    
-    
+        # FullAvgProf[inp2[i]] =  np.concatenate((np.array(UpProf[inp2[i]]), np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
+        FullAvgProf[inp2[i]] =  np.concatenate(( np.array(MidProf[inp2[i]]),np.array(BLProf[inp2[i]])), axis=0)
     
     
     df = pd.DataFrame(FullAvgProf)
-    # df = pd.DataFrame(df_new)
     rslt = {} # 
 
     DstMR = df['Dust_Mixing_Ratio'][:]
-    # AEsph = df['Angstrom_Spherical'][:]
     aDP= df['532_aer_dep'][:]
+    aDP_1064 = df['1064_aer_dep'][:]
 
     AEt= df['FMF'][:]
 
     #dust mixing ratio from paper
-   
-    
+
     height_shape = np.array(df['Altitude'][:]).shape[0]   #setting the lowermos value to zero to avoid GRASP intgration
 
     Range = np.ones((height_shape,3))
@@ -936,23 +1232,23 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
     Bext[:,0] = df['355_ext'][:]
     Bext[:,1] = df['532_ext'][:]
     Bext[:,2] = df['1064_ext'] [:]
-    Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
+    #Setting one of the value in the array to nan so that GRASP will discard this measurement
 
     Bsca = np.zeros((height_shape,3))
-    Bsca[:,0] = df['355_bsc'][:]
-    Bsca[:,1] = df['532_bsc'] [:]
-    Bsca[:,2] = df['1064_bsc'][:]
-    # Bsca[0,2] = np.nan
+    Bsca[:,0] = df['355_bsc_Sa'][:]
+    Bsca[:,1] = df['532_bsc_Sa'] [:]
+    Bsca[:,2] = df['1064_bsc_Sa'][:]
+  
   
     
     Dep = np.zeros((height_shape,3))
-    # Dep[-2:,0] = df['355_dep'][height_shape-2:] #Total depolarization ratio
-    # Dep[-2:,1] = df['532_dep'][height_shape-2:]
-    # Dep[-2:,2] = df['1064_dep'] [height_shape-2:]
-    
     Dep[:,0] = df['355_dep'][:]  #Total depolarization ratio
     Dep[:,1] = df['532_dep'][:]
     Dep[:,2] = df['1064_dep'] [:]
+
+    Bext[0,2] = np.nan
+    
+
     
 
     #Unit conversion 
@@ -970,7 +1266,8 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
     rslt['land_prct'] = 0 #Ocean Surface
 
     # if gaspar ==True: # Molecular depolarization correction 
-    rslt['gaspar'] = np.array([0.0037,0.0037,0.0037])
+    # rslt['gaspar'] = np.array([0.0037,0.0037,0.0037])
+    rslt['gaspar'] = np.array([0.00365,0.00374,0.0045]) # 
 
     if SimpleCase == True:
         Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
@@ -982,8 +1279,7 @@ def Read_Data_HSRL_Oracles_Height(file_path,file_name,PixNo,gaspar =None,SimpleC
     # TODO make this general
 
     f1.close()
-    return rslt,BLh,DstMR,aDP,AEt,AerID, Temp
-
+    return rslt,BLh,DstMR,aDP,AEt,AerID, Temp, aDP_1064
 
 
 
@@ -1026,9 +1322,9 @@ def Read_Data_HSRL_Oracles_Height_No355(file_path,file_name,PixNo,gaspar =None,S
     #Caculatig the height above which the lidar ratio is too high:
 
     LR_max = hgt[(np.where(LR_532_cal>=100))[0]]
-    print('Height above which LR at 532> 100', np.nanmin(LR_max[LR_max>4000]))
+    # print('Lidar Ratio at 532 > 100 at', np.nanmin(LR_max[LR_max>4000]))
 
-    plt.plot(LR_532_cal ,hgt)
+    # plt.plot(LR_532_cal ,hgt)
     # plt.plot(LR_355_cal,hgt)
 
     # # Assuming the lidar ratio to be constant
@@ -1087,13 +1383,15 @@ def Read_Data_HSRL_Oracles_Height_No355(file_path,file_name,PixNo,gaspar =None,S
     # UpH =   np.nanmin(NanHgt[NanHgt>3000]) 
 
     #Index of values below aircraft and above ground
-    hmaxInd = np.min(np.where(HSRL['Altitude'][0] >=AirAlt)[0])  #-1000 os added to avoid values vary close to the aircraft
-   
+    hmaxInd = np.min(np.where(HSRL['Altitude'][0] >=AirAlt)[0])  # os added to avoid values vary close to the aircraft
     #Minimun index is the max height where the values are not nan, taking 500 as a dummy value for height. 
     hminInd = int(np.where(hgt ==np.nanmax(NanHgt[NanHgt<1000]))[0]) # -1 is to set the min value to 0 so that we dont have extra aod
     
-    print('Height range of the profile',hmaxInd,hminInd)
-    print('Height range of the profile',AirAlt)
+    hmaxInd = np.min(np.where(HSRL['Altitude'][0] >=AirAlt - 2500)[0])#min because the profile is reversed
+
+
+    # print('Height range of the profile',hmaxInd,hminInd)
+    # print('Height range of the profile',AirAlt)
 
     # print(AerID)
     # HSRL['Dust_Mixing_Ratio'][PixNo][:][np.where(AerID > 8)] = np.nanmax(HSRL['Dust_Mixing_Ratio'][PixNo][:])
@@ -1326,8 +1624,8 @@ def Read_Data_HSRL_Oracles_Height_No355(file_path,file_name,PixNo,gaspar =None,S
     rslt['land_prct'] = 0 #Ocean Surface
 
     # if gaspar ==True: # Molecular depolarization correction 
-    rslt['gaspar'] = np.array([0.0037,0.0037,0.0037])
-
+    # rslt['gaspar'] = np.array([0.0037,0.0037,0.0037])
+    rslt['gaspar'] = np.array([0.00,0.00,0.00])
     if SimpleCase == True:
         Bsca[0,2] = np.nan #Setting one of the value in the array to nan so that GRASP will discard this measurement, we are doing this for HSRL because it is not a direct measuremnt
         Bext[0,2] = np.nan  #Setting one of the value in the array to nan so that GRASP will discard this measurement
