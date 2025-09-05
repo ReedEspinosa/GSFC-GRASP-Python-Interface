@@ -859,7 +859,7 @@ class graspRun():
         ptrnALB = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Surface ALBEDO')
         ptrnBRDF = re.compile(r'^[ ]*Wavelength \(um\),[ ]+BRDF parameters')
         ptrnBPDF = re.compile(r'^[ ]*Wavelength \(um\),[ ]+BPDF parameters')
-        ptrnWater = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Water surface parameters')
+        ptrnWater = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Water surface parameters?')
         i = 0
         while i < len(contents):
             self.parseMultiParamFld(contents, i, results, ptrnALB, 'albedo')
@@ -870,6 +870,15 @@ class graspRun():
         for key in ['bpdf', 'albedo']: # spectral variables we want to ensure are 2D (1 x Nlambda) [May be better to do this inside parseMultiParamFld() at some point]
             if key in results[0]: 
                 for rs in results: rs[key] = np.atleast_2d(rs[key])
+        
+        # Handle wtrSurf reshaping for new format (3 parameters × Nλ wavelengths)
+        if 'wtrSurf' in results[0] and len(results[0]['wtrSurf'].shape) == 1:
+            # New format: reshape from 1D to 2D (3 params × Nλ)
+            Nλ_actual = len(results[0]['wtrSurf']) // 3  # Should be 5 wavelengths
+            if Nλ_actual > 0 and len(results[0]['wtrSurf']) == 3 * Nλ_actual:
+                for rs in results:
+                    rs['wtrSurf'] = rs['wtrSurf'].reshape(3, Nλ_actual)
+        
         return results
 
     def parsePhaseMatrix(self, contents, wavelengths): # wavelengths is need here specificly b/c PM elements don't give index (only value in um)
