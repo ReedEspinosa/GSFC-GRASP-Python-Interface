@@ -806,10 +806,10 @@ class graspRun():
             self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
             self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
             self.parseMultiParamFld(contents, i, results, ptrnHGNTSTD, 'heightStd')
-            self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode','lambda')
+            self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode', 'lambda') # Incase lambda was not pulled in AOD above which is not given in Apr 2025 internal version of GRASP 
             self.parseMultiParamFld(contents, i, results, ptrnSSA, 'ssa')
-            self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')
             self.parseMultiParamFld(contents, i, results, ptrnSSAmode, 'ssaMode')
+            self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')
             self.parseMultiParamFld(contents, i, results, ptrnRRI, 'n')
             self.parseMultiParamFld(contents, i, results, ptrnIRI, 'k')
             i += 1
@@ -833,7 +833,7 @@ class graspRun():
                         rs[key] = rs[key].reshape(nsd,-1) # we double check that -1 -> Nwvlth on next line
                     assert rs[key].shape[-1]==Nwvlth, 'Length of the last dimension of %s was %d, not matching Nλ=%d' % (key, rs[key].shape[-1], Nwvlth)
                 for λflatKey in [k for k in ['n','k'] if k in rs.keys()]: # check if spectrally flat RI values used
-                    for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value
+                    for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value (Error can occur here when processing very old GRASP output with a single RI value provided for multiple modes)
                 if 'βext' in rs:
                     rs['range'] = rs['range'].reshape(nsd,-1)
                     rs['βext'] = rs['βext'].reshape(nsd,-1)
@@ -844,8 +844,8 @@ class graspRun():
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
                         rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
-                if 'aod' not in rs: rs['aod'] = rs['aodMode'].sum(axis=0)
-                if 'ssa' not in rs: rs['ssa'] = np.sum(rs['ssaMode']*rs['aodMode'], axis=0)/rs['aod']
+                if 'aod' not in rs: rs['aod'] = rs['aodMode'].sum(axis=0)  # GRASP internal lack total AOD output, build it from modes
+                if 'ssa' not in rs: rs['ssa'] = np.sum(rs['ssaMode']*rs['aodMode'], axis=0)/rs['aod'] # GRASP internal lack total SSA output, build it from modes              
         if ('dVdlnr' in results[0]):
             for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
             if 'rEff' not in results[0]:
