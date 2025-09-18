@@ -998,11 +998,14 @@ class graspRun():
             singNumeric = re.compile(r'^[ ]*[0-9]+[ ]*$')
             numericLn = re.compile(r'^[ ]*[0-9]+')
             lastLine = i+1
-            while not numericLn.match(contents[lastLine]) is None: lastLine += 1
+            while lastLine < len(contents) and (numericLn.match(contents[lastLine]) or contents[lastLine].strip().startswith('*')):
+                lastLine += 1
             Nparams = 0
             for dataRow in contents[i+1:lastLine]:
                 if not singNumeric.match(dataRow):
-                    dArr = np.array(dataRow.split(), dtype='float64')
+                    # Remove '*' characters from data rows
+                    cleanedRow = dataRow.replace('*', '')
+                    dArr = np.array(cleanedRow.split(), dtype='float64')
                     for k in range(len(results)): # this is looping over pixels
                         if fldName0:
                             results[k][fldName0] = np.append(results[k][fldName0], dArr[0+colOffset]) if fldName0 in results[k] else dArr[0+colOffset]
