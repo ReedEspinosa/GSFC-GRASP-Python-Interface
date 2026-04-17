@@ -36,6 +36,6 @@ S12=-0.5*(sl-sr) # minus makes positive S12 polarized in scattering plane
 #plt.figure()
 #plt.plot(theta, -S12/S11)
 
-P11 = 2*S11/np.trapz(S11*np.sin(theta), theta)
+P11 = 2*S11/np.trapezoid(S11*np.sin(theta), theta)
 
 #should make PSD class with r,dNdr and type (dndr,dvdr,etc.)

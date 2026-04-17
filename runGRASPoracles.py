@@ -1133,7 +1133,7 @@ def PlotSensitivity(SphLagrangian,TAMULagrangian, variableName):
                 # plt.tight_layout()
             
 
-            # AOD = np.trapz(Hsph['meas_VExt'],altd)
+            # AOD = np.trapezoid(Hsph['meas_VExt'],altd)
             for i in range(3):
                 wave = str(Hsph['lambda'][i]) +"μm"
 
@@ -1250,7 +1250,7 @@ def PlotSensitivity2(SphLagrangian,TAMULagrangian):
                 # plt.tight_layout()
             
 
-            # AOD = np.trapz(Hsph['meas_VExt'],altd)
+            # AOD = np.trapezoid(Hsph['meas_VExt'],altd)
             for i in range(3):
                 wave = str(Hsph['lambda'][i]) +"μm"
 
@@ -2564,7 +2564,7 @@ def PlotDiffLidarCases(Case1S, Case1H, Case2S, Case2H,CaseJ1S, CaseJ1H,CaseJ2S, 
         # fig, axs2= plt.subplots(nrows = 1, ncols =3, figsize= (15,6))
         plt.subplots_adjust(top=0.78)
 
-        # AOD = np.trapz(Hsph['meas_VExt'],altd)
+        # AOD = np.trapezoid(Hsph['meas_VExt'],altd)
         for i in range(3):
             wave = str(Hsph['lambda'][i]) +"μm"
 

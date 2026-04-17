@@ -465,9 +465,9 @@ def AeroProfNorm_FMF(DictHsrl):
 
     #Normalizing such that int(Vext.dh) = 1. This is equivalent of using vol conc
     
-    DstProfext =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-    FineProfext = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-    SeaProfext = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+    DstProfext =VextDst/ np.trapezoid(VextDst[::-1],hgt[::-1])
+    FineProfext = Vextfine/np.trapezoid(Vextfine[::-1],hgt[::-1])
+    SeaProfext = VextSea/ np.trapezoid(VextSea[::-1],hgt[::-1])
     
 
     #Plotting the extinction from each aerosol
@@ -575,13 +575,13 @@ def AeroClassAOD(DictHsrl):
         # print(Wl[rep])
           #stores aerosol contribution for each mode based on the classification. 
         # Plot the various line plots on the secondary x-axis
-        Aod_Classified[f'Aod_dst_{Wl[rep]}'] = np.trapz(VextDst[::-1],hgt[::-1])
-        Aod_Classified[f'Aod_sea_{Wl[rep]}'] = np.trapz(VextSea[::-1],hgt[::-1])
-        Aod_Classified[f'Aod_fine_{Wl[rep]}'] = np.trapz(Vextfine[::-1],hgt[::-1])
-        Aod_Classified[f'Aod_T_{Wl[rep]}'] = np.trapz(Vext1[::-1], hgt[::-1])
-        Aod_Classified[f'Aod_oth_{Wl[rep]}'] =np.trapz(Vextoth [::-1], hgt[::-1])
-        Aod_Classified[f'Aod_below_BLH_{Wl[rep]}'] = np.trapz(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
-        Aod_Classified[f'Aod_above_BLH_{Wl[rep]}'] = np.trapz(Vext1[:BLH_indx[0]][::-1], hgt[:BLH_indx[0]][::-1])
+        Aod_Classified[f'Aod_dst_{Wl[rep]}'] = np.trapezoid(VextDst[::-1],hgt[::-1])
+        Aod_Classified[f'Aod_sea_{Wl[rep]}'] = np.trapezoid(VextSea[::-1],hgt[::-1])
+        Aod_Classified[f'Aod_fine_{Wl[rep]}'] = np.trapezoid(Vextfine[::-1],hgt[::-1])
+        Aod_Classified[f'Aod_T_{Wl[rep]}'] = np.trapezoid(Vext1[::-1], hgt[::-1])
+        Aod_Classified[f'Aod_oth_{Wl[rep]}'] =np.trapezoid(Vextoth [::-1], hgt[::-1])
+        Aod_Classified[f'Aod_below_BLH_{Wl[rep]}'] = np.trapezoid(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
+        Aod_Classified[f'Aod_above_BLH_{Wl[rep]}'] = np.trapezoid(Vext1[:BLH_indx[0]][::-1], hgt[:BLH_indx[0]][::-1])
         
         # print(hgt[BLH_indx[0]:], 'below the boundary layer')
 
@@ -748,17 +748,17 @@ def AeroProfNorm_sc2(DictHsrl,printPlot = None):
 
     Aod_Classified = {}  #stores aerosol contribution for each mode based on the classification. 
     # Plot the various line plots on the secondary x-axis
-    Aod_Classified['Aod_dst'] = np.trapz(VextDst[::-1],hgt[::-1])
-    Aod_Classified['Aod_sea'] = np.trapz(VextSea[::-1],hgt[::-1])
-    Aod_Classified['Aod_fine'] = np.trapz(Vextfine[::-1],hgt[::-1])
-    Aod_Classified['Aod_T'] = np.trapz(Vext1[::-1], hgt[::-1])
+    Aod_Classified['Aod_dst'] = np.trapezoid(VextDst[::-1],hgt[::-1])
+    Aod_Classified['Aod_sea'] = np.trapezoid(VextSea[::-1],hgt[::-1])
+    Aod_Classified['Aod_fine'] = np.trapezoid(Vextfine[::-1],hgt[::-1])
+    Aod_Classified['Aod_T'] = np.trapezoid(Vext1[::-1], hgt[::-1])
 
-    Aod_Classified['Aod_below_BLH'] = np.trapz(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
-    Aod_Classified['Aod_above_BLH'] = np.trapz(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
+    Aod_Classified['Aod_below_BLH'] = np.trapezoid(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
+    Aod_Classified['Aod_above_BLH'] = np.trapezoid(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
 
-    DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-    FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-    SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+    DstProf =VextDst/ np.trapezoid(VextDst[::-1],hgt[::-1])
+    FineProf = Vextfine/np.trapezoid(Vextfine[::-1],hgt[::-1])
+    SeaProf = VextSea/ np.trapezoid(VextSea[::-1],hgt[::-1])
     # Temp = DictHsrl[5]
 
     fig = plt.figure()
@@ -895,13 +895,13 @@ def ModAeroProfNorm_sc3(DictHsrl):
 
     Aod_Classified = {}  #stores aerosol contribution for each mode based on the classification. 
     # Plot the various line plots on the secondary x-axis
-    Aod_Classified['Aod_dst'] = np.trapz(VextDst[::-1],hgt[::-1])
-    Aod_Classified['Aod_sea'] = np.trapz(VextSea[::-1],hgt[::-1])
-    Aod_Classified['Aod_fine'] = np.trapz(Vextfine[::-1],hgt[::-1])
-    Aod_Classified['Aod_T'] = np.trapz(Vext1[::-1], hgt[::-1])
+    Aod_Classified['Aod_dst'] = np.trapezoid(VextDst[::-1],hgt[::-1])
+    Aod_Classified['Aod_sea'] = np.trapezoid(VextSea[::-1],hgt[::-1])
+    Aod_Classified['Aod_fine'] = np.trapezoid(Vextfine[::-1],hgt[::-1])
+    Aod_Classified['Aod_T'] = np.trapezoid(Vext1[::-1], hgt[::-1])
 
-    Aod_Classified['Aod_below_BLH'] = np.trapz(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
-    Aod_Classified['Aod_above_BLH'] = np.trapz(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
+    Aod_Classified['Aod_below_BLH'] = np.trapezoid(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
+    Aod_Classified['Aod_above_BLH'] = np.trapezoid(Vext1[BLH_indx[0]:][::-1], hgt[BLH_indx[0]:][::-1])
     
     #Aerosol classification for 355
     # Vext355 = rslt['meas_VExt'][:,0]
@@ -926,9 +926,9 @@ def ModAeroProfNorm_sc3(DictHsrl):
     # VextSea = np.concatenate((VBack[:BLH_indx[0]],Voth[BLH_indx[0]:]))
     # Vextfine =np.concatenate((Voth[:BLH_indx[0]],VBack[BLH_indx[0]:]))
 
-    DstProf =VextDst/ np.trapz(VextDst[::-1],hgt[::-1])
-    FineProf = Vextfine/np.trapz(Vextfine[::-1],hgt[::-1])
-    SeaProf = VextSea/ np.trapz(VextSea[::-1],hgt[::-1])
+    DstProf =VextDst/ np.trapezoid(VextDst[::-1],hgt[::-1])
+    FineProf = Vextfine/np.trapezoid(Vextfine[::-1],hgt[::-1])
+    SeaProf = VextSea/ np.trapezoid(VextSea[::-1],hgt[::-1])
     # Temp = DictHsrl[5]
 
     fig = plt.figure()
@@ -1877,7 +1877,7 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
         fig, axs= plt.subplots(nrows = 1, ncols =3, figsize= (15,6))
         plt.subplots_adjust(top=0.78)
 
-        # AOD = np.trapz(Hsph['meas_VExt'],altd)
+        # AOD = np.trapezoid(Hsph['meas_VExt'],altd)
         for i in range(3):
             wave = str(Hsph['lambda'][i]) +"(μm)"
 
@@ -2028,14 +2028,14 @@ def plot_HSRL(HSRL_sphrod,HSRL_Tamu, UNCERT, forward = None, retrieval = None, C
             extrapolAOD = Hsph['meas_VExt'][:,i][-1]*Hsph['range'][i,:][-1]
             # print("ExtraAOD", extrapolAOD)
 
-            meas_aod.append(np.trapz(Hsph['meas_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] )+ extrapolAOD ) 
+            meas_aod.append(np.trapezoid(Hsph['meas_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] )+ extrapolAOD ) 
         
         # meas_aodsph = []
         # for i in range (NoMode):
-        #     meas_aodsph.append(np.trapz(Hsph['fit_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] ))
+        #     meas_aodsph.append(np.trapezoid(Hsph['fit_VExt'][:,i][::-1],Hsph['range'][i,:][::-1] ))
         # meas_aodhex = []
         # for i in range (NoMode):
-        #     meas_aodhex.append(np.trapz(HTam['fit_VExt'][:,i][::-1],HTam['range'][i,:][::-1] ))
+        #     meas_aodhex.append(np.trapezoid(HTam['fit_VExt'][:,i][::-1],HTam['range'][i,:][::-1] ))
         
         axs2[2,1].plot( Spheriod['lambda'],meas_aod,color = "k", ls = "--", marker = '*' ,markersize=20, label = " cal meas")    
         # axs[2,1].plot( Spheriod['lambda'],meas_aodsph,color = "r", ls = "-.", marker = '*' ,markersize=20, label = "cal sph")    
@@ -2559,7 +2559,7 @@ def PlotSensitivity(SphLagrangian,TAMULagrangian, variableName):
                 # plt.tight_layout()
             
 
-            # AOD = np.trapz(Hsph['meas_VExt'],altd)
+            # AOD = np.trapezoid(Hsph['meas_VExt'],altd)
             for i in range(3):
                 wave = str(Hsph['lambda'][i]) +"μm"
 
@@ -2676,7 +2676,7 @@ def PlotSensitivity2(SphLagrangian,TAMULagrangian):
                 # plt.tight_layout()
             
 
-            # AOD = np.trapz(Hsph['meas_VExt'],altd)
+            # AOD = np.trapezoid(Hsph['meas_VExt'],altd)
             for i in range(3):
                 wave = str(Hsph['lambda'][i]) +"μm"
 
@@ -3685,7 +3685,7 @@ def Read_HiGear(file_name, Idx):
     V = (4/3)* np.pi* r**3  # Volume of an equivalent sphere. 
     dVdlnr = V * dNdlnr  #dV / dlnr 
 
-    # Vtotal = np.trapz(dVdlnr, lnr)
+    # Vtotal = np.trapezoid(dVdlnr, lnr)
 
     DvDlnr = dVdlnr
 
@@ -5927,7 +5927,7 @@ def PlotSensitivity(SphLagrangian,TAMULagrangian, variableName):
                 # plt.tight_layout()
             
 
-            # AOD = np.trapz(Hsph['meas_VExt'],altd)
+            # AOD = np.trapezoid(Hsph['meas_VExt'],altd)
             for i in range(3):
                 wave = str(Hsph['lambda'][i]) +"μm"
 
@@ -6044,7 +6044,7 @@ def PlotSensitivity2(SphLagrangian,TAMULagrangian):
                 # plt.tight_layout()
             
 
-            # AOD = np.trapz(Hsph['meas_VExt'],altd)
+            # AOD = np.trapezoid(Hsph['meas_VExt'],altd)
             for i in range(3):
                 wave = str(Hsph['lambda'][i]) +"μm"
 
@@ -7358,7 +7358,7 @@ def PlotDiffLidarCases(Case1S, Case1H, Case2S, Case2H,CaseJ1S, CaseJ1H,CaseJ2S, 
         # fig, axs2= plt.subplots(nrows = 1, ncols =3, figsize= (15,6))
         plt.subplots_adjust(top=0.78)
 
-        # AOD = np.trapz(Hsph['meas_VExt'],altd)
+        # AOD = np.trapezoid(Hsph['meas_VExt'],altd)
         for i in range(3):
             wave = str(Hsph['lambda'][i]) +"μm"
 

@@ -839,7 +839,7 @@ class graspRun():
                     rs['βext'] = rs['βext'].reshape(nsd,-1)
                     βprfl = rs['βext'].sum(axis=0)
                     rng = rs['range'][0]
-                    rs['height'] = np.trapz(βprfl*rng, rng)/np.trapz(βprfl, rng) # extinction weighted mean height
+                    rs['height'] = np.trapezoid(βprfl*rng, rng)/np.trapezoid(βprfl, rng) # extinction weighted mean height
                     λ550Ind = np.argmin(np.abs(rs['lambda']-0.55))
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
@@ -927,7 +927,7 @@ class graspRun():
                 for l in range(rslt['p11'].shape[-1]): # loop over wavelength
                     for m,ssaMode in enumerate(rslt['ssaMode'][:,l]): # loop over mode
                         angRad = rslt['angle'][:,m,l]/180*np.pi
-                        rslt['gMode'][m,l] = np.trapz(rslt['p11'][:,m,l]*np.cos(angRad)*np.sin(angRad), angRad)/2
+                        rslt['gMode'][m,l] = np.trapezoid(rslt['p11'][:,m,l]*np.cos(angRad)*np.sin(angRad), angRad)/2
                         rslt['LidarRatioMode'][m,l] =4*np.pi/(ssaMode*rslt['p11'][-1,m,l]) # we assume the last angle is θ=180°
                         rslt['LidarDepolMode'][m,l] = (rslt['p11'][-1,m,l] - rslt['p22'][-1,m,l])/(rslt['p11'][-1,m,l] + rslt['p22'][-1,m,l]) # we assume the last angle is θ=180°
                     scatWghts = rslt['ssaMode'][:,l]*rslt['aodMode'][:,l]
@@ -1090,7 +1090,7 @@ class rsltDictTools():
             if not nonTruncInd.any():
                 warnings.warn('All PSDs were significantly truncated and normalization could not be detemrined. dVdlnr may or may not be in absolute units.')
                 return list(rslts)
-            trp = np.concatenate([np.trapz(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
+            trp = np.concatenate([np.trapezoid(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
             if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
                 for rs in rslts: 
                     rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr

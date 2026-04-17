@@ -125,7 +125,7 @@ def Gaspar_MAP(RSP_wl,Airhgt,GasAbsFn,SpecResFnPath):
 
     # GasTau = np.ones((len(Wl)))
     # for i in range(len(Wl)):
-    #     GasTau[i] = np.trapz(Tau[:,i],Gashgt)
+    #     GasTau[i] = np.trapezoid(Tau[:,i],Gashgt)
 
     GasTau = np.sum(Tau,axis=0)
 
@@ -145,8 +145,8 @@ def Gaspar_MAP(RSP_wl,Airhgt,GasAbsFn,SpecResFnPath):
         tau_solar = f(wl_RSP) #Tau at given RSP response function wl
         NormSRF = SpecResFn[:,1]  #normalizing the response function
 
-        tau = np.trapz(tau_solar*NormSRF,wl_RSP )
-        swl= np.trapz(NormSRF,wl_RSP)
+        tau = np.trapezoid(tau_solar*NormSRF,wl_RSP )
+        swl= np.trapezoid(NormSRF,wl_RSP)
 
         GasAbsTau[n]= tau/swl
     plt.plot(RSP_wlf,GasAbsTau)
@@ -175,8 +175,8 @@ def Gaspar_MAP(RSP_wl,Airhgt,GasAbsFn,SpecResFnPath):
         #     tau_solar = f(wl_RSP) #Tau at given RSP response function wl
         #     NormSRF = SpecResFn[:,1]  #normalizing the response function
 
-        #     tau = np.trapz(tau_solar*NormSRF,wl_RSP )
-        #     swl= np.trapz(NormSRF,wl_RSP)
+        #     tau = np.trapezoid(tau_solar*NormSRF,wl_RSP )
+        #     swl= np.trapezoid(NormSRF,wl_RSP)
 
         #     GasAbsTau[n]= tau/swl
 
@@ -212,8 +212,8 @@ def Gaspar_MAP(RSP_wl,Airhgt,GasAbsFn,SpecResFnPath):
     #     NormSRF = SpecResFn[:,1]  #normalizing the response function
 
 
-    #     tautotal = np.trapz(tau_solar*NormSRF,wl_RSP)
-    #     swl= np.trapz(NormSRF,wl_RSP)
+    #     tautotal = np.trapezoid(tau_solar*NormSRF,wl_RSP)
+    #     swl= np.trapezoid(NormSRF,wl_RSP)
         
     #     GasAbsTau[n]= tautotal/swl
 
