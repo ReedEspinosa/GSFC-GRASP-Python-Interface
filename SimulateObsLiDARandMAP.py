@@ -442,7 +442,7 @@ checkrv = np.ones((len(ChangeVariable2),len(ChangeVariable)))
 
 for j in range(len(ChangeVariable)):
     for i in range(len(ChangeVariable2)):
-        MeasAOD = abs(np.trapz(Full_dict[i][j]['meas_VExt'][:,0], Full_dict[i][j]['range'][0,:]))
+        MeasAOD = abs(np.trapezoid(Full_dict[i][j]['meas_VExt'][:,0], Full_dict[i][j]['range'][0,:]))
         print(Full_dict[i][j]['vol'][0]*Full_dict[i][j]['aodMode'][0][0]* MeasAOD)
         ConcForConstAOD[i,j] = Full_dict[i][j]['vol'][0]*Full_dict[i][j]['aodMode'][0][0]* MeasAOD
         checkrv[i,j] = Full_dict[i][j]['rv'][0]
