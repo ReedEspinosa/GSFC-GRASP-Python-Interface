@@ -1246,16 +1246,17 @@ class pixel():
                     msDct['phi'] = np.concatenate([rslt['fis'][:,l] for mt in msTypsNowSorted])[valid_mask]
 
                 # Generate measurements (with noise if applicable) and then filter with the mask
-                if radianceNoiseFun:
-                    msDct['errorModel'] = radianceNoiseFun
+                if radianceNoiseFun and isPolarimeter: msDct['errorModel'] = radianceNoiseFun # optional override of the pixel's own error model (polarimeter only)
+                if msDct['errorModel'] is not None: # use error model already in the pixel (e.g., from addMeas(..., errModel=...)) or the override above
                     try:
-                        measurements_with_nans = msDct['errorModel'](l, rslt, verbose=verbose)
+                        measurements_with_nans = np.asarray(msDct['errorModel'](l, rslt, verbose=verbose))
                     except TypeError:
-                        measurements_with_nans = msDct['errorModel'](l, rslt)
-                    msDct['measurements'] = measurements_with_nans[valid_mask]
-                else:
+                        measurements_with_nans = np.asarray(msDct['errorModel'](l, rslt))
+                    assert len(measurements_with_nans)==len(valid_mask), \
+                        'errorModel returned %d values at wavelength index %d but %d were expected (N_msTyp x N_view)' % (len(measurements_with_nans), l, len(valid_mask))
+                else: # no error model, measurements are passed through noise free
                     measurements_with_nans = np.concatenate([rslt[keyPtrn % mt][:,l] for mt in msTypsNowSorted])
-                    msDct['measurements'] = measurements_with_nans[valid_mask]
+                msDct['measurements'] = measurements_with_nans[valid_mask]
 
                 msDct['nbvm'] = [np.sum(~np.isnan(rslt[keyPtrn % mt][:,l])) for mt in msTypsNowSorted]
                 msDct = self.formatMeas(msDct) # this will tile the above msTyp times
