@@ -335,14 +335,89 @@ class graspDB():
             plt.tight_layout()
             
 
+def readJacobianFile(path):
+    """
+    Read a Jacobian file written by GRASP (retrieval.debug.jacobian.output_file, NetCDF-4 or text).
+    Returns a list with one dict per pixel (in GRASP output order) containing:
+        'jacobian' – (N_meas, N_par) array of dFS/dAP, FS and AP in GRASP's internal space; with the logarithm
+            minimization convention jacobian = dln(y + shift)/dln(x), i.e. dy/dx = jacobian*(y + shift)/x
+        'meas_type', 'meas_type_name', 'lambda' [μm], 'wavelength_index', 'sza', 'vza', 'raz', 'shift' – per measurement (N_meas)
+        'fs' – modeled measurement vector FS (simulating_observation RT settings)
+        'fs_deriv' – FS used as reference for the finite differences (the Jacobian's RT settings)
+        'par_value' (AP), 'par_step' (finite difference step in AP), 'par_computed' (False if skipped by GRASP) – per parameter (N_par)
+        'par_type', 'par_type_name', 'par_characteristic', 'par_mode', 'par_element', 'par_wavelength_index',
+        'par_min', 'par_max' – parameter metadata (N_par), characteristic/mode/element are 1-based in YAML order
+        'x', 'y', 'time' – pixel coordinates; 'attributes' – dict with minimization_convention, iPOBS, shift, etc.
+    """
+    with open(path, 'rb') as fid:
+        isNetCDF = fid.read(4) == b'\x89HDF'
+    if isNetCDF:
+        assert NC4_LOADED, 'The netCDF4 module is required to read %s' % path
+        with Dataset(path) as nc:
+            var = {k: nc.variables[k][:] for k in nc.variables}
+            var = {k: (np.ma.filled(v) if np.ma.isMaskedArray(v) else np.asarray(v)) for k, v in var.items()}
+            attrs = {k: nc.getncattr(k) for k in nc.ncattrs()}
+        obsCount = var['pixel_obs_count']
+        pixVars = {'par_value':'par_value', 'par_step':'par_step', 'x':'pixel_x', 'y':'pixel_y', 'time':'pixel_time'}
+        parInfo = {k: var[k] for k in var if k.startswith('par_') and k not in ('par_value', 'par_step', 'par_computed')}
+        computed = var['par_computed'].astype(bool)
+    else:
+        attrs, parRows, pixRows, apRows, stepRows, obsRows = {}, [], [], [], [], []
+        with open(path) as fid:
+            for line in fid:
+                if line.startswith('# PAR '): parRows.append(line.split()[2:])
+                elif line.startswith('# PIXEL ') and not line.startswith('# PIXEL pixel'): pixRows.append(line.split()[2:])
+                elif line.startswith('# AP ') and not line.startswith('# AP pixel'): apRows.append(line.split()[3:])
+                elif line.startswith('# STEP ') and not line.startswith('# STEP pixel'): stepRows.append(line.split()[3:])
+                elif line.startswith('# ') and ': ' in line:
+                    key, val = line[2:].split(': ', 1)
+                    attrs[key.strip()] = val.strip()
+                elif not line.startswith('#') and line.strip(): obsRows.append(line.split())
+        parRows = [r for r in parRows if r[0] != 'index']
+        parInfo = {'par_type': np.array([int(r[1]) for r in parRows]), 'par_type_name': np.array([r[2] for r in parRows]),
+                   'par_characteristic': np.array([int(r[3]) for r in parRows]), 'par_mode': np.array([int(r[4]) for r in parRows]),
+                   'par_element': np.array([int(r[5]) for r in parRows]), 'par_wavelength_index': np.array([int(r[6]) for r in parRows]),
+                   'par_min': np.array([float(r[7]) for r in parRows]), 'par_max': np.array([float(r[8]) for r in parRows])}
+        obs = np.array(obsRows, dtype=float).reshape(-1, 10+len(parRows))
+        var = {'obs_pixel': obs[:,0].astype(int), 'obs_wavelength_index': obs[:,1].astype(int), 'obs_wavelength': obs[:,2],
+               'obs_meas_type': obs[:,3].astype(int), 'obs_sza': obs[:,4], 'obs_vza': obs[:,5], 'obs_raz': obs[:,6],
+               'obs_shift': obs[:,7], 'obs_fs': obs[:,8], 'obs_fs_deriv': obs[:,9], 'jacobian': obs[:,10:],
+               'par_value': np.array(apRows, dtype=float), 'par_step': np.array(stepRows, dtype=float),
+               'pixel_x': np.array([float(r[2]) for r in pixRows]), 'pixel_y': np.array([float(r[3]) for r in pixRows]),
+               'pixel_time': np.array([int(r[4]) for r in pixRows])}
+        var['obs_meas_type_name'] = np.array([JACOBIAN_MEAS_TYPES.get(mt, 'unknown') for mt in var['obs_meas_type']])
+        obsCount = np.array([int(r[1]) for r in pixRows])
+        pixVars = {'par_value':'par_value', 'par_step':'par_step', 'x':'pixel_x', 'y':'pixel_y', 'time':'pixel_time'}
+        computed = var['par_step'] != 0
+    obsVars = {'jacobian':'jacobian', 'meas_type':'obs_meas_type', 'meas_type_name':'obs_meas_type_name', 'lambda':'obs_wavelength',
+               'wavelength_index':'obs_wavelength_index', 'sza':'obs_sza', 'vza':'obs_vza', 'raz':'obs_raz',
+               'shift':'obs_shift', 'fs':'obs_fs', 'fs_deriv':'obs_fs_deriv'}
+    obsEnd = np.cumsum(obsCount)
+    pixels = []
+    for i, (i0, i1) in enumerate(zip(obsEnd-obsCount, obsEnd)):
+        pix = {key: var[ncKey][i0:i1] for key, ncKey in obsVars.items()}
+        pix.update({key: var[ncKey][i] for key, ncKey in pixVars.items()})
+        pix['par_computed'] = computed[i]
+        pix.update({key: np.asarray(val) for key, val in parInfo.items()})
+        pix['attributes'] = attrs
+        pixels.append(pix)
+    return pixels
+
+JACOBIAN_MEAS_TYPES = {11:'tod', 12:'aod', 13:'aaod', 14:'htod', 21:'p11', 22:'p12', 23:'p22', 24:'p33', 25:'p34', 26:'p44',
+                       27:'p11_rel_ang', 28:'p12_rel', 31:'LS', 32:'RL', 33:'DPAR', 34:'DPER', 35:'DP', 36:'VEXT', 39:'VBS',
+                       41:'I', 42:'Q', 43:'U', 44:'P', 45:'I_rel_sum', 46:'P_rel', 51:'p11_intd', 52:'p11_intd_cut_off_1',
+                       53:'p11_intd_cut_off_2', 54:'p11_intd_cut_off_3', 55:'p11_intd_cut_off_4'}
+
 class graspRun():
-    def __init__(self, pathYAML=None, orbHghtKM=None, dirGRASP=None, releaseYAML=False, verbose=True):
+    def __init__(self, pathYAML=None, orbHghtKM=None, dirGRASP=None, releaseYAML=False, verbose=True, jacobian=False):
         """
         pathYAML – yaml data: posix path string, graspYAML object or None ('pathYAML' is historical and possibly misleading since it is not always path)
             Note: type(pathYAML)==graspYAML –> create new instance of a graspYAML object, with a duplicated YAML file in dirGRASP (see below)
         dirGRASP – grasp working directory, None for new temp dir; this needs to point to directory with SDATA file if writeSDATA is not called (Note this is not the grasp binary!)
         releaseYAML – allow this class to adjust YAML to match SDATA (e.g. change number of wavelengths)
         verbose - True or 2 will print everything, 1 prints this script but not GRASP SAYS, False or 0 prints nothing
+        jacobian – False, True or a dict of enableJacobian() keyword arguments; if not False, GRASP (forward mode only)
+            writes Jacobians that readOutput() adds to each pixel's rslt dict under the 'jacobian' key
         """
         self.releaseYAML = releaseYAML # allow automated modification of YAML, all index of wavelength involved fields MUST cover every wavelength
         self.pathSDATA = False
@@ -382,6 +457,43 @@ class graspRun():
         else:
             assert False, 'pathYAML should be None, a string or a yaml object!'
         if self.verbose: print('Working in %s' % self.dirGRASP)
+        if isinstance(jacobian, dict): self.enableJacobian(**jacobian)
+        elif jacobian: self.enableJacobian()
+
+    def enableJacobian(self, fileName='jacobian.nc4', step=None, observationRT=None):
+        """
+        Have GRASP write the Jacobians of the modeled measurements w.r.t. the retrieved parameters when it runs in
+        forward mode (retrieval.mode: forward). Requires GRASP built from the feature/jacobian-output branch
+        (settings.strict: true makes older builds fail on the unknown YAML keys). readOutput() will then add a
+        'jacobian' dict to each pixel's rslt dict (see readJacobianFile() for its contents).
+        fileName – output file, relative to the working directory (dirGRASP); *.nc4 or *.nc -> NetCDF-4, *.txt -> text
+        step – finite difference step in retrieval space (ln(x) for the logarithm minimization convention, i.e. a relative
+            perturbation of every parameter); sets retrieval.debug.jacobian.step. None -> keep the YAML's value (GRASP's
+            default is 3e-3, the best compromise in tests: smaller steps hit GRASP's single precision noise, larger steps
+            the nonlinearity of e.g. the real refractive index). Independent of scale_for_finite_difference.
+        observationRT – True -> derivatives use the simulating_observation RT settings (more accurate);
+            False/None -> simulating_derivatives RT settings (what GRASP uses internally during an inversion)
+        """
+        self.yamlObj.loadYAML()
+        rtrvl = self.yamlObj.dl.setdefault('retrieval', {})
+        if not isinstance(rtrvl.get('debug'), dict): rtrvl['debug'] = {}
+        if not isinstance(rtrvl['debug'].get('jacobian'), dict): rtrvl['debug']['jacobian'] = {}
+        jacDict = rtrvl['debug']['jacobian'] # keep settings already in the YAML (e.g. step)
+        jacDict['output_file'] = fileName
+        if step is not None: jacDict['step'] = float(step)
+        if observationRT is not None: jacDict['use_observation_rt_settings'] = bool(observationRT)
+        self.yamlObj.writeYAML()
+
+    def _jacobianPath(self):
+        """ Full path of the Jacobian file GRASP was told to write, or None if Jacobian output is not enabled """
+        if not self.yamlObj.YAMLpath: return None
+        self.yamlObj.loadYAML()
+        try:
+            fileName = self.yamlObj.dl['retrieval']['debug']['jacobian']['output_file']
+        except (KeyError, TypeError):
+            return None
+        if not fileName: return None
+        return os.path.join(os.path.dirname(os.path.abspath(self.yamlObj.YAMLpath)), fileName)
 
     def addPix(self, newPixel): # this is called once for each pixel
         self.pixels.append(copy.deepcopy(newPixel)) # deepcopy need to prevent changing via original pixel object outside of graspRun object
@@ -481,8 +593,23 @@ class graspRun():
             for aero, surf, fit, pm in zip(rsltAeroDict, rsltSurfDict, rsltFitDict, rsltPMDict):
                 rsltDict.append({**aero, **surf, **fit, **pm})
         self.calcAsymParam(rsltDict)
+        if customOUT is None: self._addJacobians(rsltDict)
         self.invRslt = rsltDict
         return rsltDict
+
+    def _addJacobians(self, rsltDict):
+        """ If Jacobian output was enabled, add each pixel's Jacobian dict to rsltDict under the 'jacobian' key """
+        jacPath = self._jacobianPath()
+        if jacPath is None: return
+        if not os.path.isfile(jacPath):
+            warnings.warn('Jacobian output was enabled but %s was not found (GRASP must run in forward mode).' % jacPath)
+            return
+        jacobians = readJacobianFile(jacPath)
+        if len(jacobians) != len(rsltDict):
+            warnings.warn('Found %d pixels in %s but %d in the GRASP output, Jacobians were not added.' % (len(jacobians), jacPath, len(rsltDict)))
+            return
+        for rslt, jac in zip(rsltDict, jacobians):
+            rslt['jacobian'] = jac
 
     def _findRslts(self, rsltDict=None, customOUT=None):
         # note that rsltDict (which this method returns) is actually a list of dicts

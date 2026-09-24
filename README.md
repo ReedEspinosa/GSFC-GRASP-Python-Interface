@@ -75,4 +75,17 @@ for key,val in rslt[0].items():
             rslt['p34']:     <class 'numpy.ndarray'> (N_ang, N_modes, N_lambda)
             rslt['p44']:     <class 'numpy.ndarray'> (N_ang, N_modes, N_lambda)
  ```
+
+### Jacobians (forward mode)
+GRASP built from the `feature/jacobian-output` branch of grasp_open can write the Jacobians of the modeled measurements with respect to the retrieved parameters when it runs in forward mode (`retrieval.mode: forward`). Enable it with `graspRun(..., jacobian=True)` (or a dict of `enableJacobian()` keyword arguments, e.g. `jacobian={'step': 3e-3}`) and `readOutput()` adds `rslt['jacobian']` to every pixel:
+```
+g = graspRun('settings_FWD.yml', jacobian=True)
+g.addPix(pix)
+g.runGRASP(binPathGRASP=binGRASP, krnlPathGRASP=krnlPath)
+J = g.invRslt[0]['jacobian']
+J['jacobian']       # (N_meas, N_par) dFS/dAP = dln(y + shift)/dln(x) (logarithm minimization convention)
+J['meas_type_name'], J['lambda'], J['vza'], J['raz']     # (N_meas,) what each row is
+J['par_type_name'], J['par_characteristic'], J['par_mode'], J['par_element']   # (N_par,) what each column is
+```
+`readJacobianFile(path)` reads the file (NetCDF-4 or text) directly; see its docstring for all fields. The finite difference step is `retrieval.debug.jacobian.step` (default 3e-3, independent of `scale_for_finite_difference`), applied to ln(x), i.e. as a relative perturbation of every parameter; `jacobian={'step': ...}` sets it. A step of about 3e-3 worked best in tests: smaller steps are limited by GRASP's single precision (noise in the Jacobian of roughly 2e-7/step) and larger ones by nonlinearity, mostly in the real refractive index.
  
