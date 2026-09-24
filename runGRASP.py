@@ -348,6 +348,13 @@ def readJacobianFile(path):
         'par_type', 'par_type_name', 'par_characteristic', 'par_mode', 'par_element', 'par_wavelength_index',
         'par_min', 'par_max' – parameter metadata (N_par), characteristic/mode/element are 1-based in YAML order
         'x', 'y', 'time' – pixel coordinates; 'attributes' – dict with minimization_convention, iPOBS, shift, etc.
+    If GRASP ran with retrieval.debug.jacobian.backward_difference (enableJacobian(backward=True)) also:
+        'jacobian_backward', 'par_step_backward' (0 where no backward step was possible)
+        'jacobian_central' – second order combination of forward and backward differences (forward where no backward step);
+            more accurate where both agree, but where 'glitch' is True it is only right if the glitch is at AP itself
+            (a glitch at AP+step or AP-step leaves half its error), so flagged entries should be recomputed with another step
+        'glitch' – (N_meas, N_par) bool, forward and backward differences disagree by more than curvature explains,
+            i.e. GRASP's forward model has a glitch at AP, AP+step or AP-step (see jacobianGlitchMask)
     """
     with open(path, 'rb') as fid:
         isNetCDF = fid.read(4) == b'\x89HDF'
@@ -359,16 +366,18 @@ def readJacobianFile(path):
             attrs = {k: nc.getncattr(k) for k in nc.ncattrs()}
         obsCount = var['pixel_obs_count']
         pixVars = {'par_value':'par_value', 'par_step':'par_step', 'x':'pixel_x', 'y':'pixel_y', 'time':'pixel_time'}
-        parInfo = {k: var[k] for k in var if k.startswith('par_') and k not in ('par_value', 'par_step', 'par_computed')}
+        if 'par_step_backward' in var: pixVars['par_step_backward'] = 'par_step_backward'
+        parInfo = {k: var[k] for k in var if k.startswith('par_') and k not in ('par_value', 'par_step', 'par_computed', 'par_step_backward')}
         computed = var['par_computed'].astype(bool)
     else:
-        attrs, parRows, pixRows, apRows, stepRows, obsRows = {}, [], [], [], [], []
+        attrs, parRows, pixRows, apRows, stepRows, stepbRows, obsRows = {}, [], [], [], [], [], []
         with open(path) as fid:
             for line in fid:
                 if line.startswith('# PAR '): parRows.append(line.split()[2:])
                 elif line.startswith('# PIXEL ') and not line.startswith('# PIXEL pixel'): pixRows.append(line.split()[2:])
                 elif line.startswith('# AP ') and not line.startswith('# AP pixel'): apRows.append(line.split()[3:])
                 elif line.startswith('# STEP ') and not line.startswith('# STEP pixel'): stepRows.append(line.split()[3:])
+                elif line.startswith('# STEPB ') and not line.startswith('# STEPB pixel'): stepbRows.append(line.split()[3:])
                 elif line.startswith('# ') and ': ' in line:
                     key, val = line[2:].split(': ', 1)
                     attrs[key.strip()] = val.strip()
@@ -378,20 +387,27 @@ def readJacobianFile(path):
                    'par_characteristic': np.array([int(r[3]) for r in parRows]), 'par_mode': np.array([int(r[4]) for r in parRows]),
                    'par_element': np.array([int(r[5]) for r in parRows]), 'par_wavelength_index': np.array([int(r[6]) for r in parRows]),
                    'par_min': np.array([float(r[7]) for r in parRows]), 'par_max': np.array([float(r[8]) for r in parRows])}
-        obs = np.array(obsRows, dtype=float).reshape(-1, 10+len(parRows))
+        nPar = len(parRows)
+        bwd = attrs.get('backward_difference', '0') == '1'
+        obs = np.array(obsRows, dtype=float).reshape(-1, 10+nPar*(2 if bwd else 1))
         var = {'obs_pixel': obs[:,0].astype(int), 'obs_wavelength_index': obs[:,1].astype(int), 'obs_wavelength': obs[:,2],
                'obs_meas_type': obs[:,3].astype(int), 'obs_sza': obs[:,4], 'obs_vza': obs[:,5], 'obs_raz': obs[:,6],
-               'obs_shift': obs[:,7], 'obs_fs': obs[:,8], 'obs_fs_deriv': obs[:,9], 'jacobian': obs[:,10:],
+               'obs_shift': obs[:,7], 'obs_fs': obs[:,8], 'obs_fs_deriv': obs[:,9], 'jacobian': obs[:,10:10+nPar],
                'par_value': np.array(apRows, dtype=float), 'par_step': np.array(stepRows, dtype=float),
                'pixel_x': np.array([float(r[2]) for r in pixRows]), 'pixel_y': np.array([float(r[3]) for r in pixRows]),
                'pixel_time': np.array([int(r[4]) for r in pixRows])}
         var['obs_meas_type_name'] = np.array([JACOBIAN_MEAS_TYPES.get(mt, 'unknown') for mt in var['obs_meas_type']])
+        if bwd:
+            var['jacobian_backward'] = obs[:,10+nPar:]
+            var['par_step_backward'] = np.array(stepbRows, dtype=float)
         obsCount = np.array([int(r[1]) for r in pixRows])
         pixVars = {'par_value':'par_value', 'par_step':'par_step', 'x':'pixel_x', 'y':'pixel_y', 'time':'pixel_time'}
+        if bwd: pixVars['par_step_backward'] = 'par_step_backward'
         computed = var['par_step'] != 0
     obsVars = {'jacobian':'jacobian', 'meas_type':'obs_meas_type', 'meas_type_name':'obs_meas_type_name', 'lambda':'obs_wavelength',
                'wavelength_index':'obs_wavelength_index', 'sza':'obs_sza', 'vza':'obs_vza', 'raz':'obs_raz',
                'shift':'obs_shift', 'fs':'obs_fs', 'fs_deriv':'obs_fs_deriv'}
+    if 'jacobian_backward' in var: obsVars['jacobian_backward'] = 'jacobian_backward'
     obsEnd = np.cumsum(obsCount)
     pixels = []
     for i, (i0, i1) in enumerate(zip(obsEnd-obsCount, obsEnd)):
@@ -400,8 +416,25 @@ def readJacobianFile(path):
         pix['par_computed'] = computed[i]
         pix.update({key: np.asarray(val) for key, val in parInfo.items()})
         pix['attributes'] = attrs
+        if 'jacobian_backward' in pix:
+            hf, hb = pix['par_step'], pix['par_step_backward']
+            both = (hb != 0) & (hf != 0)
+            wf = np.where(both, np.abs(hb)/(np.abs(hf)+np.abs(hb)+(~both)), 1.0) # second order weights for unequal steps
+            pix['jacobian_central'] = wf*pix['jacobian'] + (1-wf)*pix['jacobian_backward']
+            pix['glitch'] = jacobianGlitchMask(pix)
         pixels.append(pix)
     return pixels
+
+def jacobianGlitchMask(jac, relTol=0.05, absTol=1e-3):
+    """
+    (N_meas, N_par) bool mask of Jacobian entries where the forward and backward differences of a pixel's Jacobian dict
+    (from readJacobianFile with backward differences) disagree by more than relTol*max|J| of that column + absTol.
+    Curvature alone gives differences of ~1% for the default step (3e-3); a glitch of size d in GRASP's forward model
+    gives ~d/step. False where no backward step was possible.
+    """
+    Jf, Jb = jac['jacobian'], jac['jacobian_backward']
+    scale = np.maximum(np.abs(Jf).max(axis=0), np.abs(Jb).max(axis=0))
+    return (np.abs(Jf-Jb) > relTol*scale + absTol) & (jac['par_step_backward'] != 0)
 
 JACOBIAN_MEAS_TYPES = {11:'tod', 12:'aod', 13:'aaod', 14:'htod', 21:'p11', 22:'p12', 23:'p22', 24:'p33', 25:'p34', 26:'p44',
                        27:'p11_rel_ang', 28:'p12_rel', 31:'LS', 32:'RL', 33:'DPAR', 34:'DPER', 35:'DP', 36:'VEXT', 39:'VBS',
@@ -460,7 +493,7 @@ class graspRun():
         if isinstance(jacobian, dict): self.enableJacobian(**jacobian)
         elif jacobian: self.enableJacobian()
 
-    def enableJacobian(self, fileName='jacobian.nc4', step=None, observationRT=None):
+    def enableJacobian(self, fileName='jacobian.nc4', step=None, observationRT=None, backward=None):
         """
         Have GRASP write the Jacobians of the modeled measurements w.r.t. the retrieved parameters when it runs in
         forward mode (retrieval.mode: forward). Requires GRASP built from the feature/jacobian-output branch
@@ -473,6 +506,8 @@ class graspRun():
             the nonlinearity of e.g. the real refractive index). Independent of scale_for_finite_difference.
         observationRT – True -> derivatives use the simulating_observation RT settings (more accurate);
             False/None -> simulating_derivatives RT settings (what GRASP uses internally during an inversion)
+        backward – True -> also compute backward differences (twice the cost); readJacobianFile() then provides a
+            central difference and flags glitches of GRASP's forward model (see readJacobianFile)
         """
         self.yamlObj.loadYAML()
         rtrvl = self.yamlObj.dl.setdefault('retrieval', {})
@@ -482,6 +517,7 @@ class graspRun():
         jacDict['output_file'] = fileName
         if step is not None: jacDict['step'] = float(step)
         if observationRT is not None: jacDict['use_observation_rt_settings'] = bool(observationRT)
+        if backward is not None: jacDict['backward_difference'] = bool(backward)
         self.yamlObj.writeYAML()
 
     def _jacobianPath(self):
