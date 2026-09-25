@@ -995,8 +995,12 @@ class graspRun():
             nsd = int(results[0]['aodMode'].shape[0]/Nwvlth)
             assert (nsd*Nwvlth)==results[0]['aodMode'].shape[0], "NSD*Nlambda≠len(aodMode)"
             for rs in results: # seperate aerosol modes
-                rs['r'] = rs['r'].reshape(nsd,-1)
-                rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
+                try:
+                    rs['r'] = rs['r'].reshape(nsd,-1)
+                    rs['dVdlnr'] = rs['dVdlnr'].reshape(nsd,-1)
+                except ValueError: # components with different numbers of size bins (e.g. 22 fine + 24 coarse): the PSD cannot be split into a 2D array
+                    warnings.warn('Size distributions of the %d components have different numbers of bins; r and dVdlnr are set to NaN' % nsd)
+                    rs['r'] = np.full((nsd, 1), np.nan); rs['dVdlnr'] = np.full((nsd, 1), np.nan)
                 for key in [k for k in ['aodMode','ssaMode','n','k'] if k in rs]:
                     if rs[key].shape[-1] == nsd*Nwvlth:
                         rs[key] = rs[key].reshape(nsd,-1) # we double check that -1 -> Nwvlth on next line
