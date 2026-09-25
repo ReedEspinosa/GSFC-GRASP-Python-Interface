@@ -347,7 +347,8 @@ def readJacobianFile(path):
         'par_value' (AP), 'par_step' (finite difference step in AP), 'par_computed' (False if skipped by GRASP) – per parameter (N_par)
         'par_type', 'par_type_name', 'par_characteristic', 'par_mode', 'par_element', 'par_wavelength_index',
         'par_min', 'par_max' – parameter metadata (N_par), characteristic/mode/element are 1-based in YAML order
-        'x', 'y', 'time' – pixel coordinates; 'attributes' – dict with minimization_convention, iPOBS, shift, etc.
+        'x', 'y', 'time' – pixel coordinates; 'attributes' – dict with minimization_convention, iPOBS, shift, step and
+            the RT settings used (rt_settings, rt_order_of_scattering, rt_number_of_...)
     If GRASP ran with retrieval.debug.jacobian.backward_difference (enableJacobian(backward=True)) also:
         'jacobian_backward', 'par_step_backward' (0 where no backward step was possible)
         'jacobian_central' – second order combination of forward and backward differences (forward where no backward step);
@@ -408,6 +409,9 @@ def readJacobianFile(path):
                'wavelength_index':'obs_wavelength_index', 'sza':'obs_sza', 'vza':'obs_vza', 'raz':'obs_raz',
                'shift':'obs_shift', 'fs':'obs_fs', 'fs_deriv':'obs_fs_deriv'}
     if 'jacobian_backward' in var: obsVars['jacobian_backward'] = 'jacobian_backward'
+    if str(attrs.get('rt_order_of_scattering', '')) == 'single_scattering':
+        warnings.warn('Jacobians in %s were computed with single scattering RT; they can be far from the Jacobian of the '
+                      'modeled (multiple scattering) observations.' % path)
     obsEnd = np.cumsum(obsCount)
     pixels = []
     for i, (i0, i1) in enumerate(zip(obsEnd-obsCount, obsEnd)):
@@ -504,8 +508,10 @@ class graspRun():
             perturbation of every parameter); sets retrieval.debug.jacobian.step. None -> keep the YAML's value (GRASP's
             default is 3e-3, the best compromise in tests: smaller steps hit GRASP's single precision noise, larger steps
             the nonlinearity of e.g. the real refractive index). Independent of scale_for_finite_difference.
-        observationRT – True -> derivatives use the simulating_observation RT settings (more accurate);
-            False/None -> simulating_derivatives RT settings (what GRASP uses internally during an inversion)
+        observationRT – True/None (GRASP default) -> derivatives use the simulating_observation RT settings, i.e. the
+            Jacobian of the modeled observations; False -> simulating_derivatives RT settings (what GRASP uses internally
+            during an inversion; their order_of_scattering defaults to single_scattering, which gives very wrong Jacobians)
+            The RT settings used are in the file attributes (rt_order_of_scattering, rt_number_of_...).
         backward – True -> also compute backward differences (twice the cost); readJacobianFile() then provides a
             central difference and flags glitches of GRASP's forward model (see readJacobianFile)
         """
