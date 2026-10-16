@@ -189,7 +189,7 @@ def integrateProfile(rsltList, mode, lowBnd=1.5, upBnd=2.5):
                 indKeep = np.logical_and(rng>lowBnd, rng<upBnd)
                 ext = np.interp(rngNew, rng, ext, left=0, right=0)
                 λ550Ind = np.argmin(np.abs(rs['lambda']-0.55)) # in runGRASP we scale βext to 1/Mm at λ=550nm (or next closest λ)
-                output[i] = np.trapz(ext, rngNew)/1e6/rs['aodMode'][mode, λ550Ind] # units of βext are 1/Mm; we convert to 1/m
+                output[i] = np.trapezoid(ext, rngNew)/1e6/rs['aodMode'][mode, λ550Ind] # units of βext are 1/Mm; we convert to 1/m
         elif 'height' in rs.keys():
             assert False, 'This is likely exp profile which integrateProfile() does not currently support.'
         else:
@@ -228,12 +228,12 @@ def integratePSD(rsltList, moment='vol', lowBnd=0, upBnd=np.inf, sizeMode=None, 
             dVdlnr = np.interp(rNew, r, dVdlnr)
             r = rNew
         if moment.lower()=='vol':
-            output[i] = np.trapz(dVdlnr/r,r)
+            output[i] = np.trapezoid(dVdlnr/r,r)
         elif moment.lower()=='area' or moment.lower()=='area_pure':
-            area = np.trapz(dVdlnr/r**2,r)
+            area = np.trapezoid(dVdlnr/r**2,r)
             output[i] = area if 'pure' in moment else 3*area
         elif moment.lower()=='num':
-            output[i] = 3/4/np.pi*np.trapz(dVdlnr/r**4,r)
+            output[i] = 3/4/np.pi*np.trapezoid(dVdlnr/r**4,r)
         else:
             assert False, "%s moment not recognized. Options are 'vol', 'area', 'num', or 'reff'." % moment
     return output
@@ -262,7 +262,7 @@ def phaseMat(r, dvdlnr, n, k, wav=0.550):
     theta,sl,sr,su = ps.SF_SD(m, wav, dp, ndp, angularResolution=1)
     S11=0.5*(sl+sr)
     S12=-0.5*(sl-sr) # minus makes positive S12 polarized in scattering plane
-    p11 = 2*S11/np.trapz(S11*np.sin(theta), theta)
+    p11 = 2*S11/np.trapezoid(S11*np.sin(theta), theta)
     return theta*180/np.pi, p11, -S12/S11
 
 

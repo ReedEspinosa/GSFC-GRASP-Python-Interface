@@ -806,10 +806,10 @@ class graspRun():
             self.parseMultiParamFld(contents, i, results, ptrnSPH, 'sph')
             self.parseMultiParamFld(contents, i, results, ptrnHGNT, 'height')
             self.parseMultiParamFld(contents, i, results, ptrnHGNTSTD, 'heightStd')
-            self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode','lambda')
+            self.parseMultiParamFld(contents, i, results, ptrnAODmode, 'aodMode', 'lambda') # Incase lambda was not pulled in AOD above which is not given in Apr 2025 internal version of GRASP 
             self.parseMultiParamFld(contents, i, results, ptrnSSA, 'ssa')
-            self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')
             self.parseMultiParamFld(contents, i, results, ptrnSSAmode, 'ssaMode')
+            self.parseMultiParamFld(contents, i, results, ptrnLidar, 'LidarRatio')
             self.parseMultiParamFld(contents, i, results, ptrnRRI, 'n')
             self.parseMultiParamFld(contents, i, results, ptrnIRI, 'k')
             i += 1
@@ -833,19 +833,19 @@ class graspRun():
                         rs[key] = rs[key].reshape(nsd,-1) # we double check that -1 -> Nwvlth on next line
                     assert rs[key].shape[-1]==Nwvlth, 'Length of the last dimension of %s was %d, not matching Nλ=%d' % (key, rs[key].shape[-1], Nwvlth)
                 for λflatKey in [k for k in ['n','k'] if k in rs.keys()]: # check if spectrally flat RI values used
-                    for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value
+                    for mode in rs[λflatKey]: mode[mode==0] = mode[0] # fill zero values with first value (Error can occur here when processing very old GRASP output with a single RI value provided for multiple modes)
                 if 'βext' in rs:
                     rs['range'] = rs['range'].reshape(nsd,-1)
                     rs['βext'] = rs['βext'].reshape(nsd,-1)
                     βprfl = rs['βext'].sum(axis=0)
                     rng = rs['range'][0]
-                    rs['height'] = np.trapz(βprfl*rng, rng)/np.trapz(βprfl, rng) # extinction weighted mean height
+                    rs['height'] = np.trapezoid(βprfl*rng, rng)/np.trapezoid(βprfl, rng) # extinction weighted mean height
                     λ550Ind = np.argmin(np.abs(rs['lambda']-0.55))
                     for mode in range(nsd): # scale βext to 1/Mm at λ=550nm (or next closest λ)
                         AOD = rs['aodMode'][mode, λ550Ind]
                         rs['βext'][mode,:] = 1e6*mf.norm2absExtProf(rs['βext'][mode,:], rs['range'][mode,:], AOD)
-                if 'aod' not in rs: rs['aod'] = rs['aodMode'].sum(axis=0)
-                if 'ssa' not in rs: rs['ssa'] = np.sum(rs['ssaMode']*rs['aodMode'], axis=0)/rs['aod']
+                if 'aod' not in rs: rs['aod'] = rs['aodMode'].sum(axis=0)  # GRASP internal lack total AOD output, build it from modes
+                if 'ssa' not in rs: rs['ssa'] = np.sum(rs['ssaMode']*rs['aodMode'], axis=0)/rs['aod'] # GRASP internal lack total SSA output, build it from modes              
         if ('dVdlnr' in results[0]):
             for rs in results: rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
             if 'rEff' not in results[0]:
@@ -859,7 +859,7 @@ class graspRun():
         ptrnALB = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Surface ALBEDO')
         ptrnBRDF = re.compile(r'^[ ]*Wavelength \(um\),[ ]+BRDF parameters')
         ptrnBPDF = re.compile(r'^[ ]*Wavelength \(um\),[ ]+BPDF parameters')
-        ptrnWater = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Water surface parameters')
+        ptrnWater = re.compile(r'^[ ]*Wavelength \(um\),[ ]+Water surface parameters?')
         i = 0
         while i < len(contents):
             self.parseMultiParamFld(contents, i, results, ptrnALB, 'albedo')
@@ -870,6 +870,15 @@ class graspRun():
         for key in ['bpdf', 'albedo']: # spectral variables we want to ensure are 2D (1 x Nlambda) [May be better to do this inside parseMultiParamFld() at some point]
             if key in results[0]: 
                 for rs in results: rs[key] = np.atleast_2d(rs[key])
+        
+        # Handle wtrSurf reshaping for new format (3 parameters × Nλ wavelengths)
+        if 'wtrSurf' in results[0] and len(results[0]['wtrSurf'].shape) == 1:
+            # New format: reshape from 1D to 2D (3 params × Nλ)
+            Nλ_actual = len(results[0]['wtrSurf']) // 3  # Should be 5 wavelengths
+            if Nλ_actual > 0 and len(results[0]['wtrSurf']) == 3 * Nλ_actual:
+                for rs in results:
+                    rs['wtrSurf'] = rs['wtrSurf'].reshape(3, Nλ_actual)
+        
         return results
 
     def parsePhaseMatrix(self, contents, wavelengths): # wavelengths is need here specificly b/c PM elements don't give index (only value in um)
@@ -918,7 +927,7 @@ class graspRun():
                 for l in range(rslt['p11'].shape[-1]): # loop over wavelength
                     for m,ssaMode in enumerate(rslt['ssaMode'][:,l]): # loop over mode
                         angRad = rslt['angle'][:,m,l]/180*np.pi
-                        rslt['gMode'][m,l] = np.trapz(rslt['p11'][:,m,l]*np.cos(angRad)*np.sin(angRad), angRad)/2
+                        rslt['gMode'][m,l] = np.trapezoid(rslt['p11'][:,m,l]*np.cos(angRad)*np.sin(angRad), angRad)/2
                         rslt['LidarRatioMode'][m,l] =4*np.pi/(ssaMode*rslt['p11'][-1,m,l]) # we assume the last angle is θ=180°
                         rslt['LidarDepolMode'][m,l] = (rslt['p11'][-1,m,l] - rslt['p22'][-1,m,l])/(rslt['p11'][-1,m,l] + rslt['p22'][-1,m,l]) # we assume the last angle is θ=180°
                     scatWghts = rslt['ssaMode'][:,l]*rslt['aodMode'][:,l]
@@ -989,11 +998,14 @@ class graspRun():
             singNumeric = re.compile(r'^[ ]*[0-9]+[ ]*$')
             numericLn = re.compile(r'^[ ]*[0-9]+')
             lastLine = i+1
-            while not numericLn.match(contents[lastLine]) is None: lastLine += 1
+            while lastLine < len(contents) and (numericLn.match(contents[lastLine]) or contents[lastLine].strip().startswith('*')):
+                lastLine += 1
             Nparams = 0
             for dataRow in contents[i+1:lastLine]:
                 if not singNumeric.match(dataRow):
-                    dArr = np.array(dataRow.split(), dtype='float64')
+                    # Remove '*' characters from data rows
+                    cleanedRow = dataRow.replace('*', '')
+                    dArr = np.array(cleanedRow.split(), dtype='float64')
                     for k in range(len(results)): # this is looping over pixels
                         if fldName0:
                             results[k][fldName0] = np.append(results[k][fldName0], dArr[0+colOffset]) if fldName0 in results[k] else dArr[0+colOffset]
@@ -1078,7 +1090,7 @@ class rsltDictTools():
             if not nonTruncInd.any():
                 warnings.warn('All PSDs were significantly truncated and normalization could not be detemrined. dVdlnr may or may not be in absolute units.')
                 return list(rslts)
-            trp = np.concatenate([np.trapz(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
+            trp = np.concatenate([np.trapezoid(rs['dVdlnr']/rs['r'], rs['r']) for rs in rslts])
             if np.isclose(trp[nonTruncInd], 1, rtol=psdNormUnityRTOL).all(): # the loaded dVdlnr was likely normalized (not absolute)
                 for rs in rslts: 
                     rs['dVdlnr'] = rs['dVdlnr']*np.atleast_2d(rs['vol']).T # convert to absolute dVdlnr
@@ -1234,16 +1246,17 @@ class pixel():
                     msDct['phi'] = np.concatenate([rslt['fis'][:,l] for mt in msTypsNowSorted])[valid_mask]
 
                 # Generate measurements (with noise if applicable) and then filter with the mask
-                if radianceNoiseFun:
-                    msDct['errorModel'] = radianceNoiseFun
+                if radianceNoiseFun and isPolarimeter: msDct['errorModel'] = radianceNoiseFun # optional override of the pixel's own error model (polarimeter only)
+                if msDct['errorModel'] is not None: # use error model already in the pixel (e.g., from addMeas(..., errModel=...)) or the override above
                     try:
-                        measurements_with_nans = msDct['errorModel'](l, rslt, verbose=verbose)
+                        measurements_with_nans = np.asarray(msDct['errorModel'](l, rslt, verbose=verbose))
                     except TypeError:
-                        measurements_with_nans = msDct['errorModel'](l, rslt)
-                    msDct['measurements'] = measurements_with_nans[valid_mask]
-                else:
+                        measurements_with_nans = np.asarray(msDct['errorModel'](l, rslt))
+                    assert len(measurements_with_nans)==len(valid_mask), \
+                        'errorModel returned %d values at wavelength index %d but %d were expected (N_msTyp x N_view)' % (len(measurements_with_nans), l, len(valid_mask))
+                else: # no error model, measurements are passed through noise free
                     measurements_with_nans = np.concatenate([rslt[keyPtrn % mt][:,l] for mt in msTypsNowSorted])
-                    msDct['measurements'] = measurements_with_nans[valid_mask]
+                msDct['measurements'] = measurements_with_nans[valid_mask]
 
                 msDct['nbvm'] = [np.sum(~np.isnan(rslt[keyPtrn % mt][:,l])) for mt in msTypsNowSorted]
                 msDct = self.formatMeas(msDct) # this will tile the above msTyp times

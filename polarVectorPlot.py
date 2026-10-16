@@ -31,7 +31,7 @@ maxS11 = 0
 for i,(wav, clrNow) in enumerate(zip(wavs,colors)):
 	theta,sl,sr,su = ps.SF_SD(m, wav, dp, ndp)
 	S11=0.5*(sl+sr)
-	# P11 = 2*S11/np.trapz(S11*np.sin(theta), theta) # normalized P11
+	# P11 = 2*S11/np.trapezoid(S11*np.sin(theta), theta) # normalized P11
 	P11 = (S11**0.25) # transform absolute P11
 	kw['color'] = np.asarray(clrNow)
 	stepSize = 10
