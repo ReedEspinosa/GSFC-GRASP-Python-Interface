@@ -158,11 +158,12 @@ for degree_of_sphericity in DOS:
 
 
     folder_name = f'/home/gregmi/git/GSFC-GRASP-Python-Interface/TAMU_GRASP_Kernel_Generator/TAMUSimulationDiffSph/hex_kernels/{degree_of_sphericity}'
-    Phase_Function_299(Dict1,5,folder_name)
-    Phase_Function_299(Dict1,00,folder_name)
+    os.makedirs(folder_name, exist_ok=True)
+    Phase_Function_299(Dict1,'grid',folder_name)   # grid1.dat (was called with 00, which wrote nothing)
+    Phase_Function_299(Dict1,5,folder_name)        # kernels_299_00.txt and kernel_info.json
     Phase_Function_299(Dict1,11,folder_name)
     Phase_Function_299(Dict1,12,folder_name)
     Phase_Function_299(Dict1,22,folder_name)
     Phase_Function_299(Dict1,33,folder_name)
-    Phase_Function_299(Dict1,43,folder_name)
+    Phase_Function_299(Dict1,34,folder_name)       # GRASP element 34 = -P43 of TAMUdust2020
     Phase_Function_299(Dict1,44,folder_name)

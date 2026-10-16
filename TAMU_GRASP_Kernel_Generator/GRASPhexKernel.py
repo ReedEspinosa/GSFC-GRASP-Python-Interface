@@ -34,6 +34,60 @@ def update_spher(nml_file_path, new_spher_value):
 
 
 
+def volume_kernels(Qext1, Qabs1, Area1, Volume1, size_descriptor=None, degree_of_sphericity=None):
+    """GRASP extinction and absorption kernels from TAMUdust2020 output.
+
+    GRASP kernels are cross sections per unit particle volume times the radius-grid spacing,
+    b = C/V * dlnr [1/um]. TAMUdust2020's extinction efficiency Qe is relative to the
+    orientation-averaged projected area A (Qe = C_ext/A, Saito et al. 2021), so C/V = Qe*A/V for
+    every size descriptor. (Before 2026-10 the VER kernels used Qe*3/(4*r_v) = Qe*pi*r_v^2/V, which
+    is low by the sphericity, about 0.70.)
+
+    Qext1, Qabs1, Area1, Volume1: arrays (n_real_RI, n_imag_RI, n_size) from isca.dat (Qe, Qe*(1-SSA),
+    projected area, volume). size_descriptor:
+      'VER' (default) or 'Allsaitoang': radius grid = volume-equivalent radius cbrt(3V/(4 pi))
+      'TAMUratioA2V_VER': same (kept for backward compatibility)
+      'ER', 'TAMUratioA2V_ER': radius grid = effective radius 3V/(4A); the kernel values are the same C/V
+    Returns b_ext, b_abs, radius grid, dlnr, and a default folder name.
+    """
+    if size_descriptor in (None, 'VER'):
+        folder_name = f"Hex_VER_{degree_of_sphericity}"
+        Radius = np.cbrt(3*Volume1[1,1,:]/(np.pi*4))
+    elif size_descriptor == 'Allsaitoang':
+        folder_name = "Saito_GEOS_VarAngRes"  # volume-equivalent radius, variable angular grid for GEOS
+        Radius = np.cbrt(3*Volume1[1,1,:]/(np.pi*4))
+    elif size_descriptor == 'TAMUratioA2V_VER':
+        folder_name = "Ver_TAMU"
+        Radius = np.cbrt(3*Volume1[1,1,:]/(np.pi*4))
+    elif size_descriptor == 'ER':
+        folder_name = "Eff_sph"
+        Radius = 3*Volume1[1,1,:]/(4*Area1[1,1,:])
+    elif size_descriptor == 'TAMUratioA2V_ER':
+        folder_name = "Eff_TAMU"
+        Radius = 3*Volume1[1,1,:]/(4*Area1[1,1,:])
+    else:
+        raise ValueError(f'unknown size_descriptor {size_descriptor!r}')
+    dlnr = np.log(Radius[1]/Radius[0])
+    assert np.allclose(np.diff(np.log(Radius)), dlnr, rtol=1e-3), 'radius grid must be log-uniform (GRASP uses a single dlnr); TAMUdust2020 v1.0 does not give this, use master'
+    b_ext = Qext1*Area1*dlnr/Volume1   # C_ext/V * dlnr = Qe*A/V * dlnr
+    b_abs = Qabs1*Area1*dlnr/Volume1
+    # Build-time check: in the volume-equivalent sphere convention, C_ext/(pi r_v^2) -> 2*A/(pi r_v^2) at large x
+    Rv = np.cbrt(3*Volume1[1,1,-1]/(np.pi*4))
+    alpha = Area1[1,1,-1]/(np.pi*Rv**2)
+    q_v = b_ext[:,0,-1]/dlnr*4*Rv/3
+    assert np.all(np.abs(q_v/(2*alpha) - 1) < 0.05), f'C_ext/(pi r_v^2) at the largest size ({q_v}) is not within 5% of 2*A/(pi r_v^2) = {2*alpha}'
+    return b_ext, b_abs, Radius, dlnr, folder_name
+
+
+def ensemble_sphericity(Area1, Volume1):
+    """Sphericity psi = pi*r_v^2/A of the ensemble TAMUdust2020 delivered (mean over sizes) and alpha = 1/psi.
+    At a nominal sphericity between the database bins it differs slightly from the nominal value
+    (e.g. 0.70064 at 0.7), because A and V are interpolated separately between the bins."""
+    Rv = np.cbrt(3*Volume1[1,1,:]/(np.pi*4))
+    psi = np.pi*Rv**2/Area1[1,1,:]
+    return float(psi.mean()), float((1/psi).mean())
+
+
 def RunTAMUdust2020(df, nml_file_path,SizeParam, RealRi,Imag1,AngVal,Allangle,size_descriptor=None, degree_of_sphericity = None,  params_path=None,output_path=None):
 
 
@@ -193,56 +247,9 @@ def RunTAMUdust2020(df, nml_file_path,SizeParam, RealRi,Imag1,AngVal,Allangle,si
 
     #UNcomment the folder name that you want to create
 
-    if size_descriptor == 'VER' or size_descriptor == None : #Volume Equivant Radius
-
-        folder_name = f"Hex_VER_{degree_of_sphericity}"  #Kernels with volume equivalent radius and using volume and area of the spheres
-        # calcuating radius from the volume
-        Radius_v = np.cbrt(3*Volume1[1,1,:]/(np.pi*4))
-        Radius = Radius_v
-        #The GRASP Kernels inputs bext *lnr
-        dlnr = np.log(Radius_v[1]/Radius_v[0])
-        #Uncomment this if you want to use the volume and area of sphere
-        b_ext = Qext1*3*dlnr/(4*Radius_v)  #Qext = (4/3)*Qext *(dlnr/r)
-        b_abs = Qabs1*3*dlnr/(4*Radius_v)
-
-
-    if size_descriptor == 'ER': #Effective radius
-        folder_name = "Eff_sph"  #Kernels with effiective radius and using volume and area of the spheres
-        Radius_v =3*Volume1[1,1,:]/(4*Area1[1,1,:])
-        Radius = Radius_v
-        dlnr = np.log(Radius_v[1]/Radius_v[0])
-        b_ext = Qext1*3*dlnr/(4*Radius_v)
-        b_abs = Qabs1*3*dlnr/(4*Radius_v)
-
-    if size_descriptor == 'Allsaitoang' or size_descriptor == None : #Volume Equivant Radius
-        folder_name = "Saito_GEOS_VarAngRes"  #Kernels with volume equivalent radius and using volume and area of the spheres for GEOS model for variable angular grids
-        ### calcuating radius from the volume
-        Radius_v = np.cbrt(3*Volume1[1,1,:]/(np.pi*4))
-        Radius = Radius_v
-        #The GARSP Kernels inputs bext *lnr
-        dlnr = np.log(Radius_v[1]/Radius_v[0])
-        #Uncomment this if you want to use the volume and area of sphere
-        b_ext = Qext1*3*dlnr/(4*Radius_v)
-        b_abs = Qabs1*3*dlnr/(4*Radius_v)
-        # b_sca = b_ext - b_abs
-
-
-    if size_descriptor == 'TAMUratioA2V_VER':
-        folder_name = "Ver_TAMU" #kernels with volume equivalent radius and using volume and area definition of TAMU
-        Radius_v = np.cbrt(3*Volume1[1,1,:]/(np.pi*4))
-        dlnr = np.log(Radius_v[1]/Radius_v[0])
-        b_ext = (Qext1 *Area1 *dlnr)/Volume1
-        b_abs = (Qabs1 *Area1 *dlnr)/Volume1
-
-    
-    if size_descriptor == 'TAMUratioA2V_ER':
-        folder_name = "Eff_TAMU" #kernels with effective radius and using volume and area definition of TAMU
-        Radius_v =3*Volume1[1,1,:]/(4*Area1[1,1,:])
-        Radius = Radius_v
-        dlnr = np.log(Radius_v[1]/Radius_v[0])
-        b_ext = (Qext1 *Area1 *dlnr)/(4*Volume1)
-        b_abs = (Qabs1 *Area1 *dlnr)/(4*Volume1)
-
+    # Volume kernels (C/V * dlnr) and radius grid for the chosen size descriptor (see volume_kernels)
+    b_ext, b_abs, Radius_v, dlnr, folder_name = volume_kernels(Qext1, Qabs1, Area1, Volume1, size_descriptor, degree_of_sphericity)
+    psi_e, alpha = ensemble_sphericity(Area1, Volume1)
 
     b_sca = b_ext - b_abs
 
@@ -282,11 +289,15 @@ def RunTAMUdust2020(df, nml_file_path,SizeParam, RealRi,Imag1,AngVal,Allangle,si
     HexDict['iri'] = Imag1 
     HexDict['theta'] =AngVal
     HexDict['sph'] = degree_of_sphericity
+    HexDict['psi_e'] = psi_e      # sphericity of the delivered ensemble, from TAMUdust2020 A and V
+    HexDict['alpha'] = alpha      # A/(pi*r_v^2) = 1/psi_e
+    HexDict['size_descriptor'] = size_descriptor if size_descriptor is not None else 'VER'
+    HexDict['dlnr'] = dlnr
 
 
 
     with open(f'/home/gregmi/git/GSFC-GRASP-Python-Interface/TAMU_GRASP_Kernel_Generator/TAMUSimulationDiffSph/TAMUsim{degree_of_sphericity}.pickle', 'wb') as f:
-        pickle.dump(dict, f)
+        pickle.dump(HexDict, f)
         f.close()
 
     return HexDict
@@ -324,10 +335,23 @@ def Phase_Function_299(Dict1,a,folder_name):
 
     #Writes the phase funtions into GRASP Kernel format
 
-    if a == 5:
+    elif a == 5:
 
         b_ext = Dict1['Qext']
         b_abs = b_ext-b_sca
+
+        # Provenance: what the kernel values are and the geometry behind them
+        info = {'contents': 'GRASP kernels: C/V * dlnr [1/um] at the reference wavelength (EXTINCTION, ABSORPTION); '
+                            'absolute scattering-matrix elements F_ij * C_sca/V * dlnr with 0.5*int(F11 sin) = 1. '
+                            'Element 34 = -P43 (TAMUdust2020) * P11 * C_sca/V * dlnr.',
+                'reference_wavelength_um': float(wl),
+                'nominal_sphericity': Dict1.get('sph'), 'ensemble_sphericity_psi': Dict1.get('psi_e'),
+                'alpha_A_over_pi_rv2': Dict1.get('alpha'), 'size_descriptor': Dict1.get('size_descriptor'),
+                'dlnr': Dict1.get('dlnr'), 'n_radii': int(len(Radius_v)),
+                'note': 'Built as Qe*A/V (corrected 2026-10; earlier kernels used Qe*pi*r_v^2/V and were low by psi).'}
+        import json
+        with open(f'{folder_name}/kernel_info.json', 'w') as fj:
+            json.dump(info, fj, indent=4)
 
         with open(f'{folder_name}/kernels_299_00.txt','w')as f:
         
@@ -363,15 +387,20 @@ def Phase_Function_299(Dict1,a,folder_name):
 
 
 
-    if a in [11, 12, 22, 33, 43, 44]:
+    elif a in [11, 12, 22, 33, 34, 43, 44]:
         if a == 11:
             # Reshape P11 into a 4D array based on parameter lengths
             F = np.array(P11).reshape(len(RealRi), len(Imag1), len(Radius_v), len(Angles))
         
         # For Mueller matrix elements that require scaling
-        if a in [12, 22, 33, 43, 44]:
+        if a in [12, 22, 33, 44]:
             # Multiply P11 by a scaling factor from Dict1 and reshape
             F = (np.array(P11) * Dict1[f'P{a}']).reshape(len(RealRi), len(Imag1), len(Radius_v), len(Angles))
+
+        # GRASP element 34 = -P43 of TAMUdust2020 (TAMU provides P43/P11); always written as kernels_299_34.txt
+        if a in [34, 43]:
+            F = -(np.array(P11) * Dict1['P43']).reshape(len(RealRi), len(Imag1), len(Radius_v), len(Angles))
+            a = 34
 
         # df= pd.read_csv("/home/gregmi/TAMU_project/DATABASE.csv")
         # Imag1 = df['Imaginary Refractive Index:'][:31].values #Read imaginary refrac 
@@ -415,7 +444,7 @@ def Phase_Function_299(Dict1,a,folder_name):
             f.write("#       r    rd \n")
             f.write("1     2.98600      0.100000E+01")
     else:
-        print('Error in Line 419')
+        print(f'Phase_Function_299: unknown element {a!r}')
 
         return
     
